@@ -15,10 +15,29 @@ export default function useAuth(requireAuth: boolean = true) {
 
     if (requireAuth && !token) {
       router.push('/login');
-    } else if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      // keep isLoading=true so ProtectedRoute shows spinner during redirect
+      return;
     }
-    
+
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        // Corrupt user data — clear session and redirect
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        if (requireAuth) {
+          router.push('/login');
+          return;
+        }
+      }
+    } else if (token && requireAuth) {
+      // Token present but no user data (e.g. partial localStorage clear) — clear and redirect
+      localStorage.removeItem('token');
+      router.push('/login');
+      return;
+    }
+
     setIsLoading(false);
   }, [requireAuth, router]);
 
@@ -26,7 +45,7 @@ export default function useAuth(requireAuth: boolean = true) {
 }
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isLoading, user } = useAuth(true);
+  const { isLoading } = useAuth(true);
 
   if (isLoading) {
     return (
@@ -36,5 +55,5 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return user ? <>{children}</> : null;
+  return <>{children}</>;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTripStore } from '@/lib/store';
 import { Send, MapPin, Loader2, Sparkles, X, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,7 +8,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function IdeaBin({ tripId }: { tripId: string | null }) {
   const [inputText, setInputText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
-  const { ideas, addIdea } = useTripStore();
+  const { ideas, addIdea, setIdeas } = useTripStore();
+
+  useEffect(() => {
+    if (!tripId) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.ok ? res.json() : [])
+      .then((data: any[]) => {
+        setIdeas(
+          data.map((item) => ({
+            id: item.id.toString(),
+            title: item.title,
+            lat: item.lat ?? 0,
+            lng: item.lng ?? 0,
+          }))
+        );
+      })
+      .catch(() => {});
+  }, [tripId, setIdeas]);
 
   const handleIngest = async () => {
     if (!inputText.trim()) return;
@@ -18,7 +40,7 @@ export default function IdeaBin({ tripId }: { tripId: string | null }) {
       const token = localStorage.getItem('token');
 
       if (tripId && token) {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/trips/${tripId}/ingest`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ingest`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',

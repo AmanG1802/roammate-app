@@ -7,7 +7,7 @@ pydantic
 pydantic-settings
 alembic
 python-jose[cryptography]
-passlib[bcrypt]
+bcrypt
 openai
 langchain
 python-dotenv
@@ -17,4 +17,5 @@ redis
 pytest
 pytest-asyncio
 httpx
+aiosqlite
 email-validator

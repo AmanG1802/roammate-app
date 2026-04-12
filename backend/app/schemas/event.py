@@ -20,8 +20,7 @@ class EventCreate(EventBase):
 class Event(EventBase):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 class RippleRequest(BaseModel):
     delta_minutes: int

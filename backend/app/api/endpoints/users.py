@@ -26,8 +26,7 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     name: str
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 @router.post("/register", response_model=UserOut)
 async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):

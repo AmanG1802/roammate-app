@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from app.db.session import get_db
-from app.models.all_models import Trip, TripMember, User
+from app.models.all_models import Trip, TripMember, User, IdeaBinItem as IdeaBinItemModel
 from app.schemas.trip import Trip as TripSchema, TripCreate, IngestRequest, IdeaBinItem
 from app.services.idea_bin import idea_bin_service
 from app.api.deps import get_current_user
@@ -76,6 +76,25 @@ async def get_trip(
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
     return trip
+
+@router.get("/{trip_id}/ideas", response_model=List[IdeaBinItem])
+async def get_idea_bin(
+    trip_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    stmt = select(TripMember).where(
+        TripMember.trip_id == trip_id,
+        TripMember.user_id == current_user.id
+    )
+    res = await db.execute(stmt)
+    if not res.scalars().first():
+        raise HTTPException(status_code=403, detail="Not a member of this trip")
+
+    stmt = select(IdeaBinItemModel).where(IdeaBinItemModel.trip_id == trip_id)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
 
 @router.post("/{trip_id}/ingest", response_model=List[IdeaBinItem])
 async def ingest_to_idea_bin(

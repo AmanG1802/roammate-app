@@ -12,6 +12,7 @@ export default function LoginPage() {
   
   const [isSignup, setIsSignup] = useState(isSignupParam);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -22,7 +23,7 @@ export default function LoginPage() {
     setError('');
     
     try {
-      const endpoint = isSignup ? '/api/users/register' : '/api/users/login';
+      const endpoint = isSignup ? '/users/register' : '/users/login';
       const body = isSignup ? { email, password, name } : { email, password };
       
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
@@ -38,18 +39,20 @@ export default function LoginPage() {
       }
       
       if (isSignup) {
-        // After signup, log in automatically or ask user to login
+        // Switch to sign-in form with a success message
         setIsSignup(false);
         setError('Account created! Please sign in.');
+        setPassword('');
       } else {
         localStorage.setItem('token', data.access_token);
-        // Fetch user info
-        const userRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/me`, {
-          headers: { 'Authorization': `Bearer ${data.access_token}` }
+        // Fetch user profile
+        const userRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, {
+          headers: { 'Authorization': `Bearer ${data.access_token}` },
         });
-        const userData = await userRes.json();
-        localStorage.setItem('user', JSON.stringify(userData));
-        
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          localStorage.setItem('user', JSON.stringify(userData));
+        }
         router.push('/dashboard');
       }
     } catch (err: any) {
@@ -58,8 +61,6 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
-
-  const [error, setError] = useState('');
 
   return (
     <div className="flex h-screen bg-white">

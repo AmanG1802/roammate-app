@@ -16,8 +16,7 @@ class IdeaBinItem(IdeaBinItemBase):
     id: int
     trip_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 class IngestRequest(BaseModel):
     text: str
@@ -36,5 +35,4 @@ class Trip(TripBase):
     created_at: datetime
     created_by_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
