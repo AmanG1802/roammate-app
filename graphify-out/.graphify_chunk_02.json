@@ -1,0 +1,901 @@
+{
+  "nodes": [
+    {
+      "id": "vibecheck_component",
+      "label": "VibeCheck Component",
+      "file_type": "code",
+      "source_file": "frontend/components/trip/VibeCheck.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "useauth_hook",
+      "label": "useAuth Hook",
+      "file_type": "code",
+      "source_file": "frontend/hooks/useAuth.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "protectedroute_component",
+      "label": "ProtectedRoute Component",
+      "file_type": "code",
+      "source_file": "frontend/hooks/useAuth.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_tripstore",
+      "label": "useTripStore (Zustand Store)",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_event_interface",
+      "label": "Event Interface (Frontend)",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_idea_interface",
+      "label": "Idea Interface (Frontend)",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_moveideato_timeline",
+      "label": "moveIdeaToTimeline Action",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_moveeventtoidea",
+      "label": "moveEventToIdea Action",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_loadevent",
+      "label": "loadEvents Action",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_updateeventtime",
+      "label": "updateEventTime Action",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "store_reorderevent",
+      "label": "reorderEvent Action",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tests_conftest",
+      "label": "API Test Fixtures (conftest.py)",
+      "file_type": "code",
+      "source_file": "tests/api/conftest.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tests_test_auth",
+      "label": "Auth API Tests",
+      "file_type": "code",
+      "source_file": "tests/api/test_auth.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tests_test_trips",
+      "label": "Trips API Tests",
+      "file_type": "code",
+      "source_file": "tests/api/test_trips.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tests_test_events",
+      "label": "Events API Tests",
+      "file_type": "code",
+      "source_file": "tests/api/test_events.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "backend_main",
+      "label": "FastAPI App Entry Point (main.py)",
+      "file_type": "code",
+      "source_file": "backend/app/main.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "backend_config",
+      "label": "Settings / Config (config.py)",
+      "file_type": "code",
+      "source_file": "backend/app/core/config.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "backend_security",
+      "label": "Security Utilities (JWT + bcrypt)",
+      "file_type": "code",
+      "source_file": "backend/app/core/security.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_user",
+      "label": "User SQLAlchemy Model",
+      "file_type": "code",
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_trip",
+      "label": "Trip SQLAlchemy Model",
+      "file_type": "code",
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_tripmember",
+      "label": "TripMember SQLAlchemy Model",
+      "file_type": "code",
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_event",
+      "label": "Event SQLAlchemy Model",
+      "file_type": "code",
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "model_ideabinitem",
+      "label": "IdeaBinItem SQLAlchemy Model",
+      "file_type": "code",
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "schema_event",
+      "label": "Event Pydantic Schemas",
+      "file_type": "code",
+      "source_file": "backend/app/schemas/event.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "schema_trip",
+      "label": "Trip Pydantic Schemas",
+      "file_type": "code",
+      "source_file": "backend/app/schemas/trip.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "schema_ripplerequest",
+      "label": "RippleRequest Schema",
+      "file_type": "code",
+      "source_file": "backend/app/schemas/event.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "schema_ingestrequest",
+      "label": "IngestRequest Schema",
+      "file_type": "code",
+      "source_file": "backend/app/schemas/trip.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "db_base_class",
+      "label": "SQLAlchemy Declarative Base",
+      "file_type": "code",
+      "source_file": "backend/app/db/base_class.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "db_session",
+      "label": "Async DB Session & Engine",
+      "file_type": "code",
+      "source_file": "backend/app/db/session.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "api_deps",
+      "label": "API Dependencies (get_current_user)",
+      "file_type": "code",
+      "source_file": "backend/app/api/deps.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pattern_optimistic_update",
+      "label": "Optimistic UI Update Pattern",
+      "file_type": "code",
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pattern_localstorage_auth",
+      "label": "localStorage Token-Based Auth Pattern",
+      "file_type": "code",
+      "source_file": "frontend/hooks/useAuth.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "pattern_sqlite_test_isolation",
+      "label": "SQLite In-Memory Test Isolation Pattern",
+      "file_type": "code",
+      "source_file": "tests/api/conftest.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "vibecheck_llm_intent",
+      "label": "LLM Itinerary Adaptation Intent (VibeCheck)",
+      "file_type": "code",
+      "source_file": "frontend/components/trip/VibeCheck.tsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "vibecheck_component",
+      "target": "store_tripstore",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/components/trip/VibeCheck.tsx",
+      "source_location": "line 4",
+      "weight": 1.0
+    },
+    {
+      "source": "vibecheck_component",
+      "target": "vibecheck_llm_intent",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/components/trip/VibeCheck.tsx",
+      "source_location": "line 24-26 (comment: Logic for actual backend call to LLM)",
+      "weight": 1.0
+    },
+    {
+      "source": "protectedroute_component",
+      "target": "useauth_hook",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/hooks/useAuth.tsx",
+      "source_location": "line 48",
+      "weight": 1.0
+    },
+    {
+      "source": "useauth_hook",
+      "target": "pattern_localstorage_auth",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/hooks/useAuth.tsx",
+      "source_location": "line 13-39",
+      "weight": 1.0
+    },
+    {
+      "source": "store_tripstore",
+      "target": "store_event_interface",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": "line 35-44",
+      "weight": 1.0
+    },
+    {
+      "source": "store_tripstore",
+      "target": "store_idea_interface",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": "line 46-52",
+      "weight": 1.0
+    },
+    {
+      "source": "store_moveideato_timeline",
+      "target": "pattern_optimistic_update",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": "line 155 (Optimistically remove from ideas)",
+      "weight": 1.0
+    },
+    {
+      "source": "store_moveeventtoidea",
+      "target": "pattern_optimistic_update",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": "line 224 (Optimistically remove from timeline)",
+      "weight": 1.0
+    },
+    {
+      "source": "store_loadevent",
+      "target": "store_event_interface",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": "line 136-147",
+      "weight": 1.0
+    },
+    {
+      "source": "store_moveideato_timeline",
+      "target": "store_idea_interface",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": "line 149-216",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_conftest",
+      "target": "backend_main",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/conftest.py",
+      "source_location": "line 20",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_conftest",
+      "target": "db_base_class",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/conftest.py",
+      "source_location": "line 21",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_conftest",
+      "target": "db_session",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/conftest.py",
+      "source_location": "line 22",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_conftest",
+      "target": "pattern_sqlite_test_isolation",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/conftest.py",
+      "source_location": "line 25 (SQLite in-memory for tests)",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_test_auth",
+      "target": "tests_conftest",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/test_auth.py",
+      "source_location": "fixtures: client, auth_headers",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_test_trips",
+      "target": "tests_conftest",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/test_trips.py",
+      "source_location": "fixtures: client, auth_headers, second_auth_headers",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_test_events",
+      "target": "tests_conftest",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/test_events.py",
+      "source_location": "fixtures: client, auth_headers, second_auth_headers",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_main",
+      "target": "model_user",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/main.py",
+      "source_location": "line 7",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_main",
+      "target": "model_trip",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/main.py",
+      "source_location": "line 7",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_main",
+      "target": "model_tripmember",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/main.py",
+      "source_location": "line 7",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_main",
+      "target": "model_event",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/main.py",
+      "source_location": "line 7",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_main",
+      "target": "model_ideabinitem",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/main.py",
+      "source_location": "line 7",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_main",
+      "target": "db_base_class",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/main.py",
+      "source_location": "line 5",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_main",
+      "target": "db_session",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/main.py",
+      "source_location": "line 6",
+      "weight": 1.0
+    },
+    {
+      "source": "backend_security",
+      "target": "backend_config",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/core/security.py",
+      "source_location": "line 5 (from app.core.config import settings)",
+      "weight": 1.0
+    },
+    {
+      "source": "api_deps",
+      "target": "backend_security",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/api/deps.py",
+      "source_location": "line 9 (from app.core.security import ALGORITHM)",
+      "weight": 1.0
+    },
+    {
+      "source": "api_deps",
+      "target": "backend_config",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/api/deps.py",
+      "source_location": "line 8 (from app.core.config import settings)",
+      "weight": 1.0
+    },
+    {
+      "source": "api_deps",
+      "target": "db_session",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/api/deps.py",
+      "source_location": "line 6 (from app.db.session import get_db)",
+      "weight": 1.0
+    },
+    {
+      "source": "api_deps",
+      "target": "model_user",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/api/deps.py",
+      "source_location": "line 7 (from app.models.all_models import User)",
+      "weight": 1.0
+    },
+    {
+      "source": "db_session",
+      "target": "backend_config",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/db/session.py",
+      "source_location": "line 3 (from app.core.config import settings)",
+      "weight": 1.0
+    },
+    {
+      "source": "model_user",
+      "target": "db_base_class",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 6 (class User(Base))",
+      "weight": 1.0
+    },
+    {
+      "source": "model_trip",
+      "target": "db_base_class",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 13 (class Trip(Base))",
+      "weight": 1.0
+    },
+    {
+      "source": "model_tripmember",
+      "target": "db_base_class",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 25 (class TripMember(Base))",
+      "weight": 1.0
+    },
+    {
+      "source": "model_event",
+      "target": "db_base_class",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 47 (class Event(Base))",
+      "weight": 1.0
+    },
+    {
+      "source": "model_ideabinitem",
+      "target": "db_base_class",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 35 (class IdeaBinItem(Base))",
+      "weight": 1.0
+    },
+    {
+      "source": "model_event",
+      "target": "schema_event",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "backend/app/schemas/event.py",
+      "source_location": null,
+      "weight": 0.9
+    },
+    {
+      "source": "model_trip",
+      "target": "schema_trip",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "backend/app/schemas/trip.py",
+      "source_location": null,
+      "weight": 0.9
+    },
+    {
+      "source": "model_ideabinitem",
+      "target": "schema_trip",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/app/schemas/trip.py",
+      "source_location": "IdeaBinItem / IdeaBinItemBase schema",
+      "weight": 0.85
+    },
+    {
+      "source": "store_event_interface",
+      "target": "model_event",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "weight": 0.88
+    },
+    {
+      "source": "store_idea_interface",
+      "target": "model_ideabinitem",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "frontend/lib/store.ts",
+      "source_location": null,
+      "weight": 0.88
+    },
+    {
+      "source": "pattern_localstorage_auth",
+      "target": "api_deps",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "frontend/hooks/useAuth.tsx",
+      "source_location": null,
+      "weight": 0.75
+    },
+    {
+      "source": "tests_test_trips",
+      "target": "model_tripmember",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests/api/test_trips.py",
+      "source_location": "tests for trip isolation and forbidden access test membership model",
+      "weight": 0.8
+    },
+    {
+      "source": "vibecheck_llm_intent",
+      "target": "backend_config",
+      "relation": "references",
+      "confidence": "AMBIGUOUS",
+      "confidence_score": 0.2,
+      "source_file": "frontend/components/trip/VibeCheck.tsx",
+      "source_location": "comment mentions backend LLM call; config has OPENAI_API_KEY",
+      "weight": 0.2
+    },
+    {
+      "source": "schema_ripplerequest",
+      "target": "tests_test_events",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/test_events.py",
+      "source_location": "line 64-65 (ripple payload matches RippleRequest schema)",
+      "weight": 1.0
+    },
+    {
+      "source": "schema_ingestrequest",
+      "target": "tests_test_trips",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/api/test_trips.py",
+      "source_location": "line 163 (ingest text payload matches IngestRequest schema)",
+      "weight": 1.0
+    },
+    {
+      "source": "model_trip",
+      "target": "model_tripmember",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 21 (members relationship)",
+      "weight": 1.0
+    },
+    {
+      "source": "model_trip",
+      "target": "model_event",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 22 (events relationship)",
+      "weight": 1.0
+    },
+    {
+      "source": "model_trip",
+      "target": "model_ideabinitem",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 23 (idea_bin_items relationship)",
+      "weight": 1.0
+    },
+    {
+      "source": "model_user",
+      "target": "model_tripmember",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/app/models/all_models.py",
+      "source_location": "line 11 (trips relationship via TripMember)",
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "auth_flow_backend",
+      "label": "Backend JWT Authentication Flow",
+      "nodes": ["backend_security", "api_deps", "backend_config"],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "backend/app/api/deps.py"
+    },
+    {
+      "id": "optimistic_idea_event_store",
+      "label": "Optimistic Idea-to-Event Store Flow",
+      "nodes": ["store_moveideato_timeline", "store_moveeventtoidea", "pattern_optimistic_update"],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.92,
+      "source_file": "frontend/lib/store.ts"
+    },
+    {
+      "id": "test_isolation_sqlite_fixture",
+      "label": "In-Memory SQLite Test Isolation via Fixtures",
+      "nodes": ["tests_conftest", "pattern_sqlite_test_isolation", "db_session"],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "tests/api/conftest.py"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

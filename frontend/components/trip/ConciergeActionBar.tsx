@@ -42,8 +42,8 @@ export default function ConciergeActionBar() {
         setEvents(
           events.map((e) => ({
             ...e,
-            start_time: new Date(e.start_time.getTime() + minutes * 60_000),
-            end_time: new Date(e.end_time.getTime() + minutes * 60_000),
+            start_time: e.start_time ? new Date(e.start_time.getTime() + minutes * 60_000) : null,
+            end_time: e.end_time ? new Date(e.end_time.getTime() + minutes * 60_000) : null,
           }))
         );
       }
@@ -52,8 +52,8 @@ export default function ConciergeActionBar() {
       setEvents(
         events.map((e) => ({
           ...e,
-          start_time: new Date(e.start_time.getTime() + minutes * 60_000),
-          end_time: new Date(e.end_time.getTime() + minutes * 60_000),
+          start_time: e.start_time ? new Date(e.start_time.getTime() + minutes * 60_000) : null,
+          end_time: e.end_time ? new Date(e.end_time.getTime() + minutes * 60_000) : null,
         }))
       );
     } finally {

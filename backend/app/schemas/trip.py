@@ -1,7 +1,31 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
+
+# ── User embedded in trip member ──────────────────────────────────────────────
+class UserInTrip(BaseModel):
+    id: int
+    name: str
+    email: str
+    model_config = {"from_attributes": True}
+
+
+# ── Trip Member ────────────────────────────────────────────────────────────────
+class TripMemberOut(BaseModel):
+    id: int
+    trip_id: int
+    user_id: int
+    role: str
+    user: UserInTrip
+    model_config = {"from_attributes": True}
+
+
+class InviteRequest(BaseModel):
+    email: EmailStr
+
+
+# ── Idea Bin ───────────────────────────────────────────────────────────────────
 class IdeaBinItemBase(BaseModel):
     title: str
     place_id: Optional[str] = None

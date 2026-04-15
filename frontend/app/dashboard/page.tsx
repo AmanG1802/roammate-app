@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -268,6 +268,19 @@ function TripGrid({
   onNewTrip: () => void;
   emptyLabel?: string;
 }) {
+  const router = useRouter();
+
+  const handleOpenTrip = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>, tripId: number) => {
+      if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+        e.preventDefault();
+        (document as any).startViewTransition(() => router.push(`/trips/${tripId}`));
+      }
+      // No-op if not supported — Link's default href handles it
+    },
+    [router]
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -293,10 +306,11 @@ function TripGrid({
             {trip.start_date ? new Date(trip.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Dates TBD'}
           </div>
           <Link
-            href={`/trips?id=${trip.id}`}
+            href={`/trips/${trip.id}`}
+            onClick={(e) => handleOpenTrip(e, trip.id)}
             className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 rounded-xl text-slate-800 font-black text-sm group-hover:bg-indigo-600 group-hover:text-white transition-all"
           >
-            Open Itinerary
+            Open Trip
             <ChevronRight className="w-4 h-4" />
           </Link>
         </motion.div>

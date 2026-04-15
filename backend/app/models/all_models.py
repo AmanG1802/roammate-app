@@ -52,9 +52,10 @@ class Event(Base):
     location_name = Column(String)
     lat = Column(Float)
     lng = Column(Float)
-    start_time = Column(DateTime)
-    end_time = Column(DateTime)
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
     is_locked = Column(Boolean, default=False)
     event_type = Column(String) # activity, transport, lodging
-    
+    sort_order = Column(Integer, default=0)
+
     trip = relationship("Trip", back_populates="events")

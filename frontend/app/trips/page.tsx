@@ -10,6 +10,7 @@ import IdeaBin from '@/components/trip/IdeaBin';
 import GoogleMap from '@/components/map/GoogleMap';
 import Collaborators from '@/components/layout/Collaborators';
 import ConciergeActionBar from '@/components/trip/ConciergeActionBar';
+import { useTripStore } from '@/lib/store';
 import { addDays, format, isToday, parseISO } from 'date-fns';
 
 type Mode = 'plan' | 'concierge';
@@ -33,12 +34,17 @@ function buildTripDays(startDate: string | null, endDate: string | null): Date[]
 export default function TripPlannerPage() {
   const searchParams = useSearchParams();
   const tripId = searchParams.get('id');
+  const initialMode = (searchParams.get('mode') as Mode) === 'concierge' ? 'concierge' : 'plan';
   const [trip, setTrip] = useState<any>(null);
-  const [mode, setMode] = useState<Mode>('plan');
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
+  const { setActiveTrip, setEvents } = useTripStore();
 
   useEffect(() => {
     if (!tripId) return;
+    setActiveTrip(tripId);
+    // Clear stale events when switching trips
+    setEvents([]);
     const fetchTrip = async () => {
       const token = localStorage.getItem('token');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
@@ -47,7 +53,7 @@ export default function TripPlannerPage() {
       if (res.ok) setTrip(await res.json());
     };
     fetchTrip();
-  }, [tripId]);
+  }, [tripId, setActiveTrip, setEvents]);
 
   const tripDays = useMemo(
     () => buildTripDays(trip?.start_date ?? null, trip?.end_date ?? null),
