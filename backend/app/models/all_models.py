@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
@@ -17,11 +17,39 @@ class Trip(Base):
     end_date = Column(DateTime)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     created_by_id = Column(Integer, ForeignKey("user.id"))
-    
+    group_id = Column(Integer, ForeignKey("group.id"), nullable=True, index=True)
+
     members = relationship("TripMember", back_populates="trip")
     events = relationship("Event", back_populates="trip")
     idea_bin_items = relationship("IdeaBinItem", back_populates="trip")
     days = relationship("TripDay", back_populates="trip", order_by="TripDay.date")
+    group = relationship("Group", back_populates="trips")
+
+
+class Group(Base):
+    __tablename__ = "group"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    owner_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    members = relationship("GroupMember", back_populates="group")
+    trips = relationship("Trip", back_populates="group")
+
+
+class GroupMember(Base):
+    __tablename__ = "group_member"
+    __table_args__ = (UniqueConstraint("group_id", "user_id", name="uq_group_member"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("group.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    role = Column(String, default="admin")       # admin, member
+    status = Column(String, default="accepted")  # accepted, invited
+
+    group = relationship("Group", back_populates="members")
+    user = relationship("User")
 
 
 class TripDay(Base):
@@ -59,6 +87,24 @@ class IdeaBinItem(Base):
     added_by = Column(String, nullable=True)
     
     trip = relationship("Trip", back_populates="idea_bin_items")
+
+class Notification(Base):
+    __tablename__ = "notification"
+    __table_args__ = (
+        Index("ix_notification_user_created", "user_id", "created_at"),
+        Index("ix_notification_user_unread", "user_id", "read_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    type = Column(String, nullable=False)
+    payload = Column(JSON, nullable=False, default=dict)
+    trip_id = Column(Integer, ForeignKey("trip.id"), nullable=True, index=True)
+    group_id = Column(Integer, nullable=True, index=True)
+    actor_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
 
 class Event(Base):
     id = Column(Integer, primary_key=True, index=True)

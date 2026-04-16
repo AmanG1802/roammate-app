@@ -2,11 +2,11 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func as sa_func
+from sqlalchemy import select, update, func as sa_func
 from sqlalchemy.orm import selectinload
-from typing import List
+from typing import List, Optional
 from app.db.session import get_db
-from app.models.all_models import Trip, TripMember, User, IdeaBinItem as IdeaBinItemModel, TripDay, Event as EventModel
+from app.models.all_models import Trip, TripMember, User, IdeaBinItem as IdeaBinItemModel, TripDay, Event as EventModel, Notification
 from app.schemas.trip import (
     Trip as TripSchema, TripCreate, TripUpdate, IngestRequest, IdeaBinItem,
     TripMemberOut, InviteRequest, TripDayCreate, TripDayOut,
@@ -14,6 +14,8 @@ from app.schemas.trip import (
     RoleUpdateRequest, VALID_ROLES, TripWithRole,
 )
 from app.services.idea_bin import idea_bin_service
+from app.services import notification_service
+from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
 
 router = APIRouter()
@@ -80,6 +82,15 @@ async def create_trip(
         )
         db.add(day1)
 
+    await notification_service.emit(
+        db,
+        recipient_ids=[current_user.id],
+        type=NotificationType.TRIP_CREATED,
+        payload={"trip_name": trip.name},
+        actor_id=current_user.id,
+        trip_id=trip.id,
+    )
+
     await db.commit()
     await db.refresh(trip)
     return trip
@@ -136,6 +147,33 @@ async def accept_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
 
     member.status = "accepted"
+    await db.flush()
+
+    trip_stmt = select(Trip).where(Trip.id == member.trip_id)
+    trip = (await db.execute(trip_stmt)).scalars().first()
+    trip_name = trip.name if trip else ""
+
+    await notification_service.emit(
+        db,
+        recipient_ids=[current_user.id],
+        type=NotificationType.INVITE_ACCEPTED,
+        payload={"trip_name": trip_name, "self": True},
+        actor_id=current_user.id,
+        trip_id=member.trip_id,
+    )
+    others = await notification_service.trip_member_ids(
+        db, member.trip_id, exclude_user_id=current_user.id
+    )
+    if others:
+        await notification_service.emit(
+            db,
+            recipient_ids=others,
+            type=NotificationType.INVITE_ACCEPTED,
+            payload={"trip_name": trip_name, "joined_user_name": current_user.name or ""},
+            actor_id=current_user.id,
+            trip_id=member.trip_id,
+        )
+
     await db.commit()
     await db.refresh(member)
 
@@ -163,7 +201,27 @@ async def decline_invitation(
     if not member:
         raise HTTPException(status_code=404, detail="Invitation not found")
 
+    trip_id = member.trip_id
+    trip_stmt = select(Trip).where(Trip.id == trip_id)
+    trip = (await db.execute(trip_stmt)).scalars().first()
+    trip_name = trip.name if trip else ""
+
+    admin_stmt = select(TripMember.user_id).where(
+        TripMember.trip_id == trip_id, TripMember.role == "admin"
+    )
+    admin_ids = [uid for uid in (await db.execute(admin_stmt)).scalars().all() if uid != current_user.id]
+
     await db.delete(member)
+
+    if admin_ids:
+        await notification_service.emit(
+            db,
+            recipient_ids=admin_ids,
+            type=NotificationType.INVITE_DECLINED,
+            payload={"trip_name": trip_name, "declined_user_name": current_user.name or ""},
+            actor_id=current_user.id,
+            trip_id=trip_id,
+        )
     await db.commit()
 
 
@@ -192,7 +250,11 @@ async def update_trip(
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
-    if update.name is not None:
+    renamed_from: Optional[str] = None
+    date_changed: bool = False
+
+    if update.name is not None and update.name != trip.name:
+        renamed_from = trip.name
         trip.name = update.name
 
     if update.start_date is not None:
@@ -200,6 +262,7 @@ async def update_trip(
         old_start = trip.start_date.date() if trip.start_date and hasattr(trip.start_date, 'date') else trip.start_date
 
         if old_start and new_start != old_start:
+            date_changed = True
             delta = new_start - old_start
             # Shift all TripDay dates AND their events' day_date by the same delta.
             # Process in reverse order (latest first) when shifting forward, or
@@ -228,6 +291,32 @@ async def update_trip(
 
     if update.end_date is not None:
         trip.end_date = update.end_date
+
+    others = await notification_service.trip_member_ids(
+        db, trip_id, exclude_user_id=current_user.id
+    )
+    if others and renamed_from is not None:
+        await notification_service.emit(
+            db,
+            recipient_ids=others,
+            type=NotificationType.TRIP_RENAMED,
+            payload={"from": renamed_from, "to": trip.name, "actor_name": current_user.name or ""},
+            actor_id=current_user.id,
+            trip_id=trip_id,
+        )
+    if others and date_changed:
+        await notification_service.emit(
+            db,
+            recipient_ids=others,
+            type=NotificationType.TRIP_DATE_CHANGED,
+            payload={
+                "trip_name": trip.name,
+                "new_start_date": trip.start_date.isoformat() if trip.start_date else None,
+                "actor_name": current_user.name or "",
+            },
+            actor_id=current_user.id,
+            trip_id=trip_id,
+        )
 
     await db.commit()
     await db.refresh(trip)
@@ -274,6 +363,22 @@ async def delete_trip(
     trip = (await db.execute(stmt)).scalars().first()
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
+
+    others = await notification_service.trip_member_ids(
+        db, trip_id, exclude_user_id=current_user.id
+    )
+    if others:
+        await notification_service.emit(
+            db,
+            recipient_ids=others,
+            type=NotificationType.TRIP_DELETED,
+            payload={"trip_name": trip.name, "actor_name": current_user.name or ""},
+            actor_id=current_user.id,
+        )
+    await db.flush()
+    await db.execute(
+        update(Notification).where(Notification.trip_id == trip_id).values(trip_id=None)
+    )
 
     for events in (await db.execute(select(EventModel).where(EventModel.trip_id == trip_id))).scalars().all():
         await db.delete(events)
@@ -359,7 +464,25 @@ async def update_member_role(
     if not target:
         raise HTTPException(status_code=404, detail="Member not found")
 
+    old_role = target.role
     target.role = body.role
+
+    if target.user_id != current_user.id and old_role != body.role:
+        trip_stmt = select(Trip).where(Trip.id == trip_id)
+        trip_row = (await db.execute(trip_stmt)).scalars().first()
+        await notification_service.emit(
+            db,
+            recipient_ids=[target.user_id],
+            type=NotificationType.MEMBER_ROLE_CHANGED,
+            payload={
+                "trip_name": trip_row.name if trip_row else "",
+                "new_role": body.role,
+                "actor_name": current_user.name or "",
+            },
+            actor_id=current_user.id,
+            trip_id=trip_id,
+        )
+
     await db.commit()
     await db.refresh(target)
 
@@ -394,6 +517,39 @@ async def remove_trip_member(
 
     if target.user_id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot remove yourself from the trip")
+
+    removed_user_stmt = select(User).where(User.id == target.user_id)
+    removed_user = (await db.execute(removed_user_stmt)).scalars().first()
+    trip_stmt = select(Trip).where(Trip.id == trip_id)
+    trip_row = (await db.execute(trip_stmt)).scalars().first()
+    trip_name = trip_row.name if trip_row else ""
+
+    remaining = await notification_service.trip_member_ids(
+        db, trip_id, exclude_user_id=current_user.id
+    )
+    remaining = [uid for uid in remaining if uid != target.user_id]
+
+    await notification_service.emit(
+        db,
+        recipient_ids=[target.user_id],
+        type=NotificationType.MEMBER_REMOVED,
+        payload={"trip_name": trip_name, "actor_name": current_user.name or "", "self": True},
+        actor_id=current_user.id,
+        trip_id=trip_id,
+    )
+    if remaining:
+        await notification_service.emit(
+            db,
+            recipient_ids=remaining,
+            type=NotificationType.MEMBER_REMOVED,
+            payload={
+                "trip_name": trip_name,
+                "removed_user_name": (removed_user.name if removed_user else "") or "",
+                "actor_name": current_user.name or "",
+            },
+            actor_id=current_user.id,
+            trip_id=trip_id,
+        )
 
     await db.delete(target)
     await db.commit()
@@ -434,6 +590,22 @@ async def invite_to_trip(
 
     new_member = TripMember(trip_id=trip_id, user_id=invitee.id, role=invite.role, status="invited")
     db.add(new_member)
+
+    trip_stmt = select(Trip).where(Trip.id == trip_id)
+    trip_row = (await db.execute(trip_stmt)).scalars().first()
+    await notification_service.emit(
+        db,
+        recipient_ids=[invitee.id],
+        type=NotificationType.INVITE_RECEIVED,
+        payload={
+            "trip_name": trip_row.name if trip_row else "",
+            "inviter_name": current_user.name or "",
+            "role": invite.role,
+        },
+        actor_id=current_user.id,
+        trip_id=trip_id,
+    )
+
     await db.commit()
     await db.refresh(new_member)
 

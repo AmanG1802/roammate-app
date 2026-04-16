@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import router as api_router
 from app.db.base_class import Base
 from app.db.session import engine
-from app.models.all_models import User, Trip, TripMember, Event, IdeaBinItem, TripDay
+from app.models.all_models import User, Trip, TripMember, Event, IdeaBinItem, TripDay, Notification, Group, GroupMember
 
 
 @asynccontextmanager

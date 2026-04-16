@@ -6,6 +6,8 @@ import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, 
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import NotificationBell from '@/components/layout/NotificationBell';
+import GroupsPanel from '@/components/groups/GroupsPanel';
 
 type Section = 'dashboard' | 'trips' | 'invitations' | 'groups';
 
@@ -29,6 +31,7 @@ export default function DashboardPage() {
   const [invitations, setInvitations] = useState<any[]>([]);
   const [invitationsLoading, setInvitationsLoading] = useState(false);
   const [respondingTo, setRespondingTo] = useState<number | null>(null);
+  const [groupInvitesCount, setGroupInvitesCount] = useState(0);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -190,9 +193,11 @@ export default function DashboardPage() {
             </div>
             <div className="relative">
               {navItem('groups', <Users className="w-5 h-5" />, 'Groups')}
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-slate-300 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
-                Soon
-              </span>
+              {groupInvitesCount > 0 && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[20px] h-5 flex items-center justify-center text-[10px] font-black text-white bg-indigo-600 rounded-full px-1.5">
+                  {groupInvitesCount}
+                </span>
+              )}
             </div>
           </nav>
 
@@ -234,13 +239,16 @@ export default function DashboardPage() {
                 </button>
               )}
             </div>
-            <button
-              onClick={() => { setCreateError(''); setIsModalOpen(true); }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-            >
-              <Plus className="w-4 h-4" />
-              New Trip
-            </button>
+            <div className="flex items-center gap-2">
+              <NotificationBell />
+              <button
+                onClick={() => { setCreateError(''); setIsModalOpen(true); }}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+              >
+                <Plus className="w-4 h-4" />
+                New Trip
+              </button>
+            </div>
           </header>
 
           <div className="flex-1 overflow-y-auto p-8">
@@ -367,17 +375,8 @@ export default function DashboardPage() {
               </>
             )}
 
-            {/* Groups placeholder */}
             {section === 'groups' && !searchQuery && (
-              <div className="flex flex-col items-center justify-center py-32 text-center">
-                <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-6">
-                  <Users className="w-10 h-10 text-slate-300" />
-                </div>
-                <h3 className="text-2xl font-black text-slate-900 mb-2">Groups are coming soon.</h3>
-                <p className="text-slate-500 font-medium max-w-sm">
-                  Collaborative trip planning for families and friend groups is on the roadmap.
-                </p>
-              </div>
+              <GroupsPanel onInvitationsChange={setGroupInvitesCount} />
             )}
           </div>
         </main>
