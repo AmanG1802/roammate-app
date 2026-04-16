@@ -3,9 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from app.db.session import get_db
-from app.models.all_models import Event as EventModel, TripMember, User
+from app.models.all_models import Event as EventModel, TripMember, User, IdeaBinItem as IdeaBinItemModel
 from app.schemas.event import Event, EventCreate, EventUpdate, RippleRequest
-from app.schemas.trip import IngestRequest
+from app.schemas.trip import IngestRequest, IdeaBinItem
 from app.services.ripple_engine import ripple_engine
 from app.services.quick_add import quick_add_service
 from app.api.deps import get_current_user
@@ -34,11 +34,13 @@ async def create_event(
         location_name=event_in.location_name,
         lat=event_in.lat,
         lng=event_in.lng,
+        day_date=event_in.day_date,
         start_time=event_in.start_time,
         end_time=event_in.end_time,
         is_locked=event_in.is_locked,
         event_type=event_in.event_type,
         sort_order=event_in.sort_order,
+        added_by=event_in.added_by,
     )
     db.add(event)
     await db.commit()
@@ -69,6 +71,8 @@ async def update_event(
 
     if update.title is not None:
         event.title = update.title
+    if update.day_date is not None:
+        event.day_date = update.day_date
     if update.start_time is not None:
         event.start_time = update.start_time
     if update.end_time is not None:
@@ -102,6 +106,49 @@ async def delete_event(
 
     await db.delete(event)
     await db.commit()
+
+
+@router.post("/{event_id}/move-to-bin", response_model=IdeaBinItem)
+async def move_event_to_bin(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Atomically move an event back to the idea bin, preserving added_by."""
+    stmt = select(EventModel).where(EventModel.id == event_id)
+    event = (await db.execute(stmt)).scalars().first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    stmt = select(TripMember).where(
+        TripMember.trip_id == event.trip_id,
+        TripMember.user_id == current_user.id,
+    )
+    if not (await db.execute(stmt)).scalars().first():
+        raise HTTPException(status_code=403, detail="Not a member of this trip")
+
+    hint = None
+    if event.start_time:
+        h = event.start_time.hour
+        m = event.start_time.minute
+        ampm = "pm" if h >= 12 else "am"
+        h12 = h % 12 or 12
+        hint = f"{h12}:{m:02d}{ampm}" if m else f"{h12}{ampm}"
+
+    idea = IdeaBinItemModel(
+        trip_id=event.trip_id,
+        title=event.title,
+        place_id=event.place_id,
+        lat=event.lat,
+        lng=event.lng,
+        time_hint=hint,
+        added_by=event.added_by,
+    )
+    db.add(idea)
+    await db.delete(event)
+    await db.commit()
+    await db.refresh(idea)
+    return idea
 
 
 @router.get("/", response_model=List[Event])

@@ -2,17 +2,34 @@ import { create } from 'zustand';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
+/**
+ * Format a Date as a naive ISO-like string using *local* time values,
+ * e.g. "2026-04-16T14:00:00".  Unlike Date.toISOString() (which converts to
+ * UTC), this preserves the wall-clock time the user intended.  The backend
+ * stores TIMESTAMP WITHOUT TIME ZONE, so sending local values avoids the
+ * UTC-shift that was turning "2pm IST" into "8:30am".
+ */
+function toLocalISOString(d: Date): string {
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
 /** Create a temporary local event (used when API is unavailable). */
 function makeLocalEvent(
   idea: Idea,
   startTime: Date | null | undefined,
-  events: Event[]
+  events: Event[],
+  dayDate: string | null = null,
 ): Event {
   const maxOrder = events.reduce((m, e) => Math.max(m, e.sort_order), -1);
   return {
     id: `local-${Math.random().toString(36).slice(2, 9)}`,
     trip_id: '0',
     title: idea.title,
+    day_date: dayDate,
     start_time: startTime ?? null,
     end_time: startTime ? new Date(startTime.getTime() + 3_600_000) : null,
     lat: idea.lat,
@@ -36,11 +53,13 @@ export interface Event {
   id: string;
   trip_id: string;
   title: string;
+  day_date: string | null;   // "YYYY-MM-DD" — the day this event belongs to
   start_time: Date | null;   // null = TBD
   end_time: Date | null;     // null = TBD
   lat: number;
   lng: number;
   sort_order: number;
+  added_by?: string | null;
 }
 
 export interface Idea {
@@ -49,12 +68,21 @@ export interface Idea {
   lat: number;
   lng: number;
   time_hint?: string | null;  // e.g. "2pm" extracted from input text
+  added_by?: string | null;   // first name of user who added the idea
+}
+
+export interface TripDay {
+  id: string;
+  trip_id: string;
+  date: string;       // ISO date string "YYYY-MM-DD"
+  day_number: number;
 }
 
 interface TripState {
   activeTripId: string | null;
   ideas: Idea[];
   events: Event[];
+  tripDays: TripDay[];
   collaborators: { id: string; name: string; color: string; activeEventId?: string }[];
 
   setActiveTrip: (id: string) => void;
@@ -75,7 +103,7 @@ interface TripState {
    * Calls POST /events/ and DELETE /trips/{id}/ideas/{id}.
    * If tripId is null, falls back to in-memory only (demo mode).
    */
-  moveIdeaToTimeline: (ideaId: string, tripId: string | null, token: string | null, startTime?: Date | null) => Promise<void>;
+  moveIdeaToTimeline: (ideaId: string, tripId: string | null, token: string | null, startTime?: Date | null, dayDate?: string | null) => Promise<void>;
 
   /**
    * Move event back → idea bin.
@@ -90,6 +118,12 @@ interface TripState {
   reorderEvent: (eventId: string, newSortOrder: number, token: string | null) => Promise<void>;
 
   updateCollaboratorStatus: (userId: string, activeEventId?: string) => void;
+
+  /** Trip day management */
+  setTripDays: (days: TripDay[]) => void;
+  loadTripDays: (tripId: string, token: string) => Promise<void>;
+  addTripDay: (tripId: string, date: string, token: string) => Promise<TripDay | null>;
+  deleteTripDay: (tripId: string, dayId: string, token: string, itemsAction?: 'bin' | 'delete') => Promise<void>;
 }
 
 function mapApiEvent(raw: Record<string, unknown>): Event {
@@ -97,11 +131,13 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
     id: String(raw.id),
     trip_id: String(raw.trip_id),
     title: raw.title as string,
+    day_date: (raw.day_date as string) ?? null,
     start_time: raw.start_time ? new Date(raw.start_time as string) : null,
     end_time: raw.end_time ? new Date(raw.end_time as string) : null,
     lat: (raw.lat as number) ?? 0,
     lng: (raw.lng as number) ?? 0,
     sort_order: (raw.sort_order as number) ?? 0,
+    added_by: (raw.added_by as string) ?? null,
   };
 }
 
@@ -119,6 +155,7 @@ export const useTripStore = create<TripState>((set, get) => ({
   activeTripId: null,
   ideas: [],
   events: [],
+  tripDays: [],
   collaborators: [
     { id: '1', name: 'You', color: '#4f46e5' },
     { id: '2', name: 'Sarah', color: '#ec4899' },
@@ -137,6 +174,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     try {
       const res = await fetch(`${API}/events/?trip_id=${tripId}`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
       });
       if (!res.ok) return;
       const raw: Record<string, unknown>[] = await res.json();
@@ -146,21 +184,20 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
 
-  moveIdeaToTimeline: async (ideaId, tripId, token, startTime?) => {
+  moveIdeaToTimeline: async (ideaId, tripId, token, startTime?, dayDate?) => {
     const { ideas, events } = get();
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
 
-    // Optimistically remove from ideas
     set({ ideas: ideas.filter((i) => i.id !== ideaId) });
 
-    // Demo / no-tripId mode: create local-only event
     if (!tripId || !token) {
       const maxOrder = events.reduce((m, e) => Math.max(m, e.sort_order), 0);
       const localEvent: Event = {
         id: Math.random().toString(36).slice(2, 9),
         trip_id: '0',
         title: idea.title,
+        day_date: dayDate ?? null,
         start_time: startTime ?? null,
         end_time: startTime ? new Date(startTime.getTime() + 3600_000) : null,
         lat: idea.lat,
@@ -182,9 +219,11 @@ export const useTripStore = create<TripState>((set, get) => ({
           title: idea.title,
           lat: idea.lat,
           lng: idea.lng,
-          start_time: startTime ? startTime.toISOString() : null,
-          end_time: startTime ? new Date(startTime.getTime() + 3600_000).toISOString() : null,
+          day_date: dayDate ?? null,
+          start_time: startTime ? toLocalISOString(startTime) : null,
+          end_time: startTime ? toLocalISOString(new Date(startTime.getTime() + 3600_000)) : null,
           sort_order: maxOrder + 1,
+          added_by: idea.added_by ?? null,
         }),
       });
 
@@ -192,7 +231,6 @@ export const useTripStore = create<TripState>((set, get) => ({
         const raw = await res.json();
         set((s) => ({ events: sortEvents([...s.events, mapApiEvent(raw)]) }));
 
-        // Await idea deletion so a rapid page-refresh can't outrun a fire-and-forget.
         const numericId = parseInt(ideaId, 10);
         if (!isNaN(numericId)) {
           try {
@@ -201,17 +239,14 @@ export const useTripStore = create<TripState>((set, get) => ({
               headers: { Authorization: `Bearer ${token}` },
             });
           } catch {
-            // Deletion failed; the idea may reappear on next load but the event is safe.
+            // Deletion failed; idea may reappear on reload but event is safe.
           }
         }
       } else {
-        // API failed – fall back to a local-only event so the UI always works.
-        // The event won't survive a reload, but it's far better than silent failure.
-        set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events)]) }));
+        set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events, dayDate ?? null)]) }));
       }
     } catch {
-      // Network error – same local fallback
-      set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events)]) }));
+      set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events, dayDate ?? null)]) }));
     }
   },
 
@@ -230,17 +265,29 @@ export const useTripStore = create<TripState>((set, get) => ({
       lat: event.lat,
       lng: event.lng,
       time_hint: event.start_time ? formatTimeHint(event.start_time) : undefined,
+      added_by: event.added_by ?? null,
     };
     set((s) => ({ ideas: [restoredIdea, ...s.ideas] }));
 
     if (tripId && token) {
       try {
-        await fetch(`${API}/events/${eventId}`, {
-          method: 'DELETE',
+        const res = await fetch(`${API}/events/${eventId}/move-to-bin`, {
+          method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (res.ok) {
+          const idea = await res.json();
+          // Replace the optimistic restored idea with the real DB-backed one
+          set((s) => ({
+            ideas: s.ideas.map((i) =>
+              i.id === `restored-${eventId}`
+                ? { id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0, time_hint: idea.time_hint ?? null, added_by: idea.added_by ?? null }
+                : i
+            ),
+          }));
+        }
       } catch {
-        // If delete fails, the optimistic state still reflects user intent
+        // Optimistic state still reflects user intent
       }
     }
   },
@@ -260,8 +307,8 @@ export const useTripStore = create<TripState>((set, get) => ({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            start_time: startTime ? startTime.toISOString() : null,
-            end_time: endTime ? endTime.toISOString() : null,
+            start_time: startTime ? toLocalISOString(startTime) : null,
+            end_time: endTime ? toLocalISOString(endTime) : null,
           }),
         });
       } catch {
@@ -295,4 +342,82 @@ export const useTripStore = create<TripState>((set, get) => ({
         c.id === userId ? { ...c, activeEventId } : c
       ),
     })),
+
+  setTripDays: (days) => set({ tripDays: days }),
+
+  loadTripDays: async (tripId, token) => {
+    try {
+      const res = await fetch(`${API}/trips/${tripId}/days`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+      const raw: Record<string, unknown>[] = await res.json();
+      set({
+        tripDays: raw.map((d) => ({
+          id: String(d.id),
+          trip_id: String(d.trip_id),
+          date: d.date as string,
+          day_number: d.day_number as number,
+        })),
+      });
+    } catch {
+      // keep current state
+    }
+  },
+
+  addTripDay: async (tripId, date, token) => {
+    try {
+      const res = await fetch(`${API}/trips/${tripId}/days`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ date }),
+      });
+      if (!res.ok) return null;
+      const raw = await res.json();
+      const day: TripDay = {
+        id: String(raw.id),
+        trip_id: String(raw.trip_id),
+        date: raw.date as string,
+        day_number: raw.day_number as number,
+      };
+      set((s) => ({
+        tripDays: [...s.tripDays, day].sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        ),
+      }));
+      return day;
+    } catch {
+      return null;
+    }
+  },
+
+  deleteTripDay: async (tripId, dayId, token, itemsAction = 'bin') => {
+    try {
+      const res = await fetch(`${API}/trips/${tripId}/days/${dayId}?items_action=${itemsAction}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok || res.status === 204) {
+        // Re-fetch days to get renumbered/re-dated state from backend
+        const listRes = await fetch(`${API}/trips/${tripId}/days`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (listRes.ok) {
+          const raw: Record<string, unknown>[] = await listRes.json();
+          set({
+            tripDays: raw.map((d) => ({
+              id: String(d.id),
+              trip_id: String(d.trip_id),
+              date: d.date as string,
+              day_number: d.day_number as number,
+            })),
+          });
+        }
+      }
+    } catch {
+      // keep current state
+    }
+  },
 }));

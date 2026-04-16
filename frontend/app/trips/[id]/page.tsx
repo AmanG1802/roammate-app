@@ -5,11 +5,18 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, Calendar, MapPin, Plane, Compass, Globe,
-  Plus, X, Loader2, ChevronRight, Users, Clock,
+  Plus, X, Loader2, ChevronRight, Users, Clock, Pencil, Check,
+  ShieldCheck, Eye, Vote, ChevronDown,
 } from 'lucide-react';
 import { gsap } from 'gsap';
-import { format, differenceInDays } from 'date-fns';
-import { ProtectedRoute } from '@/hooks/useAuth';
+import { format, differenceInDays, parseISO } from 'date-fns';
+import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
+
+const ROLE_ICON_MAP: Record<string, { icon: typeof ShieldCheck; bg: string; fg: string }> = {
+  admin: { icon: ShieldCheck, bg: 'bg-amber-400', fg: 'text-amber-900' },
+  view_only: { icon: Eye, bg: 'bg-sky-400', fg: 'text-sky-900' },
+  view_with_vote: { icon: Vote, bg: 'bg-violet-400', fg: 'text-violet-900' },
+};
 
 function getInitials(name: string) {
   return name
@@ -30,6 +37,7 @@ function TripHubContent() {
   const params = useParams();
   const router = useRouter();
   const tripId = params.id as string;
+  const { user: currentUser } = useAuth(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [trip, setTrip] = useState<any>(null);
@@ -39,8 +47,23 @@ function TripHubContent() {
 
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('');
   const [inviteStatus, setInviteStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [inviteError, setInviteError] = useState('');
+  
+
+  const ROLE_OPTIONS = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'view_only', label: 'View Only' },
+    { value: 'view_with_vote', label: 'View with Vote' },
+  ];
+
+  const [editingDate, setEditingDate] = useState(false);
+  const [dateValue, setDateValue] = useState('');
+
+  const isAdmin = currentUser
+    ? members.some((m) => m.user_id === currentUser.id && m.role === 'admin')
+    : false;
 
   // ── Fetch trip + members ────────────────────────────────────────────────────
   useEffect(() => {
@@ -161,7 +184,7 @@ function TripHubContent() {
 
   // ── Invite handler ──────────────────────────────────────────────────────────
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !inviteRole) return;
     setInviteStatus('loading');
     setInviteError('');
     const token = localStorage.getItem('token');
@@ -171,13 +194,14 @@ function TripHubContent() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ email: inviteEmail }),
+          body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
         }
       );
       if (res.ok) {
         const newMember = await res.json();
         setMembers((prev) => [...prev, newMember]);
         setInviteEmail('');
+        setInviteRole('');
         setInviteStatus('success');
         setTimeout(() => { setInviteStatus('idle'); setShowInvite(false); }, 2000);
       } else {
@@ -189,6 +213,29 @@ function TripHubContent() {
       setInviteError('Network error — please try again');
       setInviteStatus('error');
     }
+  };
+
+  // ── Save start date ────────────────────────────────────────────────────────
+  const handleSaveDate = async () => {
+    if (!dateValue) return;
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ start_date: `${dateValue}T00:00:00` }),
+        }
+      );
+      if (res.ok) {
+        const updated = await res.json();
+        setTrip(updated);
+      }
+    } catch {
+      // silently fail
+    }
+    setEditingDate(false);
   };
 
   // ── View-Transition navigation ──────────────────────────────────────────────
@@ -229,16 +276,19 @@ function TripHubContent() {
 
   const nameWords: string[] = (trip?.name ?? 'Your Trip').split(' ');
 
+  const parsedStart = trip?.start_date ? parseISO(trip.start_date) : null;
+  const parsedEnd = trip?.end_date ? parseISO(trip.end_date) : null;
+
   const dateRange =
-    trip?.start_date && trip?.end_date
-      ? `${format(new Date(trip.start_date), 'MMM d')} → ${format(new Date(trip.end_date), 'MMM d, yyyy')}`
-      : trip?.start_date
-      ? `From ${format(new Date(trip.start_date), 'MMM d, yyyy')}`
+    parsedStart && parsedEnd
+      ? `${format(parsedStart, 'MMM d')} → ${format(parsedEnd, 'MMM d, yyyy')}`
+      : parsedStart
+      ? `From ${format(parsedStart, 'MMM d, yyyy')}`
       : 'Dates TBD';
 
   const duration =
-    trip?.start_date && trip?.end_date
-      ? `${differenceInDays(new Date(trip.end_date), new Date(trip.start_date)) + 1} days`
+    parsedStart && parsedEnd
+      ? `${differenceInDays(parsedEnd, parsedStart) + 1} days`
       : null;
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -315,11 +365,50 @@ function TripHubContent() {
           </h1>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="hub-date-pill flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/8 rounded-2xl backdrop-blur-sm">
-              <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span className="text-white/90 font-bold text-sm">{dateRange}</span>
-            </div>
-            {duration && (
+            {isAdmin && editingDate ? (
+              <div className="hub-date-pill flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-indigo-500/40 rounded-2xl backdrop-blur-sm">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <input
+                  autoFocus
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveDate()}
+                  className="bg-transparent text-white font-bold text-sm outline-none border-none w-40"
+                />
+                <button
+                  onClick={handleSaveDate}
+                  className="p-1 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition-colors"
+                >
+                  <Check className="w-3 h-3 text-white" />
+                </button>
+                <button
+                  onClick={() => setEditingDate(false)}
+                  className="p-1 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="hub-date-pill flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/8 rounded-2xl backdrop-blur-sm group">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="text-white/90 font-bold text-sm">{dateRange}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      const sd = trip?.start_date ? trip.start_date.split('T')[0] : '';
+                      setDateValue(sd);
+                      setEditingDate(true);
+                    }}
+                    className="p-1 text-white/30 hover:text-indigo-400 transition-colors"
+                    title="Edit start date"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+            {duration && !editingDate && (
               <div className="hub-date-pill flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/8 rounded-2xl backdrop-blur-sm">
                 <Clock className="w-3.5 h-3.5 text-violet-400 shrink-0" />
                 <span className="text-slate-300 font-bold text-sm">{duration}</span>
@@ -344,38 +433,44 @@ function TripHubContent() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
-              {members.map((member, i) => (
-                <div key={member.id} className="hub-avatar group relative">
-                  <div
-                    className="w-11 h-11 rounded-full border-2 border-slate-800 flex items-center justify-center font-black text-sm text-white shadow-lg cursor-default transition-all hover:scale-110 hover:border-indigo-400 hover:shadow-indigo-900/40"
-                    style={{ backgroundColor: AVATAR_PALETTE[i % AVATAR_PALETTE.length] }}
-                  >
-                    {getInitials(member.user?.name ?? '?')}
-                  </div>
-                  {member.role === 'owner' && (
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center shadow-sm">
-                      <span className="text-[7px] font-black text-amber-900 leading-none">★</span>
+              {members.map((member, i) => {
+                const roleCfg = ROLE_ICON_MAP[member.role] ?? ROLE_ICON_MAP.view_only;
+                const RIcon = roleCfg.icon;
+                const isSelf = currentUser && member.user_id === currentUser.id;
+                return (
+                  <div key={member.id} className="hub-avatar group relative">
+                    <div
+                      className="w-11 h-11 rounded-full border-2 border-slate-800 flex items-center justify-center font-black text-sm text-white shadow-lg cursor-default transition-all hover:scale-110 hover:border-indigo-400 hover:shadow-indigo-900/40"
+                      style={{ backgroundColor: AVATAR_PALETTE[i % AVATAR_PALETTE.length] }}
+                    >
+                      {getInitials(member.user?.name ?? '?')}
                     </div>
-                  )}
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800/95 text-white text-[10px] py-1.5 px-2.5 rounded-xl font-bold whitespace-nowrap z-50 border border-white/10 shadow-xl">
-                    {member.user?.name}
-                    <span className="text-slate-400 ml-1.5 capitalize font-normal">({member.role})</span>
+                    <div className={`absolute -top-1 -right-1 w-4 h-4 ${roleCfg.bg} rounded-full flex items-center justify-center shadow-sm`}>
+                      <RIcon className={`w-2.5 h-2.5 ${roleCfg.fg}`} />
+                    </div>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center bg-slate-800/95 text-white text-[10px] py-1.5 px-2.5 rounded-xl font-bold whitespace-nowrap z-50 border border-white/10 shadow-xl">
+                      <span>
+                        {member.user?.name}
+                        <span className="text-slate-400 ml-1.5 font-normal">({member.role?.replace('_', ' ')})</span>
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
-              {/* Add traveler toggle */}
-              <button
-                onClick={() => { setShowInvite(!showInvite); setInviteError(''); setInviteEmail(''); }}
-                className="hub-invite-btn w-11 h-11 rounded-full border-2 border-dashed border-indigo-500/35 flex items-center justify-center text-indigo-500 hover:border-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all"
-                title="Add traveler"
-              >
-                {showInvite ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => { setShowInvite(!showInvite); setInviteError(''); setInviteEmail(''); }}
+                  className="hub-invite-btn w-11 h-11 rounded-full border-2 border-dashed border-indigo-500/35 flex items-center justify-center text-indigo-500 hover:border-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all"
+                  title="Add traveler"
+                >
+                  {showInvite ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </div>
 
-            {/* Invite form */}
-            {showInvite && (
+            {/* Invite form — admin only */}
+            {isAdmin && showInvite && (
               <div className="mt-4 space-y-2">
                 <div className="flex gap-2">
                   <input
@@ -391,9 +486,24 @@ function TripHubContent() {
                     onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
                     className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-medium placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 transition-all"
                   />
+                  <div className="relative w-[150px] shrink-0">
+                    <select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                      className={`w-full appearance-none pl-3 pr-8 py-2.5 border border-white/10 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500/60 cursor-pointer transition-all ${
+                        inviteRole ? 'bg-white/10 text-white' : 'bg-white/5 text-slate-500'
+                      }`}
+                    >
+                      <option value="" disabled>Add role</option>
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                  </div>
                   <button
                     onClick={handleInvite}
-                    disabled={inviteStatus === 'loading' || !inviteEmail.trim()}
+                    disabled={inviteStatus === 'loading' || !inviteEmail.trim() || !inviteRole}
                     className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-500 transition-all disabled:opacity-50 min-w-[80px] flex items-center justify-center gap-2"
                   >
                     {inviteStatus === 'loading' ? (
@@ -443,6 +553,20 @@ function TripHubContent() {
                 Live Concierge
               </div>
               <ChevronRight className="w-5 h-5 text-indigo-600/50 group-hover:translate-x-0.5 group-hover:text-indigo-400 transition-all" />
+            </Link>
+
+            <Link
+              href={`/trips?id=${tripId}&mode=people`}
+              onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=people`)}
+              className="hub-cta group flex items-center justify-between px-6 py-4 bg-white/5 border border-white/10 text-slate-400 rounded-2xl font-black text-[15px] hover:bg-white/10 hover:border-white/20 hover:text-slate-300 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-white/10 rounded-xl flex items-center justify-center group-hover:bg-white/15 transition-colors">
+                  <Users className="w-4 h-4 text-slate-400 group-hover:text-slate-300" />
+                </div>
+                People
+              </div>
+              <ChevronRight className="w-5 h-5 text-white/20 group-hover:translate-x-0.5 group-hover:text-slate-400 transition-all" />
             </Link>
           </div>
         </div>

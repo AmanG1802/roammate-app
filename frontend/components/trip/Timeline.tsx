@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTripStore, Event, Idea } from '@/lib/store';
-import { format, isSameDay } from 'date-fns';
+import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,6 +10,8 @@ interface TimelineProps {
   tripId: string | null;
   /** When set (Concierge mode), only events on this day are shown. */
   filterDay?: Date;
+  /** When true, hides move-to-bin, time editing, and drag reorder. */
+  readOnly?: boolean;
 }
 
 /** Returns true if event A's end_time overlaps event B's start_time. */
@@ -139,8 +141,8 @@ function TimeEditor({
   );
 }
 
-export default function Timeline({ tripId, filterDay }: TimelineProps) {
-  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw } =
+export default function Timeline({ tripId, filterDay, readOnly = false }: TimelineProps) {
+  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays } =
     useTripStore();
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -155,20 +157,27 @@ export default function Timeline({ tripId, filterDay }: TimelineProps) {
     loadEvents(tripId, token);
   }, [tripId, loadEvents]);
 
-  const visibleEvents = filterDay
-    ? events.filter((e) => e.start_time && isSameDay(new Date(e.start_time), filterDay))
+  const filterDayStr = filterDay
+    ? `${filterDay.getFullYear()}-${String(filterDay.getMonth() + 1).padStart(2, '0')}-${String(filterDay.getDate()).padStart(2, '0')}`
+    : null;
+
+  const visibleEvents = filterDayStr
+    ? events.filter((e) => e.day_date === filterDayStr)
     : events;
+
+  const noDaysExist = tripDays.length === 0;
 
   // ── Drag from Idea Bin → Timeline (onto empty area) ───────────────────────
   const handleDropFromBin = (e: React.DragEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     const ideaId = e.dataTransfer.getData('ideaId');
     if (!ideaId) return;
+    if (noDaysExist) return;
     const token = localStorage.getItem('token');
-    // Carry the idea's time_hint into the timeline so the event is pre-scheduled.
     const idea = ideas.find((i: Idea) => i.id === ideaId);
     const startTime = idea?.time_hint ? parseTimeString(idea.time_hint) : null;
-    moveIdeaToTimeline(ideaId, tripId, token, startTime);
+    moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
   };
 
   // ── Per-event drag handlers ───────────────────────────────────────────────
@@ -192,9 +201,10 @@ export default function Timeline({ tripId, filterDay }: TimelineProps) {
     // ── Case 1: idea dropped from Idea Bin onto an event card ─────────────
     const ideaId = e.dataTransfer.getData('ideaId');
     if (ideaId) {
+      if (noDaysExist) { setDraggingId(null); setDragOverId(null); return; }
       const idea = ideas.find((i: Idea) => i.id === ideaId);
       const startTime = idea?.time_hint ? parseTimeString(idea.time_hint) : null;
-      moveIdeaToTimeline(ideaId, tripId, token, startTime);
+      moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
       setDraggingId(null);
       setDragOverId(null);
       return;
@@ -256,10 +266,10 @@ export default function Timeline({ tripId, filterDay }: TimelineProps) {
             <Clock className="w-7 h-7 text-indigo-400" />
           </div>
           <p className="text-base font-black text-slate-900 mb-1">
-            {filterDay ? 'No events for this day' : 'Build your day'}
+            {noDaysExist ? 'Add a day first' : filterDay ? 'No events for this day' : 'Build your day'}
           </p>
           <p className="text-sm text-slate-400 font-medium text-center px-4">
-            {filterDay ? 'Switch to Plan mode to add events.' : 'Drag items from the Idea Bin to start.'}
+            {noDaysExist ? 'Click "Add Day" before adding items.' : 'Drag items from the Idea Bin to start.'}
           </p>
         </div>
       ) : (
@@ -289,11 +299,11 @@ export default function Timeline({ tripId, filterDay }: TimelineProps) {
                   initial={{ opacity: 0, x: -16 }}
                   animate={{ opacity: isDragging ? 0.4 : 1, x: 0 }}
                   exit={{ opacity: 0, x: -16 }}
-                  draggable
-                  onDragStartCapture={(e) => handleEventDragStart(e, event.id)}
-                  onDragOver={(e) => handleEventDragOver(e, event.id)}
-                  onDrop={(e) => handleEventDrop(e, event.id)}
-                  onDragEndCapture={handleEventDragEnd}
+                  draggable={!readOnly}
+                  onDragStartCapture={(e) => { if (!readOnly) handleEventDragStart(e, event.id); }}
+                  onDragOver={(e) => { if (!readOnly) handleEventDragOver(e, event.id); }}
+                  onDrop={(e) => { if (!readOnly) handleEventDrop(e, event.id); }}
+                  onDragEndCapture={() => { if (!readOnly) handleEventDragEnd(); }}
                   data-testid={`event-card-${event.id}`}
                   className={`relative pl-10 group transition-all ${isDragTarget ? 'scale-[1.02]' : ''}`}
                 >
@@ -310,7 +320,7 @@ export default function Timeline({ tripId, filterDay }: TimelineProps) {
                   }`}>
                     <div className="flex justify-between items-start">
                       <div className="flex items-start gap-2 flex-1 min-w-0">
-                        <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />
+                        {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
                         <div className="flex-1 min-w-0">
                           <h4 className="font-black text-slate-900 leading-tight mb-0.5 truncate">
                             {event.title}
@@ -323,27 +333,48 @@ export default function Timeline({ tripId, filterDay }: TimelineProps) {
                       </div>
 
                       <div className="flex flex-col items-end gap-1 shrink-0 ml-3">
-                        <TimeDisplay
-                          event={event}
-                          isConflict={isConflict}
-                          onEdit={() => setEditingId(event.id)}
-                        />
-                        <button
-                          title="Send back to Idea Bin"
-                          data-testid={`move-to-bin-${event.id}`}
-                          onClick={() => {
-                            const token = localStorage.getItem('token');
-                            moveEventToIdea(event.id, tripId, token);
-                          }}
-                          className="flex items-center gap-1 text-[9px] font-black text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                          <Undo2 className="w-2.5 h-2.5" />
-                          Move to bin
-                        </button>
+                        {readOnly ? (
+                          /* Read-only time badge — no pencil, no click */
+                          event.start_time ? (
+                            <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black ${
+                              isConflict
+                                ? 'text-red-600 bg-red-50 border border-red-400 ring-1 ring-red-300'
+                                : 'text-indigo-600 bg-indigo-50 border border-indigo-100'
+                            }`}>
+                              {isConflict && <AlertCircle className="w-3 h-3" />}
+                              {format(event.start_time, 'h:mm a')}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black text-amber-600 bg-amber-50 border border-amber-100">
+                              <Clock className="w-3 h-3" />
+                              TBD
+                            </span>
+                          )
+                        ) : (
+                          <TimeDisplay
+                            event={event}
+                            isConflict={isConflict}
+                            onEdit={() => setEditingId(event.id)}
+                          />
+                        )}
+                        {!readOnly && (
+                          <button
+                            title="Send back to Idea Bin"
+                            data-testid={`move-to-bin-${event.id}`}
+                            onClick={() => {
+                              const token = localStorage.getItem('token');
+                              moveEventToIdea(event.id, tripId, token);
+                            }}
+                            className="flex items-center gap-1 text-[9px] font-black text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <Undo2 className="w-2.5 h-2.5" />
+                            Move to bin
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {editingId === event.id && (
+                    {!readOnly && editingId === event.id && (
                       <TimeEditor
                         event={event}
                         onConfirm={(start, end) => {

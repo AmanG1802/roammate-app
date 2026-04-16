@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
+from datetime import datetime, date
 
 
 # ── User embedded in trip member ──────────────────────────────────────────────
@@ -17,12 +17,45 @@ class TripMemberOut(BaseModel):
     trip_id: int
     user_id: int
     role: str
+    status: str = "accepted"
     user: UserInTrip
     model_config = {"from_attributes": True}
 
 
+VALID_ROLES = ("admin", "view_only", "view_with_vote")
+
+
 class InviteRequest(BaseModel):
     email: EmailStr
+    role: str = "view_only"
+
+
+class RoleUpdateRequest(BaseModel):
+    role: str
+
+
+# ── Invitation (enriched view for the invitee's dashboard) ────────────────────
+class TripSummary(BaseModel):
+    id: int
+    name: str
+    start_date: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class InviterSummary(BaseModel):
+    name: str
+    email: str
+    model_config = {"from_attributes": True}
+
+
+class InvitationOut(BaseModel):
+    """Pending invitation as seen on the invitee's dashboard."""
+    id: int
+    trip_id: int
+    role: str
+    trip: TripSummary
+    inviter: Optional[InviterSummary] = None
+    model_config = {"from_attributes": True}
 
 
 # ── Idea Bin ───────────────────────────────────────────────────────────────────
@@ -32,6 +65,8 @@ class IdeaBinItemBase(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     url_source: Optional[str] = None
+    time_hint: Optional[str] = None
+    added_by: Optional[str] = None
 
 class IdeaBinItemCreate(IdeaBinItemBase):
     pass
@@ -54,9 +89,39 @@ class TripBase(BaseModel):
 class TripCreate(TripBase):
     pass
 
+class TripUpdate(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
 class Trip(TripBase):
     id: int
     created_at: datetime
     created_by_id: int
 
+    model_config = {"from_attributes": True}
+
+
+class TripWithRole(BaseModel):
+    """Trip data with the requesting user's role attached."""
+    id: int
+    name: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    created_at: datetime
+    created_by_id: int
+    my_role: str
+
+    model_config = {"from_attributes": True}
+
+
+# ── Trip Days ─────────────────────────────────────────────────────────────────
+class TripDayCreate(BaseModel):
+    date: date
+
+class TripDayOut(BaseModel):
+    id: int
+    trip_id: int
+    date: date
+    day_number: int
     model_config = {"from_attributes": True}

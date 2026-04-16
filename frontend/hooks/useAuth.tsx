@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
+function clearSession() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+}
+
 export default function useAuth(requireAuth: boolean = true) {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -11,34 +16,43 @@ export default function useAuth(requireAuth: boolean = true) {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
 
     if (requireAuth && !token) {
       router.push('/login');
-      // keep isLoading=true so ProtectedRoute shows spinner during redirect
       return;
     }
 
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {
-        // Corrupt user data — clear session and redirect
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        if (requireAuth) {
-          router.push('/login');
-          return;
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate the token against the backend
+    const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+    fetch(`${API}/users/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const userData = await res.json();
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+          setIsLoading(false);
+        } else {
+          // Token expired or invalid
+          clearSession();
+          if (requireAuth) router.push('/login');
+          else setIsLoading(false);
         }
-      }
-    } else if (token && requireAuth) {
-      // Token present but no user data (e.g. partial localStorage clear) — clear and redirect
-      localStorage.removeItem('token');
-      router.push('/login');
-      return;
-    }
-
-    setIsLoading(false);
+      })
+      .catch(() => {
+        // Network error — use cached user data if available
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          try { setUser(JSON.parse(savedUser)); } catch { /* ignore */ }
+        }
+        setIsLoading(false);
+      });
   }, [requireAuth, router]);
 
   return { user, isLoading };

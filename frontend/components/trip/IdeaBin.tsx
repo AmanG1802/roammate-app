@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTripStore } from '@/lib/store';
-import { MapPin, Loader2, Sparkles, Plus, Clock } from 'lucide-react';
+import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /** Extract a time hint from a text fragment, e.g. "Eiffel Tower at 2pm" → "2pm" */
@@ -21,10 +21,42 @@ function stripTimeHint(text: string): string {
     .trim();
 }
 
-export default function IdeaBin({ tripId }: { tripId: string | null }) {
+/** Convert a display hint like "2pm", "2:30pm", "14:00" → "HH:MM" for <input type="time"> */
+function hintToTimeValue(hint: string | null | undefined): string {
+  if (!hint) return '';
+  const s = hint.trim().toLowerCase();
+  const ampm = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+  if (ampm) {
+    let h = parseInt(ampm[1], 10);
+    const m = parseInt(ampm[2] ?? '0', 10);
+    if (ampm[3] === 'pm' && h !== 12) h += 12;
+    if (ampm[3] === 'am' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+  const mil = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (mil) return `${String(mil[1]).padStart(2, '0')}:${mil[2]}`;
+  return '';
+}
+
+/** Convert "HH:MM" from <input type="time"> → friendly hint like "2pm" or "2:30pm" */
+function timeValueToHint(val: string): string | null {
+  if (!val) return null;
+  const [hStr, mStr] = val.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const ampm = h >= 12 ? 'pm' : 'am';
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return m === 0 ? `${h}${ampm}` : `${h}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
+export default function IdeaBin({ tripId, readOnly = false }: { tripId: string | null; readOnly?: boolean }) {
+  // readOnly = non-admin user. They CAN add ideas but CANNOT delete/edit time/drag-to-timeline.
   const [inputText, setInputText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
-  const { ideas, addIdea, setIdeas } = useTripStore();
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
+  const [editingTimeVal, setEditingTimeVal] = useState('');
+  const { ideas, addIdea, setIdeas, removeIdea } = useTripStore();
 
   // Load ideas from API on mount
   useEffect(() => {
@@ -34,6 +66,7 @@ export default function IdeaBin({ tripId }: { tripId: string | null }) {
 
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas`, {
       headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: any[]) => {
@@ -43,6 +76,8 @@ export default function IdeaBin({ tripId }: { tripId: string | null }) {
             title: item.title,
             lat: item.lat ?? 0,
             lng: item.lng ?? 0,
+            time_hint: item.time_hint ?? null,
+            added_by: item.added_by ?? null,
           }))
         );
       })
@@ -79,7 +114,8 @@ export default function IdeaBin({ tripId }: { tripId: string | null }) {
               title: item.title,
               lat: item.lat,
               lng: item.lng,
-              time_hint: extractTimeHint(fragment),
+              time_hint: item.time_hint ?? extractTimeHint(fragment),
+              added_by: item.added_by ?? null,
             });
           });
           setInputText('');
@@ -103,6 +139,40 @@ export default function IdeaBin({ tripId }: { tripId: string | null }) {
     } finally {
       setIsIngesting(false);
     }
+  };
+
+  const handleDeleteIdea = async (ideaId: string) => {
+    removeIdea(ideaId);
+    if (!tripId) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const numericId = parseInt(ideaId, 10);
+    if (isNaN(numericId)) return;
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas/${numericId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch { /* optimistic removal already done */ }
+  };
+
+  const handleSaveTime = async (ideaId: string) => {
+    const newHint = timeValueToHint(editingTimeVal);
+    setIdeas(ideas.map((i) => i.id === ideaId ? { ...i, time_hint: newHint } : i));
+    setEditingTimeId(null);
+
+    if (!tripId) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const numericId = parseInt(ideaId, 10);
+    if (isNaN(numericId)) return;
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas/${numericId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ time_hint: newHint }),
+      });
+    } catch { /* optimistic update already done */ }
   };
 
   return (
@@ -159,25 +229,14 @@ export default function IdeaBin({ tripId }: { tripId: string | null }) {
             </motion.div>
           ) : (
             ideas.map((idea) => (
-              /*
-               * NOTE: draggable + onDragStartCapture MUST be on the motion.div itself.
-               * Putting them on a wrapper div causes framer-motion's inner pointer-event
-               * listeners (for layout animation tracking) to swallow the mousedown before
-               * the browser can recognise a native drag on the parent.
-               *
-               * onDragStartCapture (capture phase) is used instead of onDragStart because
-               * framer-motion overrides the onDragStart prop with its own pointer-event
-               * handler type. The capture variant is not overridden and receives the correct
-               * React.DragEvent type with a valid dataTransfer object.
-               */
               <motion.div
                 key={idea.id}
                 layout
                 initial={{ opacity: 0, scale: 0.9, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                draggable
-                onDragStartCapture={(e) => e.dataTransfer.setData('ideaId', idea.id)}
+                draggable={!readOnly}
+                onDragStartCapture={(e) => { if (!readOnly) e.dataTransfer.setData('ideaId', idea.id); }}
                 data-testid={`idea-card-${idea.id}`}
                 className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm cursor-grab active:cursor-grabbing hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-50/50 transition-all group relative overflow-hidden"
               >
@@ -190,16 +249,75 @@ export default function IdeaBin({ tripId }: { tripId: string | null }) {
                     <span className="text-sm font-black text-slate-800 block truncate">
                       {idea.title}
                     </span>
-                    {idea.time_hint && (
-                      <span
-                        data-testid={`time-hint-badge-${idea.id}`}
-                        className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold"
-                      >
-                        <Clock className="w-2.5 h-2.5" />
-                        {idea.time_hint}
-                      </span>
+
+                    {!readOnly && editingTimeId === idea.id ? (
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <input
+                          autoFocus
+                          type="time"
+                          value={editingTimeVal}
+                          onChange={(e) => setEditingTimeVal(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveTime(idea.id)}
+                          className="w-24 px-2 py-0.5 text-[11px] font-bold border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                        <button
+                          onClick={() => handleSaveTime(idea.id)}
+                          className="p-0.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-500 transition-colors"
+                        >
+                          <Check className="w-2.5 h-2.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingTimeId(null)}
+                          className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {idea.time_hint ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold">
+                            <Clock className="w-2.5 h-2.5" />
+                            {idea.time_hint}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 text-slate-400 rounded-lg text-[10px] font-bold">
+                            <Clock className="w-2.5 h-2.5" />
+                            No time
+                          </span>
+                        )}
+                        {!readOnly && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingTimeVal(hintToTimeValue(idea.time_hint));
+                              setEditingTimeId(idea.id);
+                            }}
+                            className="p-0.5 text-slate-300 hover:text-indigo-500 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Edit time"
+                          >
+                            <Pencil className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {idea.added_by && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <UserCircle className="w-2.5 h-2.5 text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400">{idea.added_by}</span>
+                      </div>
                     )}
                   </div>
+
+                  {!readOnly && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteIdea(idea.id); }}
+                      className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                      title="Delete idea"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))
