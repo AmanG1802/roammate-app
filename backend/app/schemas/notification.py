@@ -19,6 +19,10 @@ class NotificationType:
     GROUP_MEMBER_REMOVED = "group_member_removed"
     GROUP_TRIP_ATTACHED = "group_trip_attached"
     IDEA_ADDED_TO_GROUP = "idea_added_to_group"
+    EVENT_ADDED = "event_added"
+    EVENT_MOVED = "event_moved"
+    EVENT_REMOVED = "event_removed"
+    RIPPLE_FIRED = "ripple_fired"
 
 
 class ActorSummary(BaseModel):

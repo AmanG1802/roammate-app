@@ -8,6 +8,7 @@ import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import NotificationBell from '@/components/layout/NotificationBell';
 import GroupsPanel from '@/components/groups/GroupsPanel';
+import TodayWidget from '@/components/dashboard/TodayWidget';
 
 type Section = 'dashboard' | 'trips' | 'invitations' | 'groups';
 
@@ -255,7 +256,7 @@ export default function DashboardPage() {
             {/* Dashboard overview */}
             {section === 'dashboard' && (
               <>
-                <div className="mb-8">
+                <div className="mb-6">
                   <h2 className="text-3xl font-black text-slate-900 mb-1">
                     {user?.name ? `Hey, ${user.name.split(' ')[0]}.` : 'Your Adventures.'}
                   </h2>
@@ -263,6 +264,7 @@ export default function DashboardPage() {
                     {trips.length === 0 ? "No trips yet — create your first one." : `You have ${trips.length} ${trips.length === 1 ? 'trip' : 'trips'} planned.`}
                   </p>
                 </div>
+                <TodayWidget onNewTrip={() => { setCreateError(''); setIsModalOpen(true); }} />
                 <TripGrid
                   trips={sortedTrips.slice(0, 6)}
                   isLoading={isLoading}

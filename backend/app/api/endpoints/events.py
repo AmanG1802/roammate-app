@@ -8,6 +8,8 @@ from app.schemas.event import Event, EventCreate, EventUpdate, RippleRequest
 from app.schemas.trip import IngestRequest, IdeaBinItem
 from app.services.ripple_engine import ripple_engine
 from app.services.quick_add import quick_add_service
+from app.services import notification_service
+from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
 
 router = APIRouter()
@@ -45,6 +47,20 @@ async def create_event(
     db.add(event)
     await db.commit()
     await db.refresh(event)
+
+    recipients = await notification_service.trip_member_ids(
+        db, event.trip_id, exclude_user_id=current_user.id
+    )
+    if recipients:
+        await notification_service.emit(
+            db,
+            recipient_ids=recipients,
+            type=NotificationType.EVENT_ADDED,
+            payload={"event_id": event.id, "title": event.title},
+            actor_id=current_user.id,
+            trip_id=event.trip_id,
+        )
+        await db.commit()
     return event
 
 
@@ -69,12 +85,15 @@ async def update_event(
     if not (await db.execute(stmt)).scalars().first():
         raise HTTPException(status_code=403, detail="Not a member of this trip")
 
+    time_changed = False
     if update.title is not None:
         event.title = update.title
-    if update.day_date is not None:
+    if update.day_date is not None and update.day_date != event.day_date:
         event.day_date = update.day_date
-    if update.start_time is not None:
+        time_changed = True
+    if update.start_time is not None and update.start_time != event.start_time:
         event.start_time = update.start_time
+        time_changed = True
     if update.end_time is not None:
         event.end_time = update.end_time
     if update.sort_order is not None:
@@ -82,6 +101,21 @@ async def update_event(
 
     await db.commit()
     await db.refresh(event)
+
+    if time_changed:
+        recipients = await notification_service.trip_member_ids(
+            db, event.trip_id, exclude_user_id=current_user.id
+        )
+        if recipients:
+            await notification_service.emit(
+                db,
+                recipient_ids=recipients,
+                type=NotificationType.EVENT_MOVED,
+                payload={"event_id": event.id, "title": event.title},
+                actor_id=current_user.id,
+                trip_id=event.trip_id,
+            )
+            await db.commit()
     return event
 
 
@@ -104,8 +138,24 @@ async def delete_event(
     if not (await db.execute(stmt)).scalars().first():
         raise HTTPException(status_code=403, detail="Not a member of this trip")
 
+    trip_id = event.trip_id
+    title = event.title
     await db.delete(event)
     await db.commit()
+
+    recipients = await notification_service.trip_member_ids(
+        db, trip_id, exclude_user_id=current_user.id
+    )
+    if recipients:
+        await notification_service.emit(
+            db,
+            recipient_ids=recipients,
+            type=NotificationType.EVENT_REMOVED,
+            payload={"title": title},
+            actor_id=current_user.id,
+            trip_id=trip_id,
+        )
+        await db.commit()
 
 
 @router.post("/{event_id}/move-to-bin", response_model=IdeaBinItem)
@@ -144,10 +194,26 @@ async def move_event_to_bin(
         time_hint=hint,
         added_by=event.added_by,
     )
+    trip_id = event.trip_id
+    title = event.title
     db.add(idea)
     await db.delete(event)
     await db.commit()
     await db.refresh(idea)
+
+    recipients = await notification_service.trip_member_ids(
+        db, trip_id, exclude_user_id=current_user.id
+    )
+    if recipients:
+        await notification_service.emit(
+            db,
+            recipient_ids=recipients,
+            type=NotificationType.EVENT_REMOVED,
+            payload={"title": title, "moved_to_bin": True},
+            actor_id=current_user.id,
+            trip_id=trip_id,
+        )
+        await db.commit()
     return idea
 
 
@@ -197,6 +263,23 @@ async def trigger_ripple_engine(
             delta_minutes=request.delta_minutes,
             start_from_time=request.start_from_time,
         )
+        if updated_events:
+            recipients = await notification_service.trip_member_ids(
+                db, trip_id, exclude_user_id=current_user.id
+            )
+            if recipients:
+                await notification_service.emit(
+                    db,
+                    recipient_ids=recipients,
+                    type=NotificationType.RIPPLE_FIRED,
+                    payload={
+                        "delta_minutes": request.delta_minutes,
+                        "shifted_count": len(updated_events),
+                    },
+                    actor_id=current_user.id,
+                    trip_id=trip_id,
+                )
+                await db.commit()
         return updated_events
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -226,6 +309,19 @@ async def quick_add_event(
             trip_id=trip_id,
             text=request.text,
         )
+        recipients = await notification_service.trip_member_ids(
+            db, trip_id, exclude_user_id=current_user.id
+        )
+        if recipients:
+            await notification_service.emit(
+                db,
+                recipient_ids=recipients,
+                type=NotificationType.EVENT_ADDED,
+                payload={"event_id": event.id, "title": event.title, "via": "quick_add"},
+                actor_id=current_user.id,
+                trip_id=trip_id,
+            )
+            await db.commit()
         return event
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

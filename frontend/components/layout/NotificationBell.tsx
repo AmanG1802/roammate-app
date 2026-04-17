@@ -87,6 +87,18 @@ function renderMessage(n: NotificationItem): { icon: string; text: JSX.Element }
       return { icon: '🔗', text: <>{actor} attached {trip} to group <strong className="text-slate-900">{p.group_name || ''}</strong>.</> };
     case 'idea_added_to_group':
       return { icon: '💡', text: <>{actor} added <strong className="text-slate-900">{p.idea_title || 'an idea'}</strong> to <strong className="text-slate-900">{p.group_name || 'your group'}</strong>.</> };
+    case 'event_added':
+      return { icon: '➕', text: <>{actor} added <strong className="text-slate-900">{p.title || 'an event'}</strong>{p.via === 'quick_add' ? ' (quick add)' : ''}.</> };
+    case 'event_moved':
+      return { icon: '🕒', text: <>{actor} rescheduled <strong className="text-slate-900">{p.title || 'an event'}</strong>.</> };
+    case 'event_removed':
+      return { icon: '🗑️', text: <>{actor} {p.moved_to_bin ? 'moved' : 'removed'} <strong className="text-slate-900">{p.title || 'an event'}</strong>{p.moved_to_bin ? ' to the idea bin' : ''}.</> };
+    case 'ripple_fired': {
+      const dm = Number(p.delta_minutes || 0);
+      const dir = dm >= 0 ? 'pushed back' : 'pulled forward';
+      const mins = Math.abs(dm);
+      return { icon: '🌊', text: <>{actor} {dir} {p.shifted_count || 0} events by <strong className="text-slate-900">{mins}m</strong>.</> };
+    }
     default:
       return { icon: '🔔', text: <>{n.type.replaceAll('_', ' ')}</> };
   }
