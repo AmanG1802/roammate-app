@@ -85,8 +85,41 @@ class IdeaBinItem(Base):
     url_source = Column(String)
     time_hint = Column(String, nullable=True)
     added_by = Column(String, nullable=True)
-    
+    origin_idea_id = Column(Integer, ForeignKey("idea_bin_item.id"), nullable=True, index=True)
+
     trip = relationship("Trip", back_populates="idea_bin_items")
+
+
+class IdeaVote(Base):
+    __tablename__ = "idea_vote"
+    __table_args__ = (UniqueConstraint("idea_id", "user_id", name="uq_idea_vote"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    idea_id = Column(Integer, ForeignKey("idea_bin_item.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    value = Column(Integer, nullable=False)  # +1 or -1
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class EventVote(Base):
+    __tablename__ = "event_vote"
+    __table_args__ = (UniqueConstraint("event_id", "user_id", name="uq_event_vote"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("event.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    value = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class IdeaTag(Base):
+    __tablename__ = "idea_tag"
+    __table_args__ = (UniqueConstraint("idea_id", "tag", name="uq_idea_tag"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    idea_id = Column(Integer, ForeignKey("idea_bin_item.id", ondelete="CASCADE"), nullable=False, index=True)
+    tag = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 class Notification(Base):
     __tablename__ = "notification"

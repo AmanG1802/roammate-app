@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Check, Loader2 } from 'lucide-react';
+import { Bell, Check, Loader2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type NotificationItem = {
@@ -15,6 +15,8 @@ type NotificationItem = {
   read_at: string | null;
   created_at: string;
 };
+
+export type NotificationBellHandle = { refresh: () => void };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 const POLL_MS = 30_000;
@@ -56,10 +58,13 @@ function renderMessage(n: NotificationItem): { icon: string; text: JSX.Element }
     case 'trip_created':
       return { icon: '🌍', text: <>You created {trip}.</> };
     case 'trip_renamed':
+      if (p.self) return { icon: '✏️', text: <>You renamed <strong className="text-slate-900">{p.from}</strong> to <strong className="text-slate-900">{p.to}</strong>.</> };
       return { icon: '✏️', text: <>{actor} renamed <strong className="text-slate-900">{p.from}</strong> to <strong className="text-slate-900">{p.to}</strong>.</> };
     case 'trip_date_changed':
+      if (p.self) return { icon: '📅', text: <>You changed dates for {trip}.</> };
       return { icon: '📅', text: <>{actor} changed dates for {trip}.</> };
     case 'trip_deleted':
+      if (p.self) return { icon: '🗑️', text: <>You deleted {trip}.</> };
       return { icon: '🗑️', text: <>{actor} deleted {trip}.</> };
     case 'invite_received':
       return { icon: '✉️', text: <><strong className="text-slate-900">{p.inviter_name || 'Someone'}</strong> invited you to {trip}.</> };
@@ -87,6 +92,12 @@ function renderMessage(n: NotificationItem): { icon: string; text: JSX.Element }
       return { icon: '🔗', text: <>{actor} attached {trip} to group <strong className="text-slate-900">{p.group_name || ''}</strong>.</> };
     case 'idea_added_to_group':
       return { icon: '💡', text: <>{actor} added <strong className="text-slate-900">{p.idea_title || 'an idea'}</strong> to <strong className="text-slate-900">{p.group_name || 'your group'}</strong>.</> };
+    case 'idea_bin_item_added': {
+      const cnt = Number(p.count || 1);
+      const first = p.titles?.[0] || 'an idea';
+      if (cnt === 1) return { icon: '💡', text: <>{actor} added <strong className="text-slate-900">{first}</strong> to {trip}&apos;s idea bin.</> };
+      return { icon: '💡', text: <>{actor} added <strong className="text-slate-900">{cnt} ideas</strong> to {trip}&apos;s idea bin.</> };
+    }
     case 'event_added':
       return { icon: '➕', text: <>{actor} added <strong className="text-slate-900">{p.title || 'an event'}</strong>{p.via === 'quick_add' ? ' (quick add)' : ''}.</> };
     case 'event_moved':
@@ -104,7 +115,8 @@ function renderMessage(n: NotificationItem): { icon: string; text: JSX.Element }
   }
 }
 
-export default function NotificationBell() {
+const NotificationBell = forwardRef<NotificationBellHandle>(
+  function NotificationBell(_props, ref) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -130,6 +142,15 @@ export default function NotificationBell() {
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, []);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchUnread(), fetchList()]);
+    setRefreshing(false);
+  }, [fetchUnread, fetchList]);
+
+  useImperativeHandle(ref, () => ({ refresh: fetchUnread }), [fetchUnread]);
 
   useEffect(() => {
     fetchUnread();
@@ -207,14 +228,24 @@ export default function NotificationBell() {
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <h3 className="text-sm font-black text-slate-900">Notifications</h3>
-              {unread > 0 && (
+              <div className="flex items-center gap-3">
+                {unread > 0 && (
+                  <button
+                    onClick={markAllRead}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                  >
+                    <Check className="w-3 h-3" /> Mark all read
+                  </button>
+                )}
                 <button
-                  onClick={markAllRead}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                  onClick={refreshAll}
+                  disabled={refreshing}
+                  className="p-1 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                  title="Refresh"
                 >
-                  <Check className="w-3 h-3" /> Mark all read
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
                 </button>
-              )}
+              </div>
             </div>
 
             <div className="max-h-[460px] overflow-y-auto">
@@ -269,7 +300,9 @@ export default function NotificationBell() {
       </AnimatePresence>
     </div>
   );
-}
+});
+
+export default NotificationBell;
 
 function groupByDay(items: NotificationItem[]): [string, NotificationItem[]][] {
   const map = new Map<string, NotificationItem[]>();

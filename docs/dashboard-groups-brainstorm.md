@@ -47,10 +47,10 @@
 
 - **N1 · In-app Notification Bell** — persistent bell icon on the main page header (top-right), unread count badge
 - **N2 · Event Types covered:**
-  - `Trip created` — *"You created \"Summer in Santorini\""*
-  - `Invite received` — *"Alex invited you to \"Tokyo 2026\""*
-  - `Invite accepted/declined` — *"You accepted \"Tokyo 2026\""* · *"Sam declined \"Ski Trip\""*
-  - `Member added` — *"Priya was added to \"Italy 2026\""*
+  - `Trip created` — *"You created Summer in Santorini"*
+  - `Invite received` — *"Alex invited you to Tokyo 2026"*
+  - `Invite accepted/declined` — *"You accepted Tokyo 2026"* · *"Sam declined Ski Trip"*
+  - `Member added` — *"Priya was added to Italy 2026"*
   - `Member removed / left`
   - `Trip renamed / date changed` (by collaborator)
   - `Event added / moved / deleted` by collaborator
@@ -182,13 +182,37 @@ Top-right bell on the main page, unread badge, dropdown panel showing grouped no
 
 ### Phase 3 — Voting & Library Depth
 
-- Voting primitives on `IdeaBinItem` (up/down per member, polls with deadlines)
-- Group library search, tags, "seen in trip: X" provenance
-- Ripple decisions become group-approvable when trip is group-owned
+- Voting primitives on `IdeaBinItem` **and** `Event` (timeline items). Up/down per member.
+- Role gate: only `admin` and `view_with_vote` can cast votes; `view_only` can read tallies.
+- Vote transfer: when an idea is promoted to the timeline (bin → event) or demoted back (event → bin), vote rows migrate with the item so history isn't lost.
+- Group library search (`q`), tag filter (`tag`), source-trip filter (`trip_id`), and `sort=top|recent|title`.
+- `IdeaTag(idea_id, tag)` model — lowercase, deduped, free-form; per-group tag cloud endpoint.
+- Cross-trip copy endpoint with provenance via `IdeaBinItem.origin_idea_id` — tags travel with the copy.
+- Ripple Engine locked to trip admins; `ConciergeActionBar` hidden from non-admins on the Live view.
 
 ### Phase 4 — Extensions (informed by prior phases)
 
 Group memory wall · web push for notifications · real-time presence · offline-first dashboard — all have a Group home to hang from.
+
+---
+
+## Future Scope (post-Phase 4)
+
+Ideas parked for now to keep the critical path tight.
+
+### Ripple Decision Consensus (group-owned trips)
+
+*Was originally drafted into Phase 3; deferred until voting + library + notifications have user data to validate the UX.*
+
+When a trip is attached to a group, Ripple becomes a **proposal** rather than an immediate action:
+
+- `RippleProposal(trip_id, proposer_id, delta_minutes, start_from_time, status, expires_at)` + `RippleApproval(proposal_id, user_id, decision)`.
+- Small shifts (≤ 15m) auto-apply with a broadcast notification.
+- Medium shifts (15–60m) require majority approval, else auto-apply after a 24h timeout.
+- Large shifts (> 60m) require unanimous admin approval.
+- Solo / non-group trips keep today's admin-only immediate behavior.
+
+**Why deferred:** depends on the proposal/approval primitive that Phase 4's memory wall and offline sync may also want. Building it once we see how groups actually use voting avoids premature over-design.
 
 ---
 

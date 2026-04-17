@@ -80,6 +80,8 @@ export default function GroupsPanel({ onInvitationsChange }: { onInvitationsChan
       setGroups(g);
       setInvitations(inv);
       onInvitationsChange?.(inv.length);
+    } catch {
+      /* network error — keep current state */
     } finally {
       setLoading(false);
     }
@@ -173,9 +175,9 @@ export default function GroupsPanel({ onInvitationsChange }: { onInvitationsChan
       <CreateGroupModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(gid) => {
+        onCreated={async (gid) => {
           setCreateOpen(false);
-          fetchAll();
+          await fetchAll();
           setView({ kind: 'detail', id: gid });
         }}
       />
@@ -310,6 +312,8 @@ function GroupDetailView({ groupId, onBack }: { groupId: number; onBack: () => v
         fetch(`${API}/groups/${groupId}/ideas`, { headers: auth() }).then((r) => r.ok ? r.json() : []),
       ]);
       setGroup(g); setMembers(m); setTrips(t); setIdeas(i);
+    } catch {
+      /* network error — keep current state */
     } finally { setLoading(false); }
   }, [groupId]);
 

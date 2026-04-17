@@ -292,31 +292,53 @@ async def update_trip(
     if update.end_date is not None:
         trip.end_date = update.end_date
 
-    others = await notification_service.trip_member_ids(
-        db, trip_id, exclude_user_id=current_user.id
-    )
-    if others and renamed_from is not None:
+    all_members = await notification_service.all_trip_member_ids(db, trip_id)
+    others = [uid for uid in all_members if uid != current_user.id]
+    if renamed_from is not None:
         await notification_service.emit(
             db,
-            recipient_ids=others,
+            recipient_ids=[current_user.id],
             type=NotificationType.TRIP_RENAMED,
-            payload={"from": renamed_from, "to": trip.name, "actor_name": current_user.name or ""},
+            payload={"from": renamed_from, "to": trip.name, "actor_name": current_user.name or "", "self": True},
             actor_id=current_user.id,
             trip_id=trip_id,
         )
-    if others and date_changed:
+        if others:
+            await notification_service.emit(
+                db,
+                recipient_ids=others,
+                type=NotificationType.TRIP_RENAMED,
+                payload={"from": renamed_from, "to": trip.name, "actor_name": current_user.name or ""},
+                actor_id=current_user.id,
+                trip_id=trip_id,
+            )
+    if date_changed:
         await notification_service.emit(
             db,
-            recipient_ids=others,
+            recipient_ids=[current_user.id],
             type=NotificationType.TRIP_DATE_CHANGED,
             payload={
                 "trip_name": trip.name,
                 "new_start_date": trip.start_date.isoformat() if trip.start_date else None,
                 "actor_name": current_user.name or "",
+                "self": True,
             },
             actor_id=current_user.id,
             trip_id=trip_id,
         )
+        if others:
+            await notification_service.emit(
+                db,
+                recipient_ids=others,
+                type=NotificationType.TRIP_DATE_CHANGED,
+                payload={
+                    "trip_name": trip.name,
+                    "new_start_date": trip.start_date.isoformat() if trip.start_date else None,
+                    "actor_name": current_user.name or "",
+                },
+                actor_id=current_user.id,
+                trip_id=trip_id,
+            )
 
     await db.commit()
     await db.refresh(trip)
@@ -364,8 +386,14 @@ async def delete_trip(
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
-    others = await notification_service.trip_member_ids(
-        db, trip_id, exclude_user_id=current_user.id
+    all_members = await notification_service.all_trip_member_ids(db, trip_id)
+    others = [uid for uid in all_members if uid != current_user.id]
+    await notification_service.emit(
+        db,
+        recipient_ids=[current_user.id],
+        type=NotificationType.TRIP_DELETED,
+        payload={"trip_name": trip.name, "actor_name": current_user.name or "", "self": True},
+        actor_id=current_user.id,
     )
     if others:
         await notification_service.emit(
@@ -704,6 +732,30 @@ async def ingest_to_idea_bin(
             source_url=request.source_url,
             added_by=first_name,
         )
+
+        trip_stmt = select(Trip).where(Trip.id == trip_id)
+        trip_row = (await db.execute(trip_stmt)).scalars().first()
+        trip_name = trip_row.name if trip_row else ""
+        titles = [it.title for it in items]
+        recipients = await notification_service.trip_member_ids(
+            db, trip_id, exclude_user_id=current_user.id
+        )
+        if recipients:
+            await notification_service.emit(
+                db,
+                recipient_ids=recipients,
+                type=NotificationType.IDEA_BIN_ITEM_ADDED,
+                payload={
+                    "trip_name": trip_name,
+                    "titles": titles,
+                    "count": len(titles),
+                    "actor_name": current_user.name or "",
+                },
+                actor_id=current_user.id,
+                trip_id=trip_id,
+            )
+            await db.commit()
+
         return items
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

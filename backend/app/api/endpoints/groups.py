@@ -1,12 +1,15 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func as sa_func
+from sqlalchemy import select, update, func as sa_func, or_
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
-from app.models.all_models import Group, GroupMember, User, Trip, TripMember, IdeaBinItem as IdeaBinItemModel, Notification
+from app.models.all_models import (
+    Group, GroupMember, User, Trip, TripMember,
+    IdeaBinItem as IdeaBinItemModel, Notification, IdeaTag, IdeaVote,
+)
 from app.schemas.group import (
     GroupOut, GroupDetailOut, GroupCreate, GroupUpdate,
     GroupMemberOut, GroupInviteRequest, GroupRoleUpdateRequest,
@@ -14,6 +17,7 @@ from app.schemas.group import (
     GROUP_ROLES,
 )
 from app.schemas.trip import IdeaBinItem
+from app.schemas.library import LibraryIdeaOut, TripProvenance, TagSummary
 from app.services import notification_service
 from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
@@ -488,17 +492,82 @@ async def detach_trip_from_group(
     await db.commit()
 
 
-@router.get("/{group_id}/ideas", response_model=List[IdeaBinItem])
+@router.get("/{group_id}/ideas", response_model=List[LibraryIdeaOut])
 async def get_group_idea_library(
+    group_id: int,
+    q: Optional[str] = Query(None, description="Free-text search on idea title"),
+    tag: Optional[str] = Query(None, description="Filter by tag (lowercase)"),
+    trip_id: Optional[int] = Query(None, description="Limit to a single source trip"),
+    sort: str = Query("recent", description="recent | top | title"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Aggregated idea library across a group's trips, with tags + vote counts + provenance."""
+    await _require_group_member(db, group_id, current_user.id)
+
+    stmt = (
+        select(IdeaBinItemModel, Trip)
+        .join(Trip, Trip.id == IdeaBinItemModel.trip_id)
+        .where(Trip.group_id == group_id)
+    )
+    if q:
+        like = f"%{q.lower()}%"
+        stmt = stmt.where(sa_func.lower(IdeaBinItemModel.title).like(like))
+    if trip_id is not None:
+        stmt = stmt.where(IdeaBinItemModel.trip_id == trip_id)
+    if tag:
+        tag_norm = tag.strip().lower()
+        stmt = stmt.join(IdeaTag, IdeaTag.idea_id == IdeaBinItemModel.id).where(IdeaTag.tag == tag_norm)
+
+    rows = (await db.execute(stmt)).all()
+
+    results: list[LibraryIdeaOut] = []
+    for idea, trip in rows:
+        tag_rows = (await db.execute(
+            select(IdeaTag.tag).where(IdeaTag.idea_id == idea.id)
+        )).scalars().all()
+        up = (await db.execute(
+            select(sa_func.count(IdeaVote.id)).where(IdeaVote.idea_id == idea.id, IdeaVote.value == 1)
+        )).scalar_one()
+        down = (await db.execute(
+            select(sa_func.count(IdeaVote.id)).where(IdeaVote.idea_id == idea.id, IdeaVote.value == -1)
+        )).scalar_one()
+        mine = (await db.execute(
+            select(IdeaVote.value).where(IdeaVote.idea_id == idea.id, IdeaVote.user_id == current_user.id)
+        )).scalars().first() or 0
+        results.append(LibraryIdeaOut(
+            id=idea.id, trip_id=idea.trip_id, title=idea.title,
+            place_id=idea.place_id, lat=idea.lat, lng=idea.lng,
+            url_source=idea.url_source, time_hint=idea.time_hint,
+            added_by=idea.added_by, origin_idea_id=idea.origin_idea_id,
+            tags=list(tag_rows), up=up, down=down, my_vote=mine,
+            trip=TripProvenance(id=trip.id, name=trip.name),
+        ))
+
+    if sort == "top":
+        results.sort(key=lambda r: (r.up - r.down, r.up), reverse=True)
+    elif sort == "title":
+        results.sort(key=lambda r: r.title.lower())
+    else:
+        results.sort(key=lambda r: r.id, reverse=True)
+    return results
+
+
+@router.get("/{group_id}/tags", response_model=List[TagSummary])
+async def list_group_tags(
     group_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Aggregated idea library: every IdeaBinItem from every trip attached to this group."""
+    """Tag cloud for the group: every tag used across any of its trips' ideas, with counts."""
     await _require_group_member(db, group_id, current_user.id)
     stmt = (
-        select(IdeaBinItemModel)
+        select(IdeaTag.tag, sa_func.count(IdeaTag.id))
+        .join(IdeaBinItemModel, IdeaBinItemModel.id == IdeaTag.idea_id)
         .join(Trip, Trip.id == IdeaBinItemModel.trip_id)
         .where(Trip.group_id == group_id)
+        .group_by(IdeaTag.tag)
+        .order_by(sa_func.count(IdeaTag.id).desc())
     )
-    return (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).all()
+    return [TagSummary(tag=tag, count=cnt) for tag, cnt in rows]

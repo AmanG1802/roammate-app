@@ -24,16 +24,19 @@ class TodayTrip(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class TodayWidgetOut(BaseModel):
+class TodayWidgetPage(BaseModel):
+    """One page of the widget carousel — a single trip in context."""
     state: TodayState
-    trip: Optional[TodayTrip] = None
-    # pre_trip
+    trip: TodayTrip
     days_until_start: Optional[int] = None
-    # in_trip
     today_date: Optional[date] = None
     today_events: List[TodayEvent] = []
     day_number: Optional[int] = None
     total_days: Optional[int] = None
-    # post_trip
     days_since_end: Optional[int] = None
     total_events: Optional[int] = None
+
+
+class TodayWidgetOut(BaseModel):
+    pages: List[TodayWidgetPage] = []
+    default_index: int = 0

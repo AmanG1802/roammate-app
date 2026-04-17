@@ -342,6 +342,13 @@ export default function TripPlannerPage() {
     return members.some((m: any) => m.user_id === currentUser.id && m.role === 'admin');
   }, [members, currentUser]);
 
+  const currentUserCanVote = useMemo(() => {
+    if (!currentUser) return false;
+    return members.some(
+      (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'view_with_vote'),
+    );
+  }, [members, currentUser]);
+
   return (
     <ProtectedRoute>
       <div className="flex h-screen bg-white overflow-hidden">
@@ -475,7 +482,7 @@ export default function TripPlannerPage() {
                     </p>
                   )}
                 </div>
-                <Timeline tripId={tripId} filterDay={planDay ?? undefined} readOnly={!currentUserIsAdmin} />
+                <Timeline tripId={tripId} filterDay={planDay ?? undefined} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
               {/* Map */}
               <div className="flex-1 relative">
@@ -483,7 +490,7 @@ export default function TripPlannerPage() {
               </div>
               {/* Idea Bin */}
               <div className="w-80 shrink-0 border-l border-slate-100 bg-white overflow-hidden flex flex-col">
-                <IdeaBin tripId={tripId} readOnly={!currentUserIsAdmin} />
+                <IdeaBin tripId={tripId} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
             </div>
           )}
@@ -520,13 +527,13 @@ export default function TripPlannerPage() {
                     </p>
                   )}
                 </div>
-                <Timeline tripId={tripId} filterDay={liveDay ?? undefined} readOnly />
+                <Timeline tripId={tripId} filterDay={liveDay ?? undefined} readOnly canVote={currentUserCanVote} />
               </div>
 
               {/* Map + optional concierge overlay */}
               <div className="flex-1 relative">
                 <GoogleMap />
-                {isCurrentDay && (
+                {isCurrentDay && currentUserIsAdmin && (
                   <ConciergeActionBar />
                 )}
                 {!isCurrentDay && liveDay && (

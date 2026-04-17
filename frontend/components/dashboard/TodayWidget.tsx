@@ -1,11 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import Link from 'next/link';
-import { Calendar, Clock, MapPin, ChevronRight, Sparkles, Plane, History, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
-
-type State = 'none' | 'pre_trip' | 'in_trip' | 'post_trip';
+import { Calendar, Clock, MapPin, ChevronRight, ChevronLeft, Sparkles, Plane, History, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type TodayEvent = {
   id: number;
@@ -23,9 +21,9 @@ type TodayTrip = {
   end_date: string | null;
 };
 
-type TodayWidget = {
-  state: State;
-  trip: TodayTrip | null;
+type Page = {
+  state: 'pre_trip' | 'in_trip' | 'post_trip';
+  trip: TodayTrip;
   days_until_start?: number | null;
   today_date?: string | null;
   today_events?: TodayEvent[];
@@ -34,6 +32,13 @@ type TodayWidget = {
   days_since_end?: number | null;
   total_events?: number | null;
 };
+
+type WidgetData = {
+  pages: Page[];
+  default_index: number;
+};
+
+export type TodayWidgetHandle = { refresh: () => void };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -48,62 +53,138 @@ function formatTime(iso: string | null): string {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function TodayWidget({ onNewTrip }: { onNewTrip: () => void }) {
-  const [data, setData] = useState<TodayWidget | null>(null);
-  const [loading, setLoading] = useState(true);
+const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
+  function TodayWidget({ onNewTrip }, ref) {
+    const [data, setData] = useState<WidgetData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [pageIdx, setPageIdx] = useState(0);
+    const [direction, setDirection] = useState(0);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/dashboard/today`, { headers: authHeaders() });
-      if (res.ok) setData(await res.json());
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
-  }, []);
+    const load = useCallback(async () => {
+      try {
+        const res = await fetch(`${API}/dashboard/today`, { headers: authHeaders() });
+        if (res.ok) {
+          const d: WidgetData = await res.json();
+          setData(d);
+          setPageIdx(d.default_index);
+        }
+      } catch { /* ignore */ }
+      finally { setLoading(false); }
+    }, []);
 
-  useEffect(() => {
-    load();
-    const onFocus = () => load();
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [load]);
+    useImperativeHandle(ref, () => ({ refresh: load }), [load]);
 
-  if (loading) {
+    useEffect(() => {
+      load();
+      const onFocus = () => load();
+      window.addEventListener('focus', onFocus);
+      return () => window.removeEventListener('focus', onFocus);
+    }, [load]);
+
+    const goPrev = useCallback(() => {
+      setDirection(-1);
+      setPageIdx((i) => Math.max(0, i - 1));
+    }, []);
+
+    const goNext = useCallback(() => {
+      if (!data) return;
+      setDirection(1);
+      setPageIdx((i) => Math.min(data.pages.length - 1, i + 1));
+    }, [data]);
+
+    if (loading) {
+      return (
+        <div className="rounded-[2rem] border border-slate-100 bg-white p-8 mb-8 flex items-center justify-center min-h-[180px]">
+          <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+        </div>
+      );
+    }
+
+    if (!data || data.pages.length === 0) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 mb-8 flex items-center justify-between"
+        >
+          <div>
+            <div className="flex items-center gap-2 text-xs font-black text-indigo-500 uppercase tracking-widest mb-2">
+              <Sparkles className="w-3.5 h-3.5" /> Today
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-1">Nothing on the horizon yet.</h3>
+            <p className="text-slate-500 font-medium">Spin up your first trip and the dashboard will come alive.</p>
+          </div>
+          <button
+            onClick={onNewTrip}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+          >
+            Plan a Trip
+          </button>
+        </motion.div>
+      );
+    }
+
+    const safeIdx = Math.min(pageIdx, data.pages.length - 1);
+    const page = data.pages[safeIdx];
+    const hasPrev = safeIdx > 0;
+    const hasNext = safeIdx < data.pages.length - 1;
+    const totalPages = data.pages.length;
+
     return (
-      <div className="rounded-[2rem] border border-slate-100 bg-white p-8 mb-8 flex items-center justify-center min-h-[180px]">
-        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+      <div className="relative mb-8">
+        <AnimatePresence mode="wait" custom={direction}>
+          <motion.div
+            key={`${page.trip.id}-${page.state}`}
+            custom={direction}
+            initial={{ opacity: 0, x: direction * 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: direction * -40 }}
+            transition={{ duration: 0.2 }}
+          >
+            {page.state === 'pre_trip' && <PreTripCard page={page} />}
+            {page.state === 'in_trip' && <InTripCard page={page} />}
+            {page.state === 'post_trip' && <PostTripCard page={page} />}
+          </motion.div>
+        </AnimatePresence>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 -mt-4 pb-2 relative z-10">
+            <button
+              onClick={goPrev}
+              disabled={!hasPrev}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+              title="Previous trip"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1.5">
+              {data.pages.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setDirection(i > safeIdx ? 1 : -1); setPageIdx(i); }}
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                    i === safeIdx ? 'bg-slate-700 w-4' : 'bg-slate-300 hover:bg-slate-400'
+                  }`}
+                />
+              ))}
+            </div>
+            <button
+              onClick={goNext}
+              disabled={!hasNext}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+              title="Next trip"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     );
   }
+);
 
-  if (!data || data.state === 'none' || !data.trip) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 mb-8 flex items-center justify-between"
-      >
-        <div>
-          <div className="flex items-center gap-2 text-xs font-black text-indigo-500 uppercase tracking-widest mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> Today
-          </div>
-          <h3 className="text-2xl font-black text-slate-900 mb-1">Nothing on the horizon yet.</h3>
-          <p className="text-slate-500 font-medium">Spin up your first trip and the dashboard will come alive.</p>
-        </div>
-        <button
-          onClick={onNewTrip}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-        >
-          Plan a Trip
-        </button>
-      </motion.div>
-    );
-  }
+export default TodayWidget;
 
-  if (data.state === 'pre_trip') return <PreTripCard data={data} />;
-  if (data.state === 'in_trip') return <InTripCard data={data} />;
-  if (data.state === 'post_trip') return <PostTripCard data={data} />;
-  return null;
-}
 
 function HeroShell({
   badge,
@@ -122,22 +203,20 @@ function HeroShell({
     rose: 'from-rose-50 to-white text-rose-600',
   } as const;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`rounded-[2rem] border border-slate-100 bg-gradient-to-br ${toneMap[tone]} p-8 mb-8 shadow-sm`}
+    <div
+      className={`rounded-[2rem] border border-slate-100 bg-gradient-to-br ${toneMap[tone]} p-8 pb-10 shadow-sm`}
     >
       <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-3">
         {badgeIcon} {badge}
       </div>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-function PreTripCard({ data }: { data: TodayWidget }) {
-  const days = data.days_until_start ?? 0;
-  const trip = data.trip!;
+function PreTripCard({ page }: { page: Page }) {
+  const days = page.days_until_start ?? 0;
+  const trip = page.trip;
   const startLabel = trip.start_date
     ? new Date(trip.start_date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
     : 'TBD';
@@ -162,13 +241,13 @@ function PreTripCard({ data }: { data: TodayWidget }) {
   );
 }
 
-function InTripCard({ data }: { data: TodayWidget }) {
-  const trip = data.trip!;
-  const events = data.today_events ?? [];
+function InTripCard({ page }: { page: Page }) {
+  const trip = page.trip;
+  const events = page.today_events ?? [];
   const next = events.find((e) => e.is_next) ?? null;
-  const dayLabel = data.day_number && data.total_days
-    ? `Day ${data.day_number} of ${data.total_days}`
-    : data.day_number ? `Day ${data.day_number}` : 'Today';
+  const dayLabel = page.day_number && page.total_days
+    ? `Day ${page.day_number} of ${page.total_days}`
+    : page.day_number ? `Day ${page.day_number}` : 'Today';
 
   return (
     <HeroShell badge={dayLabel} badgeIcon={<Sparkles className="w-3.5 h-3.5" />} tone="amber">
@@ -232,16 +311,16 @@ function InTripCard({ data }: { data: TodayWidget }) {
   );
 }
 
-function PostTripCard({ data }: { data: TodayWidget }) {
-  const trip = data.trip!;
-  const days = data.days_since_end ?? 0;
+function PostTripCard({ page }: { page: Page }) {
+  const trip = page.trip;
+  const days = page.days_since_end ?? 0;
   return (
     <HeroShell badge={`Wrapped ${days} day${days === 1 ? '' : 's'} ago`} badgeIcon={<History className="w-3.5 h-3.5" />} tone="rose">
       <div className="flex items-end justify-between gap-6 flex-wrap">
         <div>
           <h2 className="text-3xl font-black text-slate-900 mb-1 leading-tight">{trip.name}</h2>
           <p className="text-slate-500 text-sm font-bold">
-            {data.total_events ?? 0} memories captured across {data.total_days ?? '—'} days.
+            {page.total_events ?? 0} memories captured across {page.total_days ?? '—'} days.
           </p>
         </div>
         <Link

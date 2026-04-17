@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, LogOut, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle } from 'lucide-react';
+import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, LogOut, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import NotificationBell from '@/components/layout/NotificationBell';
+import NotificationBell, { type NotificationBellHandle } from '@/components/layout/NotificationBell';
 import GroupsPanel from '@/components/groups/GroupsPanel';
-import TodayWidget from '@/components/dashboard/TodayWidget';
+import TodayWidget, { type TodayWidgetHandle } from '@/components/dashboard/TodayWidget';
 
 type Section = 'dashboard' | 'trips' | 'invitations' | 'groups';
 
@@ -34,11 +34,31 @@ export default function DashboardPage() {
   const [respondingTo, setRespondingTo] = useState<number | null>(null);
   const [groupInvitesCount, setGroupInvitesCount] = useState(0);
 
+  const widgetRef = useRef<TodayWidgetHandle>(null);
+  const bellRef = useRef<NotificationBellHandle>(null);
+
+  const refreshDashboard = useCallback(() => {
+    widgetRef.current?.refresh();
+    bellRef.current?.refresh();
+  }, []);
+
+  const openCreateModal = () => {
+    setNewTripName('');
+    setNewTripStartDate('');
+    setCreateError('');
+    setIsModalOpen(true);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     router.push('/');
   };
+
+  const onTripMutated = useCallback(() => {
+    fetchTrips();
+    refreshDashboard();
+  }, [refreshDashboard]);
 
   useEffect(() => {
     fetchTrips();
@@ -87,7 +107,7 @@ export default function DashboardPage() {
       });
       if (res.ok) {
         setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
-        fetchTrips();
+        onTripMutated();
       }
     } catch { /* ignore */ }
     finally { setRespondingTo(null); }
@@ -131,7 +151,7 @@ export default function DashboardPage() {
         setNewTripStartDate('');
         setCreateError('');
         setIsModalOpen(false);
-        fetchTrips();
+        onTripMutated();
       } else {
         const err = await response.json().catch(() => null);
         setCreateError(err?.detail ?? `Failed to create trip (${response.status})`);
@@ -143,6 +163,8 @@ export default function DashboardPage() {
     }
   };
 
+  const [tripsTab, setTripsTab] = useState<'current' | 'past'>('current');
+
   const sortedTrips = useMemo(() => {
     return [...trips].sort((a, b) => {
       const da = a.start_date ? new Date(a.start_date).getTime() : Infinity;
@@ -151,11 +173,28 @@ export default function DashboardPage() {
     });
   }, [trips]);
 
+  const { currentAndUpcoming, pastTrips } = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const cur: any[] = [];
+    const past: any[] = [];
+    for (const t of sortedTrips) {
+      const ed = t.end_date ?? t.start_date;
+      if (ed && ed.split('T')[0] < todayStr) {
+        past.push(t);
+      } else {
+        cur.push(t);
+      }
+    }
+    return { currentAndUpcoming: cur, pastTrips: past };
+  }, [sortedTrips]);
+
   const filteredTrips = useMemo(() => {
-    if (!searchQuery.trim()) return sortedTrips;
+    if (!searchQuery.trim()) return tripsTab === 'current' ? currentAndUpcoming : pastTrips;
     const q = searchQuery.toLowerCase();
-    return sortedTrips.filter((t: any) => t.name.toLowerCase().includes(q));
-  }, [sortedTrips, searchQuery]);
+    const base = tripsTab === 'current' ? currentAndUpcoming : pastTrips;
+    return base.filter((t: any) => t.name.toLowerCase().includes(q));
+  }, [searchQuery, tripsTab, currentAndUpcoming, pastTrips]);
 
   const navItem = (id: Section, icon: React.ReactNode, label: string) => (
     <button
@@ -241,9 +280,9 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <NotificationBell />
+              <NotificationBell ref={bellRef} />
               <button
-                onClick={() => { setCreateError(''); setIsModalOpen(true); }}
+                onClick={openCreateModal}
                 className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
               >
                 <Plus className="w-4 h-4" />
@@ -261,36 +300,65 @@ export default function DashboardPage() {
                     {user?.name ? `Hey, ${user.name.split(' ')[0]}.` : 'Your Adventures.'}
                   </h2>
                   <p className="text-slate-500 font-medium">
-                    {trips.length === 0 ? "No trips yet — create your first one." : `You have ${trips.length} ${trips.length === 1 ? 'trip' : 'trips'} planned.`}
+                    {currentAndUpcoming.length === 0 ? "No upcoming trips — create your first one." : `You have ${currentAndUpcoming.length} ${currentAndUpcoming.length === 1 ? 'trip' : 'trips'} on the horizon.`}
                   </p>
                 </div>
-                <TodayWidget onNewTrip={() => { setCreateError(''); setIsModalOpen(true); }} />
+                <TodayWidget ref={widgetRef} onNewTrip={openCreateModal} />
                 <TripGrid
-                  trips={sortedTrips.slice(0, 6)}
+                  trips={currentAndUpcoming.slice(0, 6)}
                   isLoading={isLoading}
-                  onNewTrip={() => setIsModalOpen(true)}
-                  onTripUpdate={fetchTrips}
+                  onNewTrip={openCreateModal}
+                  onTripUpdate={onTripMutated}
                 />
               </>
             )}
 
-            {/* My Trips full list + search results */}
+            {/* My Trips with sub-section toggle */}
             {(section === 'trips' || searchQuery) && (
               <>
-                <div className="mb-8">
-                  <h2 className="text-3xl font-black text-slate-900 mb-1">
-                    {searchQuery ? `Results for "${searchQuery}"` : 'My Trips'}
-                  </h2>
-                  <p className="text-slate-500 font-medium">
-                    {filteredTrips.length} {filteredTrips.length === 1 ? 'trip' : 'trips'} found.
-                  </p>
-                </div>
+                {searchQuery ? (
+                  <div className="mb-8">
+                    <h2 className="text-3xl font-black text-slate-900 mb-1">
+                      Results for &ldquo;{searchQuery}&rdquo;
+                    </h2>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-1 mb-8 bg-slate-100 rounded-xl p-1 max-w-sm mx-auto">
+                    <button
+                      onClick={() => setTripsTab('current')}
+                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-black transition-all ${
+                        tripsTab === 'current'
+                          ? 'bg-white text-indigo-600 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      <Rocket className="w-4 h-4" />
+                      Ongoing & Upcoming
+                    </button>
+                    <button
+                      onClick={() => setTripsTab('past')}
+                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-black transition-all ${
+                        tripsTab === 'past'
+                          ? 'bg-white text-indigo-600 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      <History className="w-4 h-4" />
+                      Past Trips
+                    </button>
+                  </div>
+                )}
                 <TripGrid
                   trips={filteredTrips}
                   isLoading={isLoading}
-                  onNewTrip={() => setIsModalOpen(true)}
-                  onTripUpdate={fetchTrips}
-                  emptyLabel={searchQuery ? 'No trips match your search.' : "You haven't created any trips yet."}
+                  onNewTrip={openCreateModal}
+                  onTripUpdate={onTripMutated}
+                  emptyLabel={
+                    searchQuery
+                      ? 'No trips match your search.'
+                      : undefined
+                  }
+                  emptyMode={searchQuery ? 'search' : tripsTab}
                 />
               </>
             )}
@@ -448,13 +516,15 @@ function TripGrid({
   isLoading,
   onNewTrip,
   onTripUpdate,
-  emptyLabel = "No trips yet — create your first one.",
+  emptyLabel,
+  emptyMode = 'current',
 }: {
   trips: any[];
   isLoading: boolean;
   onNewTrip: () => void;
   onTripUpdate?: () => void;
   emptyLabel?: string;
+  emptyMode?: 'current' | 'past' | 'search';
 }) {
   const router = useRouter();
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
@@ -641,14 +711,49 @@ function TripGrid({
         })}
 
         {trips.length === 0 && (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-slate-400 font-bold mb-4">{emptyLabel}</p>
-            <button
-              onClick={onNewTrip}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all"
-            >
-              Create a Trip
-            </button>
+          <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
+            {emptyLabel ? (
+              <>
+                <p className="text-slate-400 font-bold mb-4">{emptyLabel}</p>
+                <button
+                  onClick={onNewTrip}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all"
+                >
+                  Create a Trip
+                </button>
+              </>
+            ) : emptyMode === 'past' ? (
+              <>
+                <div className="w-24 h-24 bg-rose-50 rounded-[2rem] flex items-center justify-center mb-6 relative">
+                  <History className="w-12 h-12 text-rose-300" />
+                  <span className="absolute -bottom-1 -right-1 text-2xl">🧳</span>
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">No stamps in the passport yet!</h3>
+                <p className="text-slate-500 font-medium max-w-sm mb-1">
+                  You haven&apos;t wrapped up any trips so far.
+                </p>
+                <p className="text-slate-400 text-sm font-medium max-w-sm">
+                  Once a trip ends, it&apos;ll show up here as a memory.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="w-24 h-24 bg-indigo-50 rounded-[2rem] flex items-center justify-center mb-6 relative">
+                  <Rocket className="w-12 h-12 text-indigo-300" />
+                  <span className="absolute -bottom-1 -right-1 text-2xl">✨</span>
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">The world is waiting!</h3>
+                <p className="text-slate-500 font-medium max-w-sm mb-4">
+                  No upcoming trips — your suitcase is collecting dust.
+                </p>
+                <button
+                  onClick={onNewTrip}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                >
+                  Plan an Adventure
+                </button>
+              </>
+            )}
           </div>
         )}
 

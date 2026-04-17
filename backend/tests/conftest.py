@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 import pytest_asyncio
+from unittest.mock import AsyncMock
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,6 +20,11 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.db.base_class import Base
 from app.db.session import get_db
+from app.services import idea_bin as _idea_bin_mod
+
+# Stub Google Maps lookups in tests — the service falls through to bare title
+# when place_data is None, so ingest still creates IdeaBinItem rows.
+_idea_bin_mod.google_maps_service.find_place = AsyncMock(return_value=None)
 
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

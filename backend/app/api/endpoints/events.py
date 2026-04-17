@@ -3,12 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from app.db.session import get_db
-from app.models.all_models import Event as EventModel, TripMember, User, IdeaBinItem as IdeaBinItemModel
+from app.models.all_models import (
+    Event as EventModel, TripMember, User,
+    IdeaBinItem as IdeaBinItemModel, IdeaVote, EventVote,
+)
 from app.schemas.event import Event, EventCreate, EventUpdate, RippleRequest
 from app.schemas.trip import IngestRequest, IdeaBinItem
 from app.services.ripple_engine import ripple_engine
 from app.services.quick_add import quick_add_service
 from app.services import notification_service
+from app.services.roles import require_trip_admin
 from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
 
@@ -47,6 +51,16 @@ async def create_event(
     db.add(event)
     await db.commit()
     await db.refresh(event)
+
+    # Transfer votes from the source idea (if this came from the idea bin)
+    if event_in.source_idea_id is not None:
+        src_votes = (await db.execute(
+            select(IdeaVote).where(IdeaVote.idea_id == event_in.source_idea_id)
+        )).scalars().all()
+        for v in src_votes:
+            db.add(EventVote(event_id=event.id, user_id=v.user_id, value=v.value))
+        if src_votes:
+            await db.commit()
 
     recipients = await notification_service.trip_member_ids(
         db, event.trip_id, exclude_user_id=current_user.id
@@ -197,6 +211,15 @@ async def move_event_to_bin(
     trip_id = event.trip_id
     title = event.title
     db.add(idea)
+    await db.flush()
+
+    # Transfer votes: EventVote rows -> IdeaVote rows on the new idea
+    src_votes = (await db.execute(
+        select(EventVote).where(EventVote.event_id == event.id)
+    )).scalars().all()
+    for v in src_votes:
+        db.add(IdeaVote(idea_id=idea.id, user_id=v.user_id, value=v.value))
+
     await db.delete(event)
     await db.commit()
     await db.refresh(idea)
@@ -247,14 +270,9 @@ async def trigger_ripple_engine(
     """
     Trigger the Ripple Engine to shift all subsequent events.
     Used for "Running Late" or manual time adjustments.
+    Only trip admins can fire ripples.
     """
-    stmt = select(TripMember).where(
-        TripMember.trip_id == trip_id,
-        TripMember.user_id == current_user.id,
-    )
-    res = await db.execute(stmt)
-    if not res.scalars().first():
-        raise HTTPException(status_code=403, detail="Not a member of this trip")
+    await require_trip_admin(db, trip_id, current_user.id)
 
     try:
         updated_events = await ripple_engine.shift_itinerary(

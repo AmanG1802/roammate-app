@@ -39,7 +39,7 @@ class EventBase(BaseModel):
         return _strip_tz(v)
 
 class EventCreate(EventBase):
-    pass
+    source_idea_id: Optional[int] = None
 
 class EventUpdate(BaseModel):
     title: Optional[str] = None

@@ -1,11 +1,11 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 
 from app.db.session import get_db
 from app.models.all_models import Trip, TripMember, Event, User
-from app.schemas.dashboard import TodayWidgetOut, TodayTrip, TodayEvent
+from app.schemas.dashboard import TodayWidgetOut, TodayWidgetPage, TodayTrip, TodayEvent
 from app.api.deps import get_current_user
 
 router = APIRouter()
@@ -19,36 +19,55 @@ def _to_date(dt) -> date | None:
     return dt
 
 
-def _pick_trip(trips: list[Trip], today: date) -> tuple[str, Trip | None]:
-    """Pick the most relevant trip for the Today Widget.
+MAX_PAST = 2
+MAX_UPCOMING = 3
 
-    Priority: in_trip (active today) > pre_trip soonest > post_trip most recent (within 30d).
+def _classify(trips: list[Trip], today: date) -> tuple[list[Trip], list[Trip], list[Trip]]:
+    """Bucket and cap trips: up to 1 active, MAX_PAST past, MAX_UPCOMING upcoming.
+
+    Past: most-recent-first (capped to last 2).
+    Upcoming: soonest-first (capped to next 3).
+    Active: soonest start first (only 1 ongoing trip shown).
     """
-    in_trip: list[Trip] = []
+    active: list[Trip] = []
     upcoming: list[Trip] = []
-    recent_past: list[Trip] = []
+    past: list[Trip] = []
     for t in trips:
         sd = _to_date(t.start_date)
         ed = _to_date(t.end_date) or sd
         if sd is None:
             continue
         if sd <= today and (ed is None or today <= ed):
-            in_trip.append(t)
+            active.append(t)
         elif sd > today:
             upcoming.append(t)
-        elif ed is not None and 0 < (today - ed).days <= 30:
-            recent_past.append(t)
+        elif ed is not None and (today - ed).days > 0:
+            past.append(t)
+    active.sort(key=lambda t: _to_date(t.start_date) or today)
+    active = active[:1]
+    upcoming.sort(key=lambda t: _to_date(t.start_date) or today)
+    upcoming = upcoming[:MAX_UPCOMING]
+    past.sort(key=lambda t: _to_date(t.end_date) or today, reverse=True)
+    past = past[:MAX_PAST]
+    return active, upcoming, past
 
-    if in_trip:
-        in_trip.sort(key=lambda t: _to_date(t.start_date) or today)
-        return "in_trip", in_trip[0]
-    if upcoming:
-        upcoming.sort(key=lambda t: _to_date(t.start_date) or today)
-        return "pre_trip", upcoming[0]
-    if recent_past:
-        recent_past.sort(key=lambda t: _to_date(t.end_date) or today, reverse=True)
-        return "post_trip", recent_past[0]
-    return "none", None
+
+def _pick_default(n_past: int, n_active: int, past: list[Trip], upcoming: list[Trip], today: date) -> int:
+    """Return the default page index. Page order: past … | active | upcoming …
+
+    Priority: ongoing trip > temporally closer of last-past vs next-upcoming.
+    """
+    if n_active:
+        return n_past
+    if past and upcoming:
+        last_end = _to_date(past[0].end_date) or today
+        next_start = _to_date(upcoming[0].start_date) or today
+        if (today - last_end).days <= (next_start - today).days:
+            return n_past - 1
+        return n_past
+    if past:
+        return n_past - 1
+    return 0
 
 
 @router.get("/today", response_model=TodayWidgetOut)
@@ -56,7 +75,7 @@ async def get_today_widget(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return a contextual snapshot for the dashboard hero based on trip state."""
+    """Return all trip widget pages for the dashboard carousel."""
     today = date.today()
 
     stmt = (
@@ -66,68 +85,62 @@ async def get_today_widget(
     )
     trips = list((await db.execute(stmt)).scalars().all())
 
-    state, trip = _pick_trip(trips, today)
-    if trip is None:
-        return TodayWidgetOut(state="none")
+    active, upcoming, past = _classify(trips, today)
+    if not active and not upcoming and not past:
+        return TodayWidgetOut()
 
-    trip_dto = TodayTrip.model_validate(trip)
-    sd = _to_date(trip.start_date)
-    ed = _to_date(trip.end_date) or sd
+    pages: list[TodayWidgetPage] = []
 
-    if state == "pre_trip" and sd is not None:
-        return TodayWidgetOut(
-            state=state,
-            trip=trip_dto,
-            days_until_start=(sd - today).days,
-        )
+    # Past pages (oldest-first so leftmost = earliest)
+    for t in reversed(past):
+        sd = _to_date(t.start_date)
+        ed = _to_date(t.end_date) or sd
+        count_stmt = select(sa_func.count(Event.id)).where(Event.trip_id == t.id)
+        total_events = (await db.execute(count_stmt)).scalar_one()
+        total_days = ((ed - sd).days + 1) if sd and ed else None
+        pages.append(TodayWidgetPage(
+            state="post_trip", trip=TodayTrip.model_validate(t),
+            days_since_end=(today - ed).days if ed else None,
+            total_events=total_events, total_days=total_days,
+        ))
 
-    if state == "in_trip" and sd is not None:
+    # Active (ongoing) trip page — at most one
+    for t in active:
+        sd = _to_date(t.start_date)
+        ed = _to_date(t.end_date) or sd
         ev_stmt = (
             select(Event)
-            .where(Event.trip_id == trip.id, Event.day_date == today)
+            .where(Event.trip_id == t.id, Event.day_date == today)
             .order_by(Event.start_time.nulls_last(), Event.sort_order)
         )
         events = list((await db.execute(ev_stmt)).scalars().all())
-
         now = datetime.now()
         next_idx: int | None = None
         for i, e in enumerate(events):
             if e.start_time is not None and e.start_time >= now:
                 next_idx = i
                 break
+        today_events = [
+            TodayEvent(id=e.id, title=e.title, location_name=e.location_name,
+                       start_time=e.start_time, end_time=e.end_time, is_next=(i == next_idx))
+            for i, e in enumerate(events)
+        ]
+        day_number = (today - sd).days + 1 if sd else None
+        total_days = ((ed - sd).days + 1) if sd and ed else None
+        pages.append(TodayWidgetPage(
+            state="in_trip", trip=TodayTrip.model_validate(t),
+            today_date=today, today_events=today_events,
+            day_number=day_number, total_days=total_days,
+        ))
 
-        today_events = []
-        for i, e in enumerate(events):
-            today_events.append(TodayEvent(
-                id=e.id,
-                title=e.title,
-                location_name=e.location_name,
-                start_time=e.start_time,
-                end_time=e.end_time,
-                is_next=(i == next_idx),
-            ))
+    # Upcoming pages (soonest-first so rightmost = furthest)
+    for t in upcoming:
+        sd = _to_date(t.start_date)
+        pages.append(TodayWidgetPage(
+            state="pre_trip", trip=TodayTrip.model_validate(t),
+            days_until_start=(sd - today).days if sd else None,
+        ))
 
-        day_number = (today - sd).days + 1
-        total_days = ((ed - sd).days + 1) if ed is not None else None
-        return TodayWidgetOut(
-            state=state,
-            trip=trip_dto,
-            today_date=today,
-            today_events=today_events,
-            day_number=day_number,
-            total_days=total_days,
-        )
+    default_idx = _pick_default(len(past), len(active), past, upcoming, today)
 
-    if state == "post_trip" and ed is not None:
-        count_stmt = select(sa_func.count(Event.id)).where(Event.trip_id == trip.id)
-        total_events = (await db.execute(count_stmt)).scalar_one()
-        total_days = ((ed - sd).days + 1) if sd is not None else None
-        return TodayWidgetOut(
-            state=state,
-            trip=trip_dto,
-            days_since_end=(today - ed).days,
-            total_events=total_events,
-            total_days=total_days,
-        )
-
-    return TodayWidgetOut(state="none")
+    return TodayWidgetOut(pages=pages, default_index=default_idx)

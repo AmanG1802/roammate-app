@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTripStore } from '@/lib/store';
 import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import VoteControl from '@/components/trip/VoteControl';
 
 /** Extract a time hint from a text fragment, e.g. "Eiffel Tower at 2pm" → "2pm" */
 function extractTimeHint(text: string): string | null {
@@ -50,7 +51,7 @@ function timeValueToHint(val: string): string | null {
   return m === 0 ? `${h}${ampm}` : `${h}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
-export default function IdeaBin({ tripId, readOnly = false }: { tripId: string | null; readOnly?: boolean }) {
+export default function IdeaBin({ tripId, readOnly = false, canVote = false }: { tripId: string | null; readOnly?: boolean; canVote?: boolean }) {
   // readOnly = non-admin user. They CAN add ideas but CANNOT delete/edit time/drag-to-timeline.
   const [inputText, setInputText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
@@ -307,6 +308,9 @@ export default function IdeaBin({ tripId, readOnly = false }: { tripId: string |
                         <span className="text-[10px] font-bold text-slate-400">{idea.added_by}</span>
                       </div>
                     )}
+                    <div className="mt-2">
+                      <VoteControl kind="idea" id={idea.id} canVote={canVote} size="sm" />
+                    </div>
                   </div>
 
                   {!readOnly && (
