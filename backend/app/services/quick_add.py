@@ -15,8 +15,11 @@ class QuickAddService:
         # 1. Parse intent with LLM
         parsed = await nlp_service.parse_quick_add(text)
         
-        # 2. Resolve location with Google Maps
-        location_data = await google_maps_service.find_place(parsed.get("title", text))
+        # 2. Resolve location with Google Maps (best-effort)
+        try:
+            location_data = await google_maps_service.find_place(parsed.get("title", text))
+        except Exception:
+            location_data = None
         
         # 3. Determine time
         # If the LLM didn't find a time, place it after the last event of the day

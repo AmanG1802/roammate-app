@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 from datetime import datetime, date
 
 
@@ -86,6 +86,12 @@ class TripBase(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
 
+    @model_validator(mode="after")
+    def _check_dates(self):
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("end_date must be on or after start_date")
+        return self
+
 class TripCreate(TripBase):
     pass
 
@@ -93,6 +99,12 @@ class TripUpdate(BaseModel):
     name: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def _check_dates(self):
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("end_date must be on or after start_date")
+        return self
 
 class Trip(TripBase):
     id: int
