@@ -25,22 +25,24 @@ class RippleEngine:
             .where(
                 and_(
                     Event.trip_id == trip_id,
+                    Event.start_time.is_not(None),
                     Event.start_time >= start_from_time,
-                    Event.is_locked == False # Don't shift locked events
+                    Event.is_locked == False,  # Don't shift locked events
                 )
             )
             .order_by(Event.start_time)
         )
-        
+
         result = await db.execute(stmt)
         events = result.scalars().all()
-        
+
         delta = timedelta(minutes=delta_minutes)
-        
+
         for event in events:
             event.start_time += delta
-            event.end_time += delta
-            
+            if event.end_time is not None:
+                event.end_time += delta
+
         await db.commit()
         return list(events)
 
