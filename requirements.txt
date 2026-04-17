@@ -1,0 +1,3 @@
+colima
+docker
+docker-compose
