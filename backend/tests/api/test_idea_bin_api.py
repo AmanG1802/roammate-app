@@ -239,3 +239,40 @@ async def test_ingest_then_idea_appears_in_attached_group_library(
     assert lib.status_code == 200
     titles = [i["title"] for i in lib.json()]
     assert "Pantheon" in titles
+
+
+# ── Batch vote data in idea bin list ──────────────────────────────────────────
+
+async def test_get_ideas_includes_vote_tallies(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    idea1 = await _seed_idea(client, auth_headers, trip["id"])
+    idea2 = await _seed_idea(client, auth_headers, trip["id"])
+    await client.post(f"/api/ideas/{idea1['id']}/vote", json={"value": 1}, headers=auth_headers)
+    ideas = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    by_id = {i["id"]: i for i in ideas}
+    assert by_id[idea1["id"]]["up"] == 1 and by_id[idea1["id"]]["my_vote"] == 1
+    assert by_id[idea2["id"]]["up"] == 0 and by_id[idea2["id"]]["my_vote"] == 0
+
+
+async def test_get_ideas_my_vote_caller_specific(
+    client: AsyncClient, auth_headers, second_auth_headers
+):
+    trip = await create_trip(client, auth_headers)
+    await invite_and_accept(
+        client, auth_headers, second_auth_headers, trip["id"], "bob@test.com",
+        role="view_with_vote",
+    )
+    idea = await _seed_idea(client, auth_headers, trip["id"])
+    await client.post(f"/api/ideas/{idea['id']}/vote", json={"value": 1}, headers=auth_headers)
+    await client.post(f"/api/ideas/{idea['id']}/vote", json={"value": -1}, headers=second_auth_headers)
+
+    alice = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    bob = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=second_auth_headers)).json()
+    assert alice[0]["my_vote"] == 1
+    assert bob[0]["my_vote"] == -1
+
+
+async def test_get_ideas_empty_bin_returns_empty(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    ideas = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    assert ideas == []

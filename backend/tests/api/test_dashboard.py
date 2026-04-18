@@ -341,3 +341,172 @@ async def test_today_only_one_active_trip_shown(client, auth_headers):
     actives = [p for p in body["pages"] if p["state"] == "in_trip"]
     assert len(actives) == 1
     assert actives[0]["trip"]["name"] == "A"
+
+
+# ── day number / total_days from _sync_trip_end_date ──────────────────────────
+
+@pytest.mark.asyncio
+async def test_today_total_days_updates_after_adding_day(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": tomorrow}, headers=auth_headers
+    )
+    page = _default_page((await client.get("/api/dashboard/today", headers=auth_headers)).json())
+    assert page["total_days"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_today_total_days_updates_after_deleting_day(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(3))
+    d1 = (date.today() + timedelta(days=1)).isoformat()
+    d2 = (date.today() + timedelta(days=2)).isoformat()
+    await client.post(f"/api/trips/{trip['id']}/days", json={"date": d1}, headers=auth_headers)
+    await client.post(f"/api/trips/{trip['id']}/days", json={"date": d2}, headers=auth_headers)
+    days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
+    last_day = sorted(days, key=lambda d: d["day_number"])[-1]
+    await client.delete(
+        f"/api/trips/{trip['id']}/days/{last_day['id']}?items_action=delete",
+        headers=auth_headers,
+    )
+    page = _default_page((await client.get("/api/dashboard/today", headers=auth_headers)).json())
+    assert page["total_days"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_today_editing_start_date_earlier_keeps_trip_active(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "TodayStart", _dt(0), _dt(2))
+    # Add a second day so that after changing start_date to yesterday,
+    # end_date = yesterday + 1 = today, keeping the trip active.
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": tomorrow}, headers=auth_headers
+    )
+    await client.patch(
+        f"/api/trips/{trip['id']}",
+        json={"start_date": _dt(-1).isoformat()},
+        headers=auth_headers,
+    )
+    page = _default_page((await client.get("/api/dashboard/today", headers=auth_headers)).json())
+    assert page["state"] == "in_trip"
+    assert page["day_number"] == 2
+
+
+# ── ongoing + up-next coexistence ─────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_today_ongoing_and_next_coexist(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
+    today_iso = date.today().isoformat()
+    now = datetime.now()
+    ongoing_start = now - timedelta(minutes=30)
+    ongoing_end = now + timedelta(minutes=30)
+    future_start = now + timedelta(hours=2)
+    future_end = now + timedelta(hours=3)
+    await _post_event(client, auth_headers, trip["id"], title="Now",
+                      day_date=today_iso,
+                      start_time=ongoing_start.isoformat(), end_time=ongoing_end.isoformat())
+    await _post_event(client, auth_headers, trip["id"], title="Later",
+                      day_date=today_iso,
+                      start_time=future_start.isoformat(), end_time=future_end.isoformat())
+    page = _default_page((await client.get("/api/dashboard/today", headers=auth_headers)).json())
+    flags = {e["title"]: (e["is_ongoing"], e["is_next"]) for e in page["today_events"]}
+    assert flags["Now"] == (True, False)
+    assert flags["Later"] == (False, True)
+
+
+@pytest.mark.asyncio
+async def test_today_past_event_neither_ongoing_nor_next(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
+    today_iso = date.today().isoformat()
+    past_start = datetime.now() - timedelta(hours=4)
+    past_end = datetime.now() - timedelta(hours=3)
+    client_now = datetime.now().isoformat()
+    await _post_event(client, auth_headers, trip["id"], title="Done",
+                      day_date=today_iso,
+                      start_time=past_start.isoformat(), end_time=past_end.isoformat())
+    page = _default_page(
+        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+    )
+    assert page["today_events"][0]["is_ongoing"] is False
+    assert page["today_events"][0]["is_next"] is False
+
+
+@pytest.mark.asyncio
+async def test_today_gap_between_events_only_up_next(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
+    today_iso = date.today().isoformat()
+    today_dt = datetime.combine(date.today(), datetime.min.time())
+    await _post_event(client, auth_headers, trip["id"], title="Early",
+                      day_date=today_iso,
+                      start_time=(today_dt + timedelta(hours=2)).isoformat(),
+                      end_time=(today_dt + timedelta(hours=2, minutes=15)).isoformat())
+    await _post_event(client, auth_headers, trip["id"], title="Afternoon",
+                      day_date=today_iso,
+                      start_time=(today_dt + timedelta(hours=15)).isoformat(),
+                      end_time=(today_dt + timedelta(hours=15, minutes=15)).isoformat())
+
+    client_now = (today_dt + timedelta(hours=10)).isoformat()
+    page = _default_page(
+        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+    )
+    ongoing = [e for e in page["today_events"] if e["is_ongoing"]]
+    assert ongoing == []
+    nexts = [e for e in page["today_events"] if e["is_next"]]
+    assert len(nexts) == 1 and nexts[0]["title"] == "Afternoon"
+
+
+@pytest.mark.asyncio
+async def test_today_all_past_no_flags(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
+    today_iso = date.today().isoformat()
+    today_dt = datetime.combine(date.today(), datetime.min.time())
+    await _post_event(client, auth_headers, trip["id"], title="E1",
+                      day_date=today_iso,
+                      start_time=(today_dt + timedelta(hours=1)).isoformat(),
+                      end_time=(today_dt + timedelta(hours=2)).isoformat())
+    await _post_event(client, auth_headers, trip["id"], title="E2",
+                      day_date=today_iso,
+                      start_time=(today_dt + timedelta(hours=3)).isoformat(),
+                      end_time=(today_dt + timedelta(hours=4)).isoformat())
+
+    client_now = (today_dt + timedelta(hours=23)).isoformat()
+    page = _default_page(
+        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+    )
+    for e in page["today_events"]:
+        assert e["is_ongoing"] is False and e["is_next"] is False
+
+
+@pytest.mark.asyncio
+async def test_today_event_without_end_time_not_ongoing(client, auth_headers):
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
+    today_iso = date.today().isoformat()
+    start = datetime.now() - timedelta(hours=1)
+    await _post_event(client, auth_headers, trip["id"], title="NoEnd",
+                      day_date=today_iso, start_time=start.isoformat())
+    page = _default_page((await client.get("/api/dashboard/today", headers=auth_headers)).json())
+    assert page["today_events"][0]["is_ongoing"] is False
+
+
+@pytest.mark.asyncio
+async def test_today_client_now_6am_skips_2am_picks_2pm(client, auth_headers):
+    """Regression: 2AM event must not show as up-next when client_now is 6AM."""
+    trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
+    today_iso = date.today().isoformat()
+    today_dt = datetime.combine(date.today(), datetime.min.time())
+    await _post_event(client, auth_headers, trip["id"], title="Tea",
+                      day_date=today_iso,
+                      start_time=(today_dt + timedelta(hours=2)).isoformat(),
+                      end_time=(today_dt + timedelta(hours=2, minutes=15)).isoformat())
+    await _post_event(client, auth_headers, trip["id"], title="Coffee",
+                      day_date=today_iso,
+                      start_time=(today_dt + timedelta(hours=14)).isoformat(),
+                      end_time=(today_dt + timedelta(hours=14, minutes=15)).isoformat())
+
+    client_now = (today_dt + timedelta(hours=6)).isoformat()
+    page = _default_page(
+        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+    )
+    nexts = [e for e in page["today_events"] if e["is_next"]]
+    assert len(nexts) == 1 and nexts[0]["title"] == "Coffee"

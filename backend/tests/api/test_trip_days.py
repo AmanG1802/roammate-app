@@ -211,3 +211,73 @@ async def test_delete_day_by_non_admin(
         headers=second_auth_headers,
     )
     assert resp.status_code == 403
+
+
+# ── _sync_trip_end_date behavior ──────────────────────────────────────────────
+
+async def test_create_trip_with_start_date_sets_end_date(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers, start_date="2026-06-01T00:00:00")
+    assert trip["end_date"] is not None
+    assert trip["end_date"].startswith("2026-06-01")
+
+
+async def test_add_day_increments_end_date(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers, start_date="2026-06-01T00:00:00")
+    await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": "2026-06-02"}, headers=auth_headers
+    )
+    updated = (await client.get(f"/api/trips/{trip['id']}", headers=auth_headers)).json()
+    assert updated["end_date"].startswith("2026-06-02")
+
+
+async def test_add_three_days_sets_end_date_correctly(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers, start_date="2026-06-01T00:00:00")
+    for d in ["2026-06-02", "2026-06-03", "2026-06-04"]:
+        await client.post(
+            f"/api/trips/{trip['id']}/days", json={"date": d}, headers=auth_headers
+        )
+    updated = (await client.get(f"/api/trips/{trip['id']}", headers=auth_headers)).json()
+    assert updated["end_date"].startswith("2026-06-04")
+
+
+async def test_delete_day_decrements_end_date(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers, start_date="2026-06-01T00:00:00")
+    await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": "2026-06-02"}, headers=auth_headers
+    )
+    await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": "2026-06-03"}, headers=auth_headers
+    )
+    days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
+    last = sorted(days, key=lambda x: x["day_number"])[-1]
+    await client.delete(
+        f"/api/trips/{trip['id']}/days/{last['id']}?items_action=delete",
+        headers=auth_headers,
+    )
+    updated = (await client.get(f"/api/trips/{trip['id']}", headers=auth_headers)).json()
+    assert updated["end_date"].startswith("2026-06-02")
+
+
+async def test_update_start_date_resyncs_end_date(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers, start_date="2026-06-01T00:00:00")
+    await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": "2026-06-02"}, headers=auth_headers
+    )
+    await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": "2026-06-03"}, headers=auth_headers
+    )
+    await client.patch(
+        f"/api/trips/{trip['id']}",
+        json={"start_date": "2026-06-05T00:00:00"},
+        headers=auth_headers,
+    )
+    updated = (await client.get(f"/api/trips/{trip['id']}", headers=auth_headers)).json()
+    assert updated["end_date"].startswith("2026-06-07")
+
+
+async def test_trip_without_start_date_no_crash_on_add_day(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    resp = await client.post(
+        f"/api/trips/{trip['id']}/days", json={"date": "2026-06-01"}, headers=auth_headers
+    )
+    assert resp.status_code == 201

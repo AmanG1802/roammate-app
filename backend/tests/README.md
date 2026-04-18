@@ -2,7 +2,7 @@
 
 All backend tests live here — `backend/tests/` is the single home for anything that exercises FastAPI routes, SQLAlchemy models, or backend services.
 
-**Status:** 439 tests, all passing.
+**Status:** 482 tests, all passing.
 
 ---
 
@@ -15,16 +15,16 @@ backend/tests/
 │   ├── test_users.py                   (12)
 │   ├── test_trips.py                   (19)
 │   ├── test_trip_members.py            (24)
-│   ├── test_trip_days.py               (12)
-│   ├── test_idea_bin_api.py            (16)
-│   ├── test_events.py                  (17)
+│   ├── test_trip_days.py               (18)
+│   ├── test_idea_bin_api.py            (19)
+│   ├── test_events.py                  (21)
 │   ├── test_ripple_api.py              (7)
 │   ├── test_quick_add_api.py           (3)
-│   ├── test_dashboard.py               (29)
+│   ├── test_dashboard.py               (38)
 │   ├── test_groups.py                  (65)
 │   ├── test_group_library.py           (21)
 │   ├── test_ideas_tags_copy.py         (22)
-│   ├── test_votes.py                   (31)
+│   ├── test_votes.py                   (35)
 │   └── test_notifications.py           (26)
 ├── services/                           # service-layer unit tests
 │   ├── test_idea_bin_service.py        (12)
@@ -39,13 +39,13 @@ backend/tests/
 │   └── test_deps.py                    (3)
 ├── cross/                              # multi-service / multi-entity integration
 │   ├── test_trip_lifecycle.py          (4)
-│   ├── test_vote_transfer.py           (9)
+│   ├── test_vote_transfer.py           (19)
 │   ├── test_group_trip_lifecycle.py    (5)
 │   ├── test_notification_fanout.py     (18)
 │   └── test_ripple_gating.py           (4)
 └── schemas/                            # pydantic validation
-    ├── test_event_schema.py            (12)
-    ├── test_votes_schema.py            (9)
+    ├── test_event_schema.py            (14)
+    ├── test_votes_schema.py            (14)
     ├── test_library_schema.py          (7)
     └── test_group_schema.py            (7)
 ```
@@ -92,6 +92,8 @@ Shared fixtures and helpers (no tests):
 
 Ordered GET, non-member 403, add-day increments number, duplicate date 409, non-admin 403, first-day when no start-date, delete with action=bin (events→bin + time_hint), delete with action=delete, left-shift subsequent day_numbers + event dates, nonexistent 404, non-admin 403.
 
+**`_sync_trip_end_date`:** create-with-start-date auto-sets end_date, add-day increments end_date, add-three-days arithmetic, delete-day decrements end_date, start_date change re-syncs end_date, trip-without-start-date doesn't crash on add-day.
+
 ### `api/test_idea_bin_api.py` — `/api/trips/{id}/ideas` + `/ingest`
 
 **Ingest:** success, added_by first-name split, comma/newline splitters, empty, whitespace-only filtered, GMaps failure fallback, source_url persisted, non-member 403.
@@ -100,11 +102,15 @@ Ordered GET, non-member 403, add-day increments number, duplicate date 409, non-
 
 **Cross-service:** `test_ingest_then_idea_appears_in_attached_group_library` — ingested idea surfaces in the library of an attached group.
 
+**Batch vote data:** `GET /trips/{id}/ideas` returns `up`, `down`, `my_vote` per idea; `my_vote` is caller-specific (multi-user); empty bin returns `[]`.
+
 ### `api/test_events.py` — `/api/events/*`
 
 **CRUD:** create (happy / non-member 403 / missing fields 422 / tz-strip), list (by trip / non-member 403 / missing trip_id 422), patch (happy / non-member 403 / nonexistent 404), delete (happy / non-member 403 / nonexistent 404).
 
 **Move-to-bin:** preserves place_id/lat/lng/added_by/time_hint, no-start-time → `time_hint=None`, non-member 403, nonexistent 404.
+
+**Batch vote data:** `GET /events/` returns `up`, `down`, `my_vote` per event; `my_vote` is caller-specific (multi-user); no-votes returns zeros; `PATCH /events/{id}` response includes vote tallies.
 
 ### `api/test_ripple_api.py` — `/api/events/ripple/{trip_id}`
 
@@ -121,6 +127,10 @@ Success (NLP + GMaps mocked), non-member 403, NLP failure → 500.
 **State classification:** empty state, pre_trip / in_trip / post_trip single-trip, `end_date=None` falls back to `end=start`, trip with no start_date skipped, ending-today and starting-today both active, ended-yesterday is past.
 
 **`in_trip` event enrichment:** today-only filter, order by start_time nulls-last, `is_ongoing` when now between start/end, `is_next` on first future event only, `day_number` from TripDays (or date-delta fallback), `total_days` from end-start, `client_now` override (ISO / Z-suffix / invalid falls back).
+
+**`total_days` / `day_number` sync:** total_days updates after adding a day, total_days updates after deleting a day, editing start_date earlier keeps trip active with correct day_number.
+
+**Ongoing + Up Next coexistence:** ongoing and next flags coexist correctly, past event gets neither flag, gap between events shows only up-next (no ongoing), all-past events get no flags, event without end_time is never ongoing, 6AM `client_now` skips 2AM event and picks 2PM as up-next (timezone regression).
 
 **Multi-trip / isolation:** invited-but-not-accepted excluded, removed member loses trip, overlapping actives → soonest-start kept, default_index points at active when present, closer-upcoming default, zero-when-only-upcoming, past cap=2, upcoming cap=3, page ordering past→active→upcoming, closer-past default, per-user isolation.
 
@@ -171,6 +181,8 @@ Success (NLP + GMaps mocked), non-member 403, NLP failure → 500.
 **Auth:** requires auth (401), vote on idea not in my trip (403).
 
 **Voter lists:** idea voters split up/down, unknown-name → "Unknown", view_only can read, non-member 403, nonexistent 404; same for event voters.
+
+**Voter list edge cases:** empty voters when no votes (idea + event), voter list updates after vote removal (value=0), event voters present after transfer from idea via `source_idea_id`.
 
 **Invalid input:** missing field 422, non-int 422, parametrized out-of-range (2, -2, 10, 1.5, `"up"`) → 422.
 
@@ -242,7 +254,15 @@ Full trip lifecycle (register → create → invite → accept → add-day → i
 
 ### `cross/test_vote_transfer.py`
 
-Idea→event transfer via `source_idea_id` preserves per-user up/down values, does NOT delete source IdeaVote rows (current behavior), event→idea via move-to-bin preserves both up/down voters, no votes → clean transfer, event created without `source_idea_id` has no event votes, bin→timeline→bin roundtrip keeps tally, transferred idea shows up in group library with tally.
+**Idea→event:** transfer via `source_idea_id` preserves per-user up/down values, does NOT delete source IdeaVote rows (current behavior), event created without `source_idea_id` has no event votes.
+
+**Event→idea (move-to-bin):** preserves both up/down voters, no votes → clean transfer, bin→timeline→bin roundtrip keeps tally, transferred idea shows up in group library with tally.
+
+**Response inline votes:** `create_event` response includes transferred vote tallies; zero votes when no `source_idea_id`; `move-to-bin` response includes `up`, `down`, `my_vote`; `my_vote` reflects the calling user.
+
+**Day-delete vote transfer:** `items_action=bin` preserves single-user vote, preserves multi-user up+down votes; `items_action=delete` does not create idea votes; zero-vote event produces clean idea; day-delete→bin roundtrip preserves votes on resulting idea.
+
+**Extended roundtrips:** timeline→bin roundtrip preserves votes on the resulting idea (event→idea leg verified; the final re-creation step hits a known SQLite limitation with orphaned EventVote rows — see infrastructure gaps).
 
 ### `cross/test_group_trip_lifecycle.py`
 
@@ -270,11 +290,11 @@ Admin allowed, parametrized non-admin 403 (view_only / view_with_vote), non-memb
 
 ### `schemas/test_event_schema.py`
 
-`_strip_tz` helper (none / UTC / non-UTC with offset), EventCreate / EventUpdate / RippleRequest strip tz. Trip validators: end-before-start rejected (create + update), equal dates ok, name-only ok. Request shape: invite default role `view_only`, ingest requires `text`.
+`_strip_tz` helper (none / UTC / non-UTC with offset), EventCreate / EventUpdate / RippleRequest strip tz. Trip validators: end-before-start rejected (create + update), equal dates ok, name-only ok. Request shape: invite default role `view_only`, ingest requires `text`. `Event` schema defaults `up=0, down=0, my_vote=0`. `IdeaBinItem` schema defaults `up=0, down=0, my_vote=0`.
 
 ### `schemas/test_votes_schema.py`
 
-`VoteRequest` parametrized -1/0/1 accepted, out-of-range (2, -2, `None`) rejected, str→int coercion (pydantic default). `VoteTally` defaults zero.
+`VoteRequest` parametrized -1/0/1 accepted, out-of-range (2, -2, `None`) rejected, str→int coercion (pydantic default). `VoteTally` defaults zero. `VoterInfo` requires `name`, accepts name. `VoterList` defaults to empty lists. `TodayEvent` defaults `is_ongoing=False` and `is_next=False`, accepts `is_ongoing=True`.
 
 ### `schemas/test_library_schema.py`
 
@@ -301,7 +321,7 @@ The *contract* tests remain valid; the *cross-service* files (`cross/`, `test_no
 
 ## Known infrastructure gaps (not test gaps)
 
-- **Cascade on idea delete** — `IdeaTag` and `IdeaVote` both declare `ondelete="CASCADE"` at the FK level. SQLite ignores this unless `PRAGMA foreign_keys=ON` is set per-connection, which conftest does not do. Enabling it risks breaking Stage-1 tests that tolerate orphans. Cascade behavior is therefore not asserted in the test suite; it is enforced in Postgres (production) at the DB level.
+- **Cascade on idea/event delete** — `IdeaTag`, `IdeaVote`, and `EventVote` all declare `ondelete="CASCADE"` at the FK level. SQLite ignores this unless `PRAGMA foreign_keys=ON` is set per-connection, which conftest does not do. Enabling it risks breaking Stage-1 tests that tolerate orphans. Cascade behavior is therefore not asserted in the test suite; it is enforced in Postgres (production) at the DB level. Consequence: when an Event is deleted in tests, orphaned `EventVote` rows survive, and SQLite may reuse the deleted event's ROWID for a new insert, causing a UNIQUE constraint collision on `(event_id, user_id)`. Roundtrip tests that delete an event and re-create one from the same votes work around this by verifying the intermediate idea instead.
 - **Pagination** on unbounded list endpoints (`GET /events/`, `/ideas`, `/members`) — currently not tested because the endpoints don't paginate.
 
 ## Explicit non-goals
