@@ -1,7 +1,8 @@
 """Tests for /api/events/ripple/{trip_id}."""
 from datetime import datetime
+import pytest
 from httpx import AsyncClient
-from tests.conftest import create_trip
+from tests.conftest import create_trip, invite_and_accept
 
 
 async def _create_event(client, headers, trip_id, **extra):
@@ -89,3 +90,21 @@ async def test_ripple_isolated_to_trip(
         )
     ).json()
     assert b_events[0]["start_time"].startswith("2026-06-01T10:00:00")
+
+
+# ── Role gating (admin-only) ─────────────────────────────────────────────────
+
+@pytest.mark.parametrize("role", ["view_only", "view_with_vote"])
+async def test_ripple_non_admin_member_forbidden(
+    client: AsyncClient, auth_headers, second_auth_headers, role
+):
+    trip = await create_trip(client, auth_headers)
+    await invite_and_accept(
+        client, auth_headers, second_auth_headers, trip["id"], "bob@test.com", role
+    )
+    resp = await client.post(
+        f"/api/events/ripple/{trip['id']}",
+        json={"delta_minutes": 15},
+        headers=second_auth_headers,
+    )
+    assert resp.status_code == 403

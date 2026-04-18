@@ -210,3 +210,32 @@ async def test_delete_idea_nonexistent(client: AsyncClient, auth_headers):
         f"/api/trips/{trip['id']}/ideas/9999", headers=auth_headers
     )
     assert resp.status_code == 404
+
+
+async def test_ingest_then_idea_appears_in_attached_group_library(
+    client: AsyncClient, auth_headers
+):
+    """Ingested ideas must surface in the library of any group the trip is attached to."""
+    trip = await create_trip(client, auth_headers)
+    g = (await client.post(
+        "/api/groups/", json={"name": "Crew"}, headers=auth_headers
+    )).json()
+    attach = await client.post(
+        f"/api/groups/{g['id']}/trips/{trip['id']}", headers=auth_headers
+    )
+    assert attach.status_code in (200, 201, 204)
+
+    with patch(
+        "app.services.idea_bin.google_maps_service.find_place",
+        new=AsyncMock(return_value=None),
+    ):
+        await client.post(
+            f"/api/trips/{trip['id']}/ingest",
+            json={"text": "Pantheon"},
+            headers=auth_headers,
+        )
+
+    lib = await client.get(f"/api/groups/{g['id']}/ideas", headers=auth_headers)
+    assert lib.status_code == 200
+    titles = [i["title"] for i in lib.json()]
+    assert "Pantheon" in titles
