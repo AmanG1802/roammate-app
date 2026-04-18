@@ -24,6 +24,7 @@ class NotificationType:
     IDEA_ADDED_TO_GROUP    = "idea_added_to_group"
     # ── Idea bin & events ─────────────────────────────────────────
     IDEA_BIN_ITEM_ADDED = "idea_bin_item_added"
+    BRAINSTORM_PROMOTED = "brainstorm_promoted"
     EVENT_ADDED         = "event_added"
     EVENT_MOVED         = "event_moved"
     EVENT_REMOVED       = "event_removed"
@@ -49,6 +50,7 @@ class NotificationType:
         "group_trip_attached":  True,
         "idea_added_to_group":  True,
         "idea_bin_item_added":  True,
+        "brainstorm_promoted":  True,
         "event_added":          True,
         "event_moved":          True,
         "event_removed":        True,

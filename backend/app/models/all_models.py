@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index
+from datetime import datetime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
@@ -24,6 +25,8 @@ class Trip(Base):
     idea_bin_items = relationship("IdeaBinItem", back_populates="trip")
     days = relationship("TripDay", back_populates="trip", order_by="TripDay.date")
     group = relationship("Group", back_populates="trips")
+    brainstorm_bin_items = relationship("BrainstormBinItem", back_populates="trip", cascade="all, delete-orphan")
+    brainstorm_messages = relationship("BrainstormMessage", back_populates="trip", cascade="all, delete-orphan")
 
 
 class Group(Base):
@@ -79,15 +82,66 @@ class IdeaBinItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     trip_id = Column(Integer, ForeignKey("trip.id"))
     title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String, nullable=True)
     place_id = Column(String)
     lat = Column(Float)
     lng = Column(Float)
+    address = Column(String, nullable=True)
+    photo_url = Column(String, nullable=True)
+    rating = Column(Float, nullable=True)
+    price_level = Column(Integer, nullable=True)
+    types = Column(JSON, nullable=True)
+    opening_hours = Column(JSON, nullable=True)
+    phone = Column(String, nullable=True)
+    website = Column(String, nullable=True)
     url_source = Column(String)
     time_hint = Column(String, nullable=True)
     added_by = Column(String, nullable=True)
     origin_idea_id = Column(Integer, ForeignKey("idea_bin_item.id"), nullable=True, index=True)
 
     trip = relationship("Trip", back_populates="idea_bin_items")
+
+
+class BrainstormBinItem(Base):
+    __tablename__ = "brainstorm_bin_item"
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("trip.id", ondelete="CASCADE"), index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), index=True, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String, nullable=True)
+    place_id = Column(String, nullable=True)
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    address = Column(String, nullable=True)
+    photo_url = Column(String, nullable=True)
+    rating = Column(Float, nullable=True)
+    price_level = Column(Integer, nullable=True)
+    types = Column(JSON, nullable=True)
+    opening_hours = Column(JSON, nullable=True)
+    phone = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    time_hint = Column(String, nullable=True)
+    url_source = Column(String, nullable=True)
+    added_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    trip = relationship("Trip", back_populates="brainstorm_bin_items")
+    user = relationship("User")
+
+
+class BrainstormMessage(Base):
+    __tablename__ = "brainstorm_message"
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("trip.id", ondelete="CASCADE"), index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), index=True, nullable=False)
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    trip = relationship("Trip", back_populates="brainstorm_messages")
+    user = relationship("User")
 
 
 class IdeaVote(Base):

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, Calendar, MapPin, Plane, Compass, Globe,
   Plus, X, Loader2, ChevronRight, Users, Clock, Pencil, Check,
-  ShieldCheck, Eye, Vote, ChevronDown,
+  ShieldCheck, Eye, Vote, ChevronDown, Lightbulb,
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { format, differenceInDays, parseISO } from 'date-fns';
@@ -527,6 +527,20 @@ function TripHubContent() {
 
           {/* CTA buttons */}
           <div className="flex flex-col gap-3">
+            <Link
+              href={`/trips?id=${tripId}&mode=brainstorm`}
+              onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=brainstorm`)}
+              className="hub-cta group flex items-center justify-between px-6 py-4 bg-amber-500/15 border border-amber-400/25 text-amber-200 rounded-2xl font-black text-[15px] hover:bg-amber-500/25 hover:border-amber-400/40 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-amber-400/20 rounded-xl flex items-center justify-center group-hover:bg-amber-400/30 transition-colors">
+                  <Lightbulb className="w-4 h-4 text-amber-300" />
+                </div>
+                Go to Brainstorm
+              </div>
+              <ChevronRight className="w-5 h-5 text-amber-400/50 group-hover:translate-x-0.5 group-hover:text-amber-300 transition-all" />
+            </Link>
+
             <Link
               href={`/trips?id=${tripId}`}
               onClick={(e) => navigate(e, `/trips?id=${tripId}`)}

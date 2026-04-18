@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTripStore } from '@/lib/store';
 import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -57,10 +57,10 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   const [isIngesting, setIsIngesting] = useState(false);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [editingTimeVal, setEditingTimeVal] = useState('');
+  const [extras, setExtras] = useState<Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null }>>({});
   const { ideas, addIdea, setIdeas, removeIdea } = useTripStore();
 
-  // Load ideas from API on mount
-  useEffect(() => {
+  const loadIdeas = useCallback(() => {
     if (!tripId) return;
     const token = localStorage.getItem('token');
     if (!token) return;
@@ -84,9 +84,26 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
             my_vote: item.my_vote ?? 0,
           }))
         );
+        const extraMap: Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null }> = {};
+        for (const item of data) {
+          extraMap[item.id.toString()] = {
+            description: item.description ?? null,
+            photo_url: item.photo_url ?? null,
+            rating: item.rating ?? null,
+          };
+        }
+        setExtras(extraMap);
       })
       .catch(() => {});
   }, [tripId, setIdeas]);
+
+  useEffect(() => { loadIdeas(); }, [loadIdeas]);
+
+  useEffect(() => {
+    const handler = () => loadIdeas();
+    window.addEventListener('idea-bin:refresh', handler);
+    return () => window.removeEventListener('idea-bin:refresh', handler);
+  }, [loadIdeas]);
 
   const handleIngest = async () => {
     if (!inputText.trim()) return;
@@ -253,6 +270,24 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                     <span className="text-sm font-black text-slate-800 block truncate">
                       {idea.title}
                     </span>
+
+                    {extras[idea.id]?.photo_url && (
+                      <img
+                        src={extras[idea.id]!.photo_url as string}
+                        alt=""
+                        className="mt-2 w-full h-24 object-cover rounded-lg"
+                      />
+                    )}
+                    {extras[idea.id]?.description && (
+                      <p className="mt-1 text-[11px] text-slate-500 font-medium line-clamp-2">
+                        {extras[idea.id]!.description}
+                      </p>
+                    )}
+                    {extras[idea.id]?.rating != null && (
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold">
+                        ★ {extras[idea.id]!.rating}
+                      </span>
+                    )}
 
                     {!readOnly && editingTimeId === idea.id ? (
                       <div className="flex items-center gap-1.5 mt-1.5">
