@@ -74,10 +74,6 @@ export default function TripPlannerPage() {
   }, [tripId]);
 
   useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
-
-  useEffect(() => {
     if (mode === 'people') fetchMembers();
   }, [mode, fetchMembers]);
 
@@ -176,7 +172,8 @@ export default function TripPlannerPage() {
 
     loadTripDays(tripId, token);
     loadEvents(tripId, token);
-  }, [tripId, loadTripDays, loadEvents]);
+    fetchMembers();
+  }, [tripId, loadTripDays, loadEvents, fetchMembers]);
 
   useEffect(() => {
     if (!tripId) return;
@@ -293,6 +290,9 @@ export default function TripPlannerPage() {
               lng: r.lng ?? 0,
               time_hint: r.time_hint ?? null,
               added_by: r.added_by ?? null,
+              up: r.up ?? 0,
+              down: r.down ?? 0,
+              my_vote: r.my_vote ?? 0,
             })));
           }
         } catch { /* ignore */ }
@@ -340,6 +340,13 @@ export default function TripPlannerPage() {
   const currentUserIsAdmin = useMemo(() => {
     if (!currentUser) return false;
     return members.some((m: any) => m.user_id === currentUser.id && m.role === 'admin');
+  }, [members, currentUser]);
+
+  const currentUserCanVote = useMemo(() => {
+    if (!currentUser) return false;
+    return members.some(
+      (m: any) => m.user_id === currentUser.id && (m.role === 'admin' || m.role === 'view_with_vote'),
+    );
   }, [members, currentUser]);
 
   return (
@@ -475,7 +482,7 @@ export default function TripPlannerPage() {
                     </p>
                   )}
                 </div>
-                <Timeline tripId={tripId} filterDay={planDay ?? undefined} readOnly={!currentUserIsAdmin} />
+                <Timeline tripId={tripId} filterDay={planDay ?? undefined} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
               {/* Map */}
               <div className="flex-1 relative">
@@ -483,7 +490,7 @@ export default function TripPlannerPage() {
               </div>
               {/* Idea Bin */}
               <div className="w-80 shrink-0 border-l border-slate-100 bg-white overflow-hidden flex flex-col">
-                <IdeaBin tripId={tripId} readOnly={!currentUserIsAdmin} />
+                <IdeaBin tripId={tripId} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
             </div>
           )}
@@ -520,13 +527,13 @@ export default function TripPlannerPage() {
                     </p>
                   )}
                 </div>
-                <Timeline tripId={tripId} filterDay={liveDay ?? undefined} readOnly />
+                <Timeline tripId={tripId} filterDay={liveDay ?? undefined} readOnly canVote={currentUserCanVote} />
               </div>
 
               {/* Map + optional concierge overlay */}
               <div className="flex-1 relative">
                 <GoogleMap />
-                {isCurrentDay && (
+                {isCurrentDay && currentUserIsAdmin && (
                   <ConciergeActionBar />
                 )}
                 {!isCurrentDay && liveDay && (

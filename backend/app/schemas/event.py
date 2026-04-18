@@ -39,7 +39,7 @@ class EventBase(BaseModel):
         return _strip_tz(v)
 
 class EventCreate(EventBase):
-    pass
+    source_idea_id: Optional[int] = None
 
 class EventUpdate(BaseModel):
     title: Optional[str] = None
@@ -55,6 +55,9 @@ class EventUpdate(BaseModel):
 
 class Event(EventBase):
     id: int
+    up: int = 0
+    down: int = 0
+    my_vote: int = 0
 
     model_config = {"from_attributes": True}
 

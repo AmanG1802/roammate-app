@@ -2,43 +2,57 @@
 
 All backend tests live here — `backend/tests/` is the single home for anything that exercises FastAPI routes, SQLAlchemy models, or backend services.
 
-## Layout (target)
+**Status:** 439 tests, all passing.
+
+---
+
+## Layout
 
 ```
 backend/tests/
-├── conftest.py                         # shared fixtures (SQLite in-memory, auth_headers, second_auth_headers)
+├── conftest.py                         # shared fixtures (SQLite in-memory, auth headers, helpers)
 ├── api/                                # HTTP-level integration tests (hit the ASGI app)
-│   ├── test_users.py                   # /api/users/*
-│   ├── test_trips.py                   # /api/trips/*
-│   ├── test_trip_members.py            # /api/trips/{id}/members, invitations
-│   ├── test_trip_days.py               # /api/trips/{id}/days/*
-│   ├── test_idea_bin_api.py            # /api/trips/{id}/ideas, /ingest
-│   ├── test_events.py                  # /api/events/*
-│   ├── test_ripple_api.py              # /api/events/ripple/{trip_id}
-│   └── test_quick_add_api.py           # /api/events/quick-add/{trip_id}
-├── services/                           # unit tests for service-layer logic (mocked DB where useful)
-│   ├── test_idea_bin_service.py
-│   ├── test_ripple_engine.py
-│   ├── test_quick_add_service.py
-│   ├── test_nlp_service.py
-│   └── test_google_maps_service.py
+│   ├── test_users.py                   (12)
+│   ├── test_trips.py                   (19)
+│   ├── test_trip_members.py            (24)
+│   ├── test_trip_days.py               (12)
+│   ├── test_idea_bin_api.py            (16)
+│   ├── test_events.py                  (17)
+│   ├── test_ripple_api.py              (7)
+│   ├── test_quick_add_api.py           (3)
+│   ├── test_dashboard.py               (29)
+│   ├── test_groups.py                  (65)
+│   ├── test_group_library.py           (21)
+│   ├── test_ideas_tags_copy.py         (22)
+│   ├── test_votes.py                   (31)
+│   └── test_notifications.py           (26)
+├── services/                           # service-layer unit tests
+│   ├── test_idea_bin_service.py        (12)
+│   ├── test_ripple_engine.py           (8)
+│   ├── test_quick_add_service.py       (5)
+│   ├── test_nlp_service.py             (3)
+│   ├── test_google_maps_service.py     (4)
+│   ├── test_notification_service.py    (10)
+│   └── test_roles.py                   (9)
 ├── core/                               # pure unit tests
-│   ├── test_security.py                # password hash, JWT create/decode
-│   └── test_deps.py                    # get_current_user token flow
+│   ├── test_security.py                (6)
+│   └── test_deps.py                    (3)
 ├── cross/                              # multi-service / multi-entity integration
-│   ├── test_trip_lifecycle.py          # create→invite→accept→plan→delete
-│   ├── test_date_shift_cascade.py      # trip start_date change → days → events
-│   ├── test_day_delete_cascade.py      # day delete → events to bin vs hard-delete
-│   └── test_bin_to_timeline_roundtrip.py
+│   ├── test_trip_lifecycle.py          (4)
+│   ├── test_vote_transfer.py           (9)
+│   ├── test_group_trip_lifecycle.py    (5)
+│   ├── test_notification_fanout.py     (18)
+│   └── test_ripple_gating.py           (4)
 └── schemas/                            # pydantic validation
-    └── test_event_schema.py            # tz-strip validator, etc.
+    ├── test_event_schema.py            (12)
+    ├── test_votes_schema.py            (9)
+    ├── test_library_schema.py          (7)
+    └── test_group_schema.py            (7)
 ```
 
 ---
 
 # What's Tested Where
-
-All tests listed below are implemented and passing (164 passed). Each bullet is one test function (or parametrized group).
 
 ## `conftest.py`
 
@@ -56,163 +70,121 @@ Shared fixtures and helpers (no tests):
 
 ### `api/test_users.py` — `/api/users/*`
 
-- `test_register_returns_user_out` — shape, no `hashed_password` leak
-- `test_register_duplicate_email` — 400
-- `test_register_invalid_email` — 422 (Pydantic `EmailStr`)
-- `test_register_missing_fields` — 422
-- `test_login_returns_bearer_token`
-- `test_login_unknown_email` — 401
-- `test_login_wrong_password` — 401
-- `test_me_returns_current_user`
-- `test_me_requires_auth` — 401
-- `test_me_malformed_token` — 401
-- `test_me_expired_token` — 401 (short-lived token)
-- `test_me_token_for_deleted_user` — 401
+- Register: shape + no password leak, duplicate email (400), invalid email (422), missing fields (422)
+- Login: bearer token happy path, unknown email (401), wrong password (401)
+- `/me`: happy path, missing/malformed/expired token (401), token for deleted user (401)
 
 ### `api/test_trips.py` — `/api/trips/*`
 
-**Basic CRUD:**
+**CRUD:** create (basic / with start_date / without / end-before-start 422), list excludes invited, get (member / non-member 403), patch name (admin / non-admin 403 / non-member 403 / end-before-start 422), delete (admin cascade / non-admin 403), all routes require auth (401).
 
-- `test_create_trip_basic`
-- `test_create_trip_sets_creator_as_admin`
-- `test_create_trip_with_start_date_creates_day1`
-- `test_create_trip_without_start_date_has_no_days`
-- `test_create_trip_end_before_start_rejected` — 422 (validator)
-- `test_get_trips_only_accepted` — excludes `status="invited"`
-- `test_get_trip_forbidden_for_non_member` — 403
-- `test_get_trip_allows_any_member`
-- `test_patch_trip_name_by_admin`
-- `test_patch_trip_by_non_admin_forbidden` — 403
-- `test_patch_trip_by_non_member_forbidden` — 403
-- `test_patch_trip_end_before_start_rejected` — 422
-
-**Date-shift cascade:**
-
-- `test_patch_trip_start_date_forward_shifts_days`
-- `test_patch_trip_start_date_backward_shifts_days`
-- `test_patch_trip_date_shift_moves_events` — event `day_date` moves in lock-step
-- `test_patch_trip_same_start_date_is_noop`
-
-**Delete + auth:**
-
-- `test_delete_trip_by_admin_cascades` — events/ideas/days/members all gone
-- `test_delete_trip_by_non_admin_forbidden` — 403
-- `test_all_trip_routes_require_auth` — 401 across GET/POST/DELETE
+**Date-shift cascade:** forward, backward, events lock-step, same-date noop.
 
 ### `api/test_trip_members.py` — invitations & membership
 
-**Invite:**
+**Invite:** admin ok, non-admin/non-member 403, unknown email 404, duplicate / already-invited 409, invalid role 422, default role `view_only`.
 
-- `test_admin_can_invite` — creates `status="invited"`
-- `test_non_admin_cannot_invite` — 403
-- `test_non_member_cannot_invite` — 403
-- `test_invite_unknown_email` — 404
-- `test_invite_already_member` — 409
-- `test_invite_already_invited` — 409
-- `test_invite_invalid_role` — 422
-- `test_invite_default_role_view_only`
+**Pending / Accept / Decline:** pending list shape, empty, accept (happy / nonexistent / foreign / already-accepted 404), decline (204).
 
-**Pending:**
+**Members:** list (member / non-member 403), role update (admin / non-admin 403 / invalid 422), remove (happy / non-admin 403 / admin-self-remove 400 / nonexistent 404).
 
-- `test_pending_invitations` — includes `trip` summary + `inviter`
-- `test_pending_empty`
+### `api/test_trip_days.py` — `/api/trips/{id}/days/*`
 
-**Accept / decline:**
-
-- `test_accept_invitation`
-- `test_accept_nonexistent_invitation` — 404
-- `test_accept_foreign_invitation` — 404 (filter by user_id)
-- `test_accept_already_accepted` — 404
-- `test_decline_invitation` — 204, no longer pending
-
-**Members:**
-
-- `test_get_members_by_member`
-- `test_get_members_by_non_member` — 403
-- `test_update_member_role`
-- `test_update_role_by_non_admin` — 403
-- `test_update_role_invalid` — 422
-- `test_remove_member` — removed user loses read access
-- `test_admin_cannot_remove_self` — 400
-- `test_remove_by_non_admin` — 403
-- `test_remove_nonexistent_member` — 404
-
-### `api/test_trip_days.py` — `/api/trips/{id}/days/`*
-
-- `test_get_days_ordered` — by date
-- `test_get_days_non_member_forbidden` — 403
-- `test_add_day_increments_number` — `day_number = max+1`
-- `test_add_day_by_non_admin_forbidden` — 403
-- `test_add_day_duplicate_date` — 409 (`uq_trip_day`)
-- `test_first_day_when_no_start_date` — uses `coalesce(max,0)+1`
-- `test_delete_day_items_action_bin` — events → `IdeaBinItem` with time_hint
-- `test_delete_day_items_action_delete` — events hard-deleted
-- `test_delete_day_left_shifts_subsequent` — day_number + date both shift -1
-- `test_delete_day_left_shifts_event_dates` — events on later days follow
-- `test_delete_day_nonexistent` — 404
-- `test_delete_day_by_non_admin` — 403
+Ordered GET, non-member 403, add-day increments number, duplicate date 409, non-admin 403, first-day when no start-date, delete with action=bin (events→bin + time_hint), delete with action=delete, left-shift subsequent day_numbers + event dates, nonexistent 404, non-admin 403.
 
 ### `api/test_idea_bin_api.py` — `/api/trips/{id}/ideas` + `/ingest`
 
-**Ingest:**
+**Ingest:** success, added_by first-name split, comma/newline splitters, empty, whitespace-only filtered, GMaps failure fallback, source_url persisted, non-member 403.
 
-- `test_ingest_success`
-- `test_ingest_added_by_first_name` — split on whitespace
-- `test_ingest_comma_and_newline` — mixed splitters
-- `test_ingest_empty` — `[]`
-- `test_ingest_whitespace_filtered`
-- `test_ingest_google_maps_failure_falls_back` — item still created
-- `test_ingest_source_url_persisted`
-- `test_ingest_non_member_forbidden` — 403
+**Idea CRUD:** get (member / non-member 403), patch title + time_hint (member / non-member 403 / wrong trip 404), delete (happy / nonexistent 404).
 
-**Idea CRUD:**
+**Cross-service:** `test_ingest_then_idea_appears_in_attached_group_library` — ingested idea surfaces in the library of an attached group.
 
-- `test_get_ideas`
-- `test_get_ideas_non_member` — 403
-- `test_patch_idea_title_and_time_hint`
-- `test_patch_idea_non_member` — 403
-- `test_patch_idea_wrong_trip` — 404 (trip_id mismatch)
-- `test_delete_idea`
-- `test_delete_idea_nonexistent` — 404
+### `api/test_events.py` — `/api/events/*`
 
-### `api/test_events.py` — `/api/events/`*
+**CRUD:** create (happy / non-member 403 / missing fields 422 / tz-strip), list (by trip / non-member 403 / missing trip_id 422), patch (happy / non-member 403 / nonexistent 404), delete (happy / non-member 403 / nonexistent 404).
 
-**CRUD:**
-
-- `test_create_event`
-- `test_create_event_non_member` — 403
-- `test_create_event_missing_fields` — 422
-- `test_create_event_strips_tz` — naive datetime stored
-- `test_get_events_by_trip`
-- `test_get_events_non_member` — 403
-- `test_get_events_missing_trip_id` — 422
-- `test_patch_event`
-- `test_patch_event_non_member` — 403
-- `test_patch_event_nonexistent` — 404
-- `test_delete_event`
-- `test_delete_event_nonexistent` — 404
-- `test_delete_event_non_member` — 403
-
-**Move-to-bin:**
-
-- `test_move_to_bin` — preserves place_id/lat/lng/added_by + time_hint
-- `test_move_to_bin_no_start_time` — `time_hint=None`
-- `test_move_to_bin_non_member` — 403
-- `test_move_to_bin_nonexistent` — 404
+**Move-to-bin:** preserves place_id/lat/lng/added_by/time_hint, no-start-time → `time_hint=None`, non-member 403, nonexistent 404.
 
 ### `api/test_ripple_api.py` — `/api/events/ripple/{trip_id}`
 
-- `test_ripple_shifts_future_events`
-- `test_ripple_non_member` — 403
-- `test_ripple_missing_delta` — 422
-- `test_ripple_strips_tz_on_start_from_time`
-- `test_ripple_isolated_to_trip` — no cross-trip leakage
+Shifts future events, non-member 403, missing delta 422, tz-strip on `start_from_time`, trip isolation, **parametrized non-admin 403** (view_only / view_with_vote).
 
 ### `api/test_quick_add_api.py` — `/api/events/quick-add/{trip_id}`
 
-- `test_quick_add_success` — NLP + GMaps both mocked
-- `test_quick_add_non_member` — 403
-- `test_quick_add_nlp_failure_surfaces_500`
+Success (NLP + GMaps mocked), non-member 403, NLP failure → 500.
+
+### `api/test_dashboard.py` — `/api/dashboard/today`
+
+**Auth / shape:** requires auth (401), top-level `{pages, default_index}` always present.
+
+**State classification:** empty state, pre_trip / in_trip / post_trip single-trip, `end_date=None` falls back to `end=start`, trip with no start_date skipped, ending-today and starting-today both active, ended-yesterday is past.
+
+**`in_trip` event enrichment:** today-only filter, order by start_time nulls-last, `is_ongoing` when now between start/end, `is_next` on first future event only, `day_number` from TripDays (or date-delta fallback), `total_days` from end-start, `client_now` override (ISO / Z-suffix / invalid falls back).
+
+**Multi-trip / isolation:** invited-but-not-accepted excluded, removed member loses trip, overlapping actives → soonest-start kept, default_index points at active when present, closer-upcoming default, zero-when-only-upcoming, past cap=2, upcoming cap=3, page ordering past→active→upcoming, closer-past default, per-user isolation.
+
+### `api/test_groups.py` — `/api/groups/*`
+
+**Create:** requires auth (401), empty/whitespace name rejected (422), strip whitespace, owner gets admin membership, `group_created` self-notification.
+
+**Read:** detail by member (my_role), not-found (404), invited-but-not-accepted 403, list counts `member_count` + `trip_count`, isolation.
+
+**Update:** patch name (admin / non-admin 403 / non-member 403 / empty noop / 404).
+
+**Delete:** admin ok, non-admin 403, removes all members (including invited), nullifies `notifications.group_id`, nonexistent 404.
+
+**Invitations:** admin ok, non-admin 403, unknown email 404, already-member 409, invalid role 422, default role `member`, pending-list shape (group + inviter), pending-empty, accept (happy / nonexistent / foreign / already-accepted 404), decline (happy / nonexistent 404), accept fan-out (self vs peers).
+
+**Members list:** by member, non-member 403, includes invited + accepted.
+
+**Role changes:** member→admin, non-admin 403, invalid 422, nonexistent member 404, cross-group 404.
+
+**Remove member:** admin ok, non-admin 403, admin-self 400, nonexistent 404, fan-out to target + remaining.
+
+**Trip attach/detach:** idempotent when already attached, non-group-admin 403, nonexistent trip 404, attach fan-out, detach by non-admin 403, detach when not attached 404, detach preserves trip data.
+
+**Auth sweep:** parametrized 401 across all routes.
+
+### `api/test_group_library.py` — `/api/groups/{id}/ideas`, `/tags`
+
+**Aggregation:** across multiple trips, excludes unattached trips, non-member 403, empty group returns empty, unknown group 403.
+
+**Query params:** case-insensitive search, no-match empty, filter by `trip_id`, filter by trip_id not in group (empty), combined q+tag, sort recent (id desc), sort title (lowercase key), sort top (score tie → higher `up`), unknown sort → recent.
+
+**Row fields:** `tags`, `up`, `down`, `my_vote` all present; `my_vote` is per-caller.
+
+**Tag summary:** empty when no ideas, sorted by count desc, non-member 403, excludes tags from detached trips.
+
+### `api/test_ideas_tags_copy.py` — `/api/ideas/{id}/tags`, `/copy`
+
+**Tags CRUD:** get empty, get non-member 403, get nonexistent 404, set strips/lowercases, drops empty strings, dedupes case-insensitive, view_only 403, view_with_vote 200, non-member 403, nonexistent idea 404, empty list clears.
+
+**Copy across trips:** preserves `place_id`/lat/lng/url_source/time_hint/added_by/`origin_idea_id`/tags, copy-of-copy keeps original origin (sticky through chains — verified via group library `LibraryIdeaOut`), requires membership on source (403), same-trip duplicates, nonexistent idea 404, nonexistent target trip 403, no-tags-on-source copies zero tags.
+
+### `api/test_votes.py` — `/api/ideas/{id}/vote`, `/events/{id}/vote`, voters
+
+**Tally:** non-member 403, nonexistent idea/event 404, multi-user state (up/down/none).
+
+**Vote edits:** admin can vote, view_only blocked (403), view_with_vote allowed, view_only reads tally, zero removes vote, idempotent same-value, up→down flip, `my_vote` reflects caller not latest voter, zero when no vote exists (no-op, no 404).
+
+**Auth:** requires auth (401), vote on idea not in my trip (403).
+
+**Voter lists:** idea voters split up/down, unknown-name → "Unknown", view_only can read, non-member 403, nonexistent 404; same for event voters.
+
+**Invalid input:** missing field 422, non-int 422, parametrized out-of-range (2, -2, 10, 1.5, `"up"`) → 422.
+
+### `api/test_notifications.py` — `/api/notifications/*`
+
+**List:** requires auth 401, ordered by `created_at` desc, `limit` caps results, `limit=0`/`limit=101` → 422, `before_id` pagination, actor summary when `actor_id` set, actor null when system-emitted, `payload` defaults to `{}` when null, empty list for new user.
+
+**Unread count:** requires auth 401, ignores read rows, only counts own user, decrements on mark-read, zeroes on mark-all-read.
+
+**Mark-read:** nonexistent 404, another user's row 404, idempotent (preserves `read_at`), sets `read_at`.
+
+**Mark-all-read:** empty is ok, leaves other users' rows alone.
+
+**Fan-out:** trip-create self-notification, invite emits to invitee, per-user isolation.
 
 ---
 
@@ -220,52 +192,33 @@ Shared fixtures and helpers (no tests):
 
 ### `services/test_idea_bin_service.py`
 
-**Regex helpers (pure):**
+**Regex helpers (pure):** `extract_time_hint` (parametrized: `2pm`, `14:00`, `8:30 pm`, no-time), `strip_time_hint` (removes / no-change / 24h).
 
-- `test_extract_time_hint` (parametrized: `2pm`, `14:00`, `8:30 pm`, no-time)
-- `test_strip_time_hint_removes_time`
-- `test_strip_time_hint_no_change_if_no_time`
-- `test_strip_time_hint_24h`
-
-**Ingestion against real SQLite:**
-
-- `test_ingest_creates_items_with_place`
-- `test_ingest_falls_back_when_no_place`
-- `test_ingest_handles_google_exception`
-- `test_ingest_splits_commas_newlines`
-- `test_ingest_empty_returns_empty`
+**Ingestion (real SQLite):** creates items with place, falls back when no place, handles Google exception, splits commas/newlines, empty returns empty.
 
 ### `services/test_ripple_engine.py`
 
-- `test_shifts_future_events`
-- `test_skips_past_events` — `start_time < start_from_time`
-- `test_skips_locked` — `is_locked=True`
-- `test_skips_events_with_none_start` — regression for bug fix
-- `test_handles_none_end_time` — `end_time=None` preserved
-- `test_negative_delta` — shifts earlier
-- `test_zero_delta_is_noop`
-- `test_returns_ordered_by_start_time`
+Shifts future events, skips past events, skips locked, skips `start=None` (regression), preserves `end_time=None`, negative delta, zero-delta noop, ordered by `start_time`.
 
 ### `services/test_quick_add_service.py`
 
-- `test_quick_add_with_nlp_time` — `start_iso` honored
-- `test_quick_add_default_duration` — 60 min fallback
-- `test_quick_add_without_start_iso_uses_today_10am`
-- `test_quick_add_gmaps_exception_falls_back` — regression for bug fix
-- `test_quick_add_default_event_type` — `"activity"`
+NLP time honored, default duration 60min, no start_iso uses today 10am, GMaps exception fallback (regression), default event_type `"activity"`.
 
 ### `services/test_nlp_service.py`
 
-- `test_no_api_key_returns_stub`
-- `test_with_api_key_calls_openai` — mocked `AsyncOpenAI`
-- `test_client_is_lazy` — not initialized until needed
+No API key → stub, with key calls mocked `AsyncOpenAI`, client is lazy.
 
 ### `services/test_google_maps_service.py`
 
-- `test_no_key_returns_mock` — Rome coordinates
-- `test_with_key_ok_response` — first candidate returned
-- `test_with_key_non_ok_returns_none`
-- `test_with_key_no_candidates_returns_none`
+No key → Rome mock, with-key ok returns first candidate, non-ok returns `None`, no candidates returns `None`.
+
+### `services/test_notification_service.py`
+
+`emit()` dedupes recipients, drops `None`, empty-list noop, persists `payload`/`actor`/`trip_id`/`group_id`, disabled type is silent noop (via `monkeypatch.setitem(NotificationType.ENABLED, ..., False)`), unknown type defaults true. `trip_member_ids` accepted-only default, includes-invited flag, `exclude_user` filter. `all_trip_member_ids` includes caller.
+
+### `services/test_roles.py`
+
+`get_trip_member` returns `None` for non-member / invited status. `require_trip_member` 403 for non-member. `require_trip_admin` accepts admin / 403 for view_only / 403 for view_with_vote. `require_vote_role` parametrized: admin + view_with_vote accepted / view_only 403.
 
 ---
 
@@ -273,18 +226,11 @@ Shared fixtures and helpers (no tests):
 
 ### `core/test_security.py`
 
-- `test_hash_verify_roundtrip`
-- `test_verify_wrong_password`
-- `test_hashes_have_different_salts` — bcrypt salt
-- `test_token_contains_sub_and_exp`
-- `test_token_custom_expiry`
-- `test_token_wrong_secret_fails`
+Hash/verify roundtrip, wrong password, different salts, token contains sub+exp, custom expiry, wrong-secret fails.
 
 ### `core/test_deps.py` — `get_current_user` via `/api/users/me`
 
-- `test_wrong_signature_rejected` — 401
-- `test_missing_sub_rejected` — 401
-- `test_wrong_algorithm_rejected` — HS512 vs HS256, 401
+Wrong signature 401, missing sub 401, wrong algorithm (HS512 vs HS256) 401.
 
 ---
 
@@ -292,10 +238,31 @@ Shared fixtures and helpers (no tests):
 
 ### `cross/test_trip_lifecycle.py`
 
-- `test_full_trip_lifecycle` — register → create → invite → accept → add day → ingest → event → ripple → remove → delete
-- `test_view_only_cannot_mutate` — view_only role blocked from invite/add-day
-- `test_idor_across_trips` — no cross-trip reads or event lookups
-- `test_ripple_then_day_delete_bin_reflects_shifted_time` — time_hint reflects post-ripple time
+Full trip lifecycle (register → create → invite → accept → add-day → ingest → event → ripple → remove → delete), view_only cannot mutate, IDOR across trips, ripple-then-day-delete bin reflects shifted time.
+
+### `cross/test_vote_transfer.py`
+
+Idea→event transfer via `source_idea_id` preserves per-user up/down values, does NOT delete source IdeaVote rows (current behavior), event→idea via move-to-bin preserves both up/down voters, no votes → clean transfer, event created without `source_idea_id` has no event votes, bin→timeline→bin roundtrip keeps tally, transferred idea shows up in group library with tally.
+
+### `cross/test_group_trip_lifecycle.py`
+
+Full E2E (create → invite → accept → attach → library → role change → detach → remove → delete), detach removes ideas from library, trip-delete propagates, IDOR across groups, removed member loses read access.
+
+### `cross/test_notification_fanout.py`
+
+**Trip:** `trip_created` self-only, `trip_renamed` / `date_changed` / `deleted` fan-out, invite/accept/decline chains with self vs peer payload shapes, `member_role_changed` to target, `member_removed` two-shape.
+
+**Event:** `event_added` excludes creator, `event_moved` fires only on time change (not title-only), `event_removed` on delete, `event_removed` with `moved_to_bin=True` flag on move-to-bin, `ripple_fired` to affected members.
+
+**Group:** `group_created` self-only, `group_invite_received` to invitee, group-attach to peers not actor.
+
+**Negative:** disabled type suppresses emission (monkeypatch `ENABLED`).
+
+### `cross/test_ripple_gating.py`
+
+Admin allowed, parametrized non-admin 403 (view_only / view_with_vote), non-member 403.
+
+> Note: `api/test_ripple_api.py` also asserts the non-admin 403 inline as a cross-service addition; the `cross/` file is the consolidated reference.
 
 ---
 
@@ -303,46 +270,51 @@ Shared fixtures and helpers (no tests):
 
 ### `schemas/test_event_schema.py`
 
-`**_strip_tz` helper:**
+`_strip_tz` helper (none / UTC / non-UTC with offset), EventCreate / EventUpdate / RippleRequest strip tz. Trip validators: end-before-start rejected (create + update), equal dates ok, name-only ok. Request shape: invite default role `view_only`, ingest requires `text`.
 
-- `test_strip_tz_none`
-- `test_strip_tz_utc`
-- `test_strip_tz_non_utc` — UTC offset applied
+### `schemas/test_votes_schema.py`
 
-**Schema validators:**
+`VoteRequest` parametrized -1/0/1 accepted, out-of-range (2, -2, `None`) rejected, str→int coercion (pydantic default). `VoteTally` defaults zero.
 
-- `test_event_create_strips_tz_on_both_times`
-- `test_event_update_strips_tz`
-- `test_ripple_request_strips_tz`
+### `schemas/test_library_schema.py`
 
-**Trip validators (end_date ≥ start_date — regression for bug fix):**
+`TagList` lowercases + strips, dedupes case-insensitive, filters empty/whitespace, preserves first-occurrence order, empty list ok. `CopyIdeaRequest` requires `target_trip_id` (422), accepts int.
 
-- `test_trip_create_rejects_end_before_start`
-- `test_trip_create_accepts_equal_dates`
-- `test_trip_update_rejects_end_before_start`
-- `test_trip_create_only_name_ok`
+### `schemas/test_group_schema.py`
 
-**Request shape:**
-
-- `test_invite_request_default_role` — `view_only`
-- `test_ingest_request_requires_text` — 422 without text
+`GroupCreate` requires name, accepts name. `GroupUpdate.name` optional. `GroupInviteRequest` default role `member`, requires email, rejects invalid email. `GroupRoleUpdateRequest` accepts any string (role validation is endpoint-level against `GROUP_ROLES`, not schema — regression anchor).
 
 ---
 
-# Not Yet Written (future scope)
+# Design notes
 
-Documented in the plan but not yet implemented — these are cases where the current behavior is surprising, out of scope for this pass, or needs a product decision:
+## Why additive Stage-2 features didn't break Stage-1 tests
 
-- Pagination on list endpoints (`GET /events/`, `/ideas`, `/members`) — currently unbounded
-- Concurrency: two admins editing same trip simultaneously
-- Large `delta_minutes` / datetime overflow on ripple
-- Unicode + very long strings in titles
+Stage-1 tests assert on endpoint *contracts* (HTTP response + primary entity state). Stage-2 features — notifications, vote transfer, group-library visibility, cascade cleanup — are all additive side effects on *other* tables. The tests never queried those tables, so nothing broke:
+
+- **Notifications** — emitted to a separate `notifications` table; Stage-1 tests don't query it.
+- **Vote transfer** — only triggers when `source_idea_id` is set or via `move_to_bin`; Stage-1 event tests don't set it.
+- **Group-library visibility** — library filter requires `Trip.group_id`; Stage-1 tests never attach trips to groups.
+- **Role gating** — existing tests cover non-member 403 but not view_only / view_with_vote boundary; the new parametrized gating test fills this.
+
+The *contract* tests remain valid; the *cross-service* files (`cross/`, `test_notification_fanout.py`, `test_vote_transfer.py`) are where the additive behavior is pinned.
+
+## Known infrastructure gaps (not test gaps)
+
+- **Cascade on idea delete** — `IdeaTag` and `IdeaVote` both declare `ondelete="CASCADE"` at the FK level. SQLite ignores this unless `PRAGMA foreign_keys=ON` is set per-connection, which conftest does not do. Enabling it risks breaking Stage-1 tests that tolerate orphans. Cascade behavior is therefore not asserted in the test suite; it is enforced in Postgres (production) at the DB level.
+- **Pagination** on unbounded list endpoints (`GET /events/`, `/ideas`, `/members`) — currently not tested because the endpoints don't paginate.
+
+## Explicit non-goals
+
+- Unicode / very long group names, tag names, idea titles
+- Concurrent same-user vote (last-write-wins is current behavior)
+- Removing last group admin — prevented by 400; revisit if admin handoff is added
+- Notification `payload` shape drift — we don't pin exact keys per type beyond `trip_name` / `self`; add a schema only when the frontend breaks on a missing key
+- `before_id` pagination with tombstones
+- Large library (>1000 ideas) performance
+- `freezegun`-based assertion for `quick_add`'s 10 AM fallback
 - CORS smoke test
-- `freezegun`-based `datetime.now()` assertion for `quick_add`'s 10 AM fallback
-- Removing last admin leaves orphaned trip — product decision
-- `PATCH /events/{id}` cannot change `trip_id` — schema-level assertion
-- Empty-string `current_user.name` falls back to `added_by=None` on ingest — edge case
-- `test_date_shift_cascade.py`, `test_day_delete_cascade.py`, `test_bin_to_timeline_roundtrip.py` under `cross/` — currently covered inline in `api/test_trips.py`, `api/test_trip_days.py`, and `cross/test_trip_lifecycle.py`; split out if/when they grow
+- Large `delta_minutes` / datetime overflow on ripple
 
 ---
 
@@ -350,7 +322,7 @@ Documented in the plan but not yet implemented — these are cases where the cur
 
 ```bash
 cd backend
-pytest tests/ -v
+pytest tests/
 
 # one directory
 pytest tests/api -v
@@ -364,7 +336,7 @@ pytest tests/api/test_trips.py::test_create_trip_basic -v
 
 Configuration lives in `tests/pytest.ini` (`asyncio_mode = auto`). No `@pytest.mark.asyncio` needed on individual tests.
 
-Environment:
+## Environment
 
 - `OPENAI_API_KEY` unset or stub → NLP service returns stub
 - `GOOGLE_MAPS_API_KEY` unset → GMaps service falls back to Rome mock
@@ -373,6 +345,27 @@ Environment:
 ## Conventions
 
 - HTTP tests use the `client` + `auth_headers` / `second_auth_headers` / `third_auth_headers` fixtures from `conftest.py`.
-- Service tests prefer real in-memory SQLite via `db_session` when ORM behavior matters; mock only the outbound I/O (OpenAI, Google Maps).
+- Service tests prefer real in-memory SQLite via `db_session` when ORM behavior matters; mock only outbound I/O (OpenAI, Google Maps).
 - Every new endpoint gets: happy path, auth required, authz boundary (non-member/non-admin), not-found, validation error.
+- New Stage-2 features additionally get a cross-service test in `cross/` whenever they emit notifications, transfer state across entities, or surface data through a different endpoint (e.g., group library).
 
+---
+
+# Not Yet Written (future scope)
+
+Documented but not yet implemented — these are cases where the current behavior is surprising, out of scope for this pass, or needs a product decision:
+
+- Pagination on list endpoints (`GET /events/`, `/ideas`, `/members`) — currently unbounded
+- Concurrency: two admins editing the same trip simultaneously
+- Large `delta_minutes` / datetime overflow on ripple
+- Unicode + very long strings in titles, group names, tags
+- CORS smoke test
+- `freezegun`-based `datetime.now()` assertion for `quick_add`'s 10 AM fallback
+- Removing last trip/group admin leaves orphaned entity — product decision
+- `PATCH /events/{id}` cannot change `trip_id` — schema-level assertion
+- Empty-string `current_user.name` falls back to `added_by=None` on ingest — edge case
+- Cascade on idea delete (`IdeaTag`, `IdeaVote`) — requires `PRAGMA foreign_keys=ON` in conftest; production (Postgres) enforces it at the DB layer
+- `before_id` notification pagination where rows have been deleted
+- Large group library (>1000 ideas) performance
+- Notification `payload` shape drift — pin exact keys per type once frontend contracts stabilize
+- `test_date_shift_cascade.py`, `test_day_delete_cascade.py`, `test_bin_to_timeline_roundtrip.py` under `cross/` — currently covered inline in `api/test_trips.py`, `api/test_trip_days.py`, and `cross/test_trip_lifecycle.py`; split out if/when they grow

@@ -5,6 +5,7 @@ import { useTripStore, Event, Idea } from '@/lib/store';
 import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import VoteControl from '@/components/trip/VoteControl';
 
 interface TimelineProps {
   tripId: string | null;
@@ -12,6 +13,8 @@ interface TimelineProps {
   filterDay?: Date;
   /** When true, hides move-to-bin, time editing, and drag reorder. */
   readOnly?: boolean;
+  /** When true, user may cast votes on events (admin or view_with_vote). */
+  canVote?: boolean;
 }
 
 /** Returns true if event A's end_time overlaps event B's start_time. */
@@ -141,7 +144,7 @@ function TimeEditor({
   );
 }
 
-export default function Timeline({ tripId, filterDay, readOnly = false }: TimelineProps) {
+export default function Timeline({ tripId, filterDay, readOnly = false, canVote = false }: TimelineProps) {
   const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays } =
     useTripStore();
 
@@ -392,6 +395,10 @@ export default function Timeline({ tripId, filterDay, readOnly = false }: Timeli
                         {format(event.start_time, 'h:mm a')} – {format(event.end_time, 'h:mm a')}
                       </div>
                     )}
+
+                    <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                      <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" initial={event.up != null ? { up: event.up ?? 0, down: event.down ?? 0, my_vote: event.my_vote ?? 0 } : undefined} />
+                    </div>
 
                     {index < visibleEvents.length - 1 && !filterDay && (
                       <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl text-[10px] text-slate-500 font-bold">
