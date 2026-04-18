@@ -2,8 +2,9 @@
 import pytest
 
 
-async def create_trip(client, headers, name="T"):
-    r = await client.post("/api/trips/", json={"name": name}, headers=headers)
+async def create_trip(client, headers, name="T", **extra):
+    body = {"name": name, **extra}
+    r = await client.post("/api/trips/", json=body, headers=headers)
     assert r.status_code == 200
     return r.json()
 
@@ -152,3 +153,183 @@ async def test_move_to_bin_shows_in_group_library_with_tally(
     body = (await client.get(f"/api/groups/{group_id}/ideas", headers=auth_headers)).json()
     assert body[0]["title"] == "Spot"
     assert body[0]["up"] == 1
+
+
+# ── create_event response includes inline vote tallies ────────────────────────
+
+@pytest.mark.asyncio
+async def test_create_event_response_includes_transferred_votes(client, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    idea = await ingest(client, auth_headers, trip["id"])
+    await client.post(f"/api/ideas/{idea['id']}/vote", json={"value": 1}, headers=auth_headers)
+
+    ev = await create_event(client, auth_headers, trip["id"], source_idea_id=idea["id"])
+    assert ev["up"] == 1
+    assert ev["down"] == 0
+    assert ev["my_vote"] == 1
+
+
+@pytest.mark.asyncio
+async def test_create_event_response_zero_votes_without_source(client, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    ev = await create_event(client, auth_headers, trip["id"])
+    assert ev["up"] == 0 and ev["down"] == 0 and ev["my_vote"] == 0
+
+
+# ── move-to-bin response includes inline vote tallies ─────────────────────────
+
+@pytest.mark.asyncio
+async def test_move_to_bin_response_includes_votes(client, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    ev = await create_event(client, auth_headers, trip["id"])
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    r = await client.post(f"/api/events/{ev['id']}/move-to-bin", headers=auth_headers)
+    idea = r.json()
+    assert idea["up"] == 1 and idea["down"] == 0 and idea["my_vote"] == 1
+
+
+@pytest.mark.asyncio
+async def test_move_to_bin_my_vote_reflects_caller(
+    client, auth_headers, second_auth_headers
+):
+    trip = await create_trip(client, auth_headers)
+    await invite_and_accept(
+        client, auth_headers, second_auth_headers, trip["id"], "bob@test.com", "view_with_vote"
+    )
+    ev = await create_event(client, auth_headers, trip["id"])
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": -1}, headers=second_auth_headers)
+    r = await client.post(f"/api/events/{ev['id']}/move-to-bin", headers=auth_headers)
+    assert r.json()["my_vote"] == 1
+
+
+# ── day-delete vote transfer ──────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_day_delete_bin_preserves_single_vote(client, auth_headers):
+    trip = await create_trip(client, auth_headers, "T", start_date="2026-06-01T00:00:00")
+    days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
+    day_date = days[0]["date"]
+    ev = await create_event(client, auth_headers, trip["id"], title="Beach")
+    await client.patch(
+        f"/api/events/{ev['id']}",
+        json={"day_date": day_date},
+        headers=auth_headers,
+    )
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    await client.delete(
+        f"/api/trips/{trip['id']}/days/{days[0]['id']}?items_action=bin",
+        headers=auth_headers,
+    )
+    ideas = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    assert len(ideas) == 1
+    t = (await client.get(f"/api/ideas/{ideas[0]['id']}/votes", headers=auth_headers)).json()
+    assert t["up"] == 1
+
+
+@pytest.mark.asyncio
+async def test_day_delete_bin_preserves_multi_user_votes(
+    client, auth_headers, second_auth_headers
+):
+    trip = await create_trip(client, auth_headers, "T", start_date="2026-06-01T00:00:00")
+    await invite_and_accept(
+        client, auth_headers, second_auth_headers, trip["id"], "bob@test.com", "view_with_vote"
+    )
+    days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
+    day_date = days[0]["date"]
+    ev = await create_event(client, auth_headers, trip["id"], title="Market")
+    await client.patch(
+        f"/api/events/{ev['id']}",
+        json={"day_date": day_date},
+        headers=auth_headers,
+    )
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": -1}, headers=second_auth_headers)
+    await client.delete(
+        f"/api/trips/{trip['id']}/days/{days[0]['id']}?items_action=bin",
+        headers=auth_headers,
+    )
+    ideas = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    t = (await client.get(f"/api/ideas/{ideas[0]['id']}/votes", headers=auth_headers)).json()
+    assert t["up"] == 1 and t["down"] == 1
+
+
+@pytest.mark.asyncio
+async def test_day_delete_action_delete_no_idea_votes(client, auth_headers):
+    trip = await create_trip(client, auth_headers, "T", start_date="2026-06-01T00:00:00")
+    days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
+    day_date = days[0]["date"]
+    ev = await create_event(client, auth_headers, trip["id"], title="Temple")
+    await client.patch(
+        f"/api/events/{ev['id']}",
+        json={"day_date": day_date},
+        headers=auth_headers,
+    )
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    await client.delete(
+        f"/api/trips/{trip['id']}/days/{days[0]['id']}?items_action=delete",
+        headers=auth_headers,
+    )
+    ideas = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    assert ideas == []
+
+
+@pytest.mark.asyncio
+async def test_day_delete_bin_zero_votes_clean(client, auth_headers):
+    trip = await create_trip(client, auth_headers, "T", start_date="2026-06-01T00:00:00")
+    days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
+    day_date = days[0]["date"]
+    ev = await create_event(client, auth_headers, trip["id"], title="Park")
+    await client.patch(
+        f"/api/events/{ev['id']}",
+        json={"day_date": day_date},
+        headers=auth_headers,
+    )
+    await client.delete(
+        f"/api/trips/{trip['id']}/days/{days[0]['id']}?items_action=bin",
+        headers=auth_headers,
+    )
+    ideas = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    t = (await client.get(f"/api/ideas/{ideas[0]['id']}/votes", headers=auth_headers)).json()
+    assert t == {"up": 0, "down": 0, "my_vote": 0}
+
+
+# ── extended roundtrips ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_timeline_to_bin_roundtrip_votes_on_idea(client, auth_headers):
+    """Event→bin preserves votes on the resulting idea; re-creating the event
+    is not tested here because SQLite (without FK pragma) leaves orphaned
+    EventVote rows that collide on ROWID reuse.  The idea→event leg is
+    already covered by test_bin_to_timeline_roundtrip_keeps_votes."""
+    trip = await create_trip(client, auth_headers)
+    ev = await create_event(client, auth_headers, trip["id"], title="Cafe")
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    r = await client.post(f"/api/events/{ev['id']}/move-to-bin", headers=auth_headers)
+    new_idea_id = r.json()["id"]
+    t = (await client.get(f"/api/ideas/{new_idea_id}/votes", headers=auth_headers)).json()
+    assert t["up"] == 1
+
+
+@pytest.mark.asyncio
+async def test_day_delete_bin_roundtrip_votes_on_idea(client, auth_headers):
+    """Day-delete→bin preserves votes on the resulting idea.  Re-creating the
+    event is not tested because SQLite (no FK pragma) leaves orphaned
+    EventVote rows that collide on ROWID reuse."""
+    trip = await create_trip(client, auth_headers, "T", start_date="2026-06-01T00:00:00")
+    days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
+    day_date = days[0]["date"]
+    ev = await create_event(client, auth_headers, trip["id"], title="Falls")
+    await client.patch(
+        f"/api/events/{ev['id']}",
+        json={"day_date": day_date},
+        headers=auth_headers,
+    )
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    await client.delete(
+        f"/api/trips/{trip['id']}/days/{days[0]['id']}?items_action=bin",
+        headers=auth_headers,
+    )
+    ideas = (await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)).json()
+    t = (await client.get(f"/api/ideas/{ideas[0]['id']}/votes", headers=auth_headers)).json()
+    assert t["up"] == 1

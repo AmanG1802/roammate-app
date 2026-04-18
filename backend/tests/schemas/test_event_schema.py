@@ -92,3 +92,19 @@ def test_invite_request_default_role():
 def test_ingest_request_requires_text():
     with pytest.raises(ValidationError):
         IngestRequest()
+
+
+# ── Event / IdeaBinItem vote field defaults ───────────────────────────────────
+
+from app.schemas.event import Event
+from app.schemas.trip import IdeaBinItem
+
+
+def test_event_schema_vote_defaults():
+    e = Event(id=1, trip_id=1, title="T")
+    assert e.up == 0 and e.down == 0 and e.my_vote == 0
+
+
+def test_idea_bin_item_schema_vote_defaults():
+    i = IdeaBinItem(id=1, trip_id=1, title="T")
+    assert i.up == 0 and i.down == 0 and i.my_vote == 0

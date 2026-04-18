@@ -182,3 +182,55 @@ async def test_move_to_bin_non_member(
 async def test_move_to_bin_nonexistent(client: AsyncClient, auth_headers):
     resp = await client.post("/api/events/9999/move-to-bin", headers=auth_headers)
     assert resp.status_code == 404
+
+
+# ── Batch vote data in responses ──────────────────────────────────────────────
+
+async def test_get_events_includes_vote_tallies(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    ev1 = await _create_event(client, auth_headers, trip["id"], title="A")
+    ev2 = await _create_event(client, auth_headers, trip["id"], title="B")
+    await client.post(f"/api/events/{ev1['id']}/vote", json={"value": 1}, headers=auth_headers)
+    resp = await client.get(f"/api/events/?trip_id={trip['id']}", headers=auth_headers)
+    events = resp.json()
+    by_title = {e["title"]: e for e in events}
+    assert by_title["A"]["up"] == 1 and by_title["A"]["my_vote"] == 1
+    assert by_title["B"]["up"] == 0 and by_title["B"]["my_vote"] == 0
+
+
+async def test_get_events_my_vote_is_caller_specific(
+    client: AsyncClient, auth_headers, second_auth_headers
+):
+    trip = await create_trip(client, auth_headers)
+    await invite_and_accept(
+        client, auth_headers, second_auth_headers, trip["id"], "bob@test.com",
+        role="view_with_vote",
+    )
+    ev = await _create_event(client, auth_headers, trip["id"], title="X")
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": -1}, headers=second_auth_headers)
+
+    alice_view = (await client.get(f"/api/events/?trip_id={trip['id']}", headers=auth_headers)).json()
+    bob_view = (await client.get(f"/api/events/?trip_id={trip['id']}", headers=second_auth_headers)).json()
+    assert alice_view[0]["my_vote"] == 1
+    assert bob_view[0]["my_vote"] == -1
+
+
+async def test_get_events_no_votes_returns_zeros(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    await _create_event(client, auth_headers, trip["id"], title="Z")
+    events = (await client.get(f"/api/events/?trip_id={trip['id']}", headers=auth_headers)).json()
+    assert events[0]["up"] == 0 and events[0]["down"] == 0 and events[0]["my_vote"] == 0
+
+
+async def test_patch_event_response_includes_votes(client: AsyncClient, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    ev = await _create_event(client, auth_headers, trip["id"], title="Old")
+    await client.post(f"/api/events/{ev['id']}/vote", json={"value": 1}, headers=auth_headers)
+    resp = await client.patch(
+        f"/api/events/{ev['id']}",
+        json={"title": "New"},
+        headers=auth_headers,
+    )
+    data = resp.json()
+    assert data["up"] == 1 and data["my_vote"] == 1

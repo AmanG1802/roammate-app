@@ -318,3 +318,44 @@ async def test_event_voters_non_member_403(
 async def test_event_voters_nonexistent_404(client, auth_headers):
     r = await client.get("/api/events/9999/voters", headers=auth_headers)
     assert r.status_code == 404
+
+
+# ── Voter list edge cases ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_idea_voters_empty_when_no_votes(client, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    idea = await ingest(client, auth_headers, trip["id"])
+    r = (await client.get(f"/api/ideas/{idea['id']}/voters", headers=auth_headers)).json()
+    assert r["up_voters"] == [] and r["down_voters"] == []
+
+
+@pytest.mark.asyncio
+async def test_idea_voters_updates_after_vote_removal(client, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    idea = await ingest(client, auth_headers, trip["id"])
+    await client.post(f"/api/ideas/{idea['id']}/vote", json={"value": 1}, headers=auth_headers)
+    r = (await client.get(f"/api/ideas/{idea['id']}/voters", headers=auth_headers)).json()
+    assert len(r["up_voters"]) == 1
+    await client.post(f"/api/ideas/{idea['id']}/vote", json={"value": 0}, headers=auth_headers)
+    r = (await client.get(f"/api/ideas/{idea['id']}/voters", headers=auth_headers)).json()
+    assert r["up_voters"] == [] and r["down_voters"] == []
+
+
+@pytest.mark.asyncio
+async def test_event_voters_after_transfer_from_idea(client, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    idea = await ingest(client, auth_headers, trip["id"])
+    await client.post(f"/api/ideas/{idea['id']}/vote", json={"value": 1}, headers=auth_headers)
+    ev = await create_event(client, auth_headers, trip["id"], source_idea_id=idea["id"])
+    r = (await client.get(f"/api/events/{ev['id']}/voters", headers=auth_headers)).json()
+    assert len(r["up_voters"]) == 1
+    assert r["up_voters"][0]["name"] == "Alice Smith"
+
+
+@pytest.mark.asyncio
+async def test_event_voters_empty_when_no_votes(client, auth_headers):
+    trip = await create_trip(client, auth_headers)
+    ev = await create_event(client, auth_headers, trip["id"])
+    r = (await client.get(f"/api/events/{ev['id']}/voters", headers=auth_headers)).json()
+    assert r["up_voters"] == [] and r["down_voters"] == []
