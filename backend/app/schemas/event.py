@@ -55,6 +55,9 @@ class EventUpdate(BaseModel):
 
 class Event(EventBase):
     id: int
+    up: int = 0
+    down: int = 0
+    my_vote: int = 0
 
     model_config = {"from_attributes": True}
 

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,7 +6,7 @@ from sqlalchemy import select, update, func as sa_func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from app.db.session import get_db
-from app.models.all_models import Trip, TripMember, User, IdeaBinItem as IdeaBinItemModel, TripDay, Event as EventModel, Notification
+from app.models.all_models import Trip, TripMember, User, IdeaBinItem as IdeaBinItemModel, TripDay, Event as EventModel, Notification, IdeaVote, EventVote
 from app.schemas.trip import (
     Trip as TripSchema, TripCreate, TripUpdate, IngestRequest, IdeaBinItem,
     TripMemberOut, InviteRequest, TripDayCreate, TripDayOut,
@@ -17,6 +17,19 @@ from app.services.idea_bin import idea_bin_service
 from app.services import notification_service
 from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
+
+
+async def _sync_trip_end_date(db: AsyncSession, trip_id: int) -> None:
+    """Recompute Trip.end_date = start_date + (TripDay count - 1)."""
+    trip = (await db.execute(select(Trip).where(Trip.id == trip_id))).scalars().first()
+    if not trip or not trip.start_date:
+        return
+    day_count = (await db.execute(
+        select(sa_func.count(TripDay.id)).where(TripDay.trip_id == trip_id)
+    )).scalar_one()
+    if day_count > 0:
+        sd = trip.start_date.date() if hasattr(trip.start_date, 'date') else trip.start_date
+        trip.end_date = datetime.combine(sd + timedelta(days=day_count - 1), datetime.min.time())
 
 router = APIRouter()
 
@@ -81,6 +94,8 @@ async def create_trip(
             day_number=1,
         )
         db.add(day1)
+        await db.flush()
+        await _sync_trip_end_date(db, trip.id)
 
     await notification_service.emit(
         db,
@@ -288,6 +303,8 @@ async def update_trip(
                 await db.flush()
 
         trip.start_date = update.start_date
+        await db.flush()
+        await _sync_trip_end_date(db, trip_id)
 
     if update.end_date is not None:
         trip.end_date = update.end_date
@@ -436,8 +453,42 @@ async def get_idea_bin(
         raise HTTPException(status_code=403, detail="Not a member of this trip")
 
     stmt = select(IdeaBinItemModel).where(IdeaBinItemModel.trip_id == trip_id)
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    ideas = (await db.execute(stmt)).scalars().all()
+
+    idea_ids = [i.id for i in ideas]
+    if not idea_ids:
+        return []
+
+    up_stmt = (
+        select(IdeaVote.idea_id, sa_func.count(IdeaVote.id))
+        .where(IdeaVote.idea_id.in_(idea_ids), IdeaVote.value == 1)
+        .group_by(IdeaVote.idea_id)
+    )
+    up_map = dict((await db.execute(up_stmt)).all())
+
+    down_stmt = (
+        select(IdeaVote.idea_id, sa_func.count(IdeaVote.id))
+        .where(IdeaVote.idea_id.in_(idea_ids), IdeaVote.value == -1)
+        .group_by(IdeaVote.idea_id)
+    )
+    down_map = dict((await db.execute(down_stmt)).all())
+
+    my_stmt = (
+        select(IdeaVote.idea_id, IdeaVote.value)
+        .where(IdeaVote.idea_id.in_(idea_ids), IdeaVote.user_id == current_user.id)
+    )
+    my_map = dict((await db.execute(my_stmt)).all())
+
+    return [
+        IdeaBinItem(
+            id=i.id, trip_id=i.trip_id, title=i.title,
+            place_id=i.place_id, lat=i.lat, lng=i.lng,
+            url_source=i.url_source, time_hint=i.time_hint, added_by=i.added_by,
+            up=up_map.get(i.id, 0), down=down_map.get(i.id, 0),
+            my_vote=my_map.get(i.id, 0),
+        )
+        for i in ideas
+    ]
 
 
 @router.get("/{trip_id}/members", response_model=List[TripMemberOut])
@@ -811,6 +862,8 @@ async def add_trip_day(
 
     day = TripDay(trip_id=trip_id, date=day_in.date, day_number=max_num + 1)
     db.add(day)
+    await db.flush()
+    await _sync_trip_end_date(db, trip_id)
     await db.commit()
     await db.refresh(day)
     return day
@@ -867,6 +920,12 @@ async def delete_trip_day(
                 added_by=evt.added_by,
             )
             db.add(idea)
+            await db.flush()
+            src_votes = (await db.execute(
+                select(EventVote).where(EventVote.event_id == evt.id)
+            )).scalars().all()
+            for v in src_votes:
+                db.add(IdeaVote(idea_id=idea.id, user_id=v.user_id, value=v.value))
             await db.delete(evt)
     else:
         for evt in day_events:
@@ -901,4 +960,5 @@ async def delete_trip_day(
         d.date = new_date
         await db.flush()
 
+    await _sync_trip_end_date(db, trip_id)
     await db.commit()

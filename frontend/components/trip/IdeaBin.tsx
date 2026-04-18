@@ -79,6 +79,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
             lng: item.lng ?? 0,
             time_hint: item.time_hint ?? null,
             added_by: item.added_by ?? null,
+            up: item.up ?? 0,
+            down: item.down ?? 0,
+            my_vote: item.my_vote ?? 0,
           }))
         );
       })
@@ -308,8 +311,8 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                         <span className="text-[10px] font-bold text-slate-400">{idea.added_by}</span>
                       </div>
                     )}
-                    <div className="mt-2">
-                      <VoteControl kind="idea" id={idea.id} canVote={canVote} size="sm" />
+                    <div className="mt-2 flex justify-end">
+                      <VoteControl kind="idea" id={idea.id} canVote={canVote} size="sm" initial={idea.up != null ? { up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0 } : undefined} />
                     </div>
                   </div>
 

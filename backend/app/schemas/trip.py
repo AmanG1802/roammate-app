@@ -74,6 +74,9 @@ class IdeaBinItemCreate(IdeaBinItemBase):
 class IdeaBinItem(IdeaBinItemBase):
     id: int
     trip_id: int
+    up: int = 0
+    down: int = 0
+    my_vote: int = 0
 
     model_config = {"from_attributes": True}
 

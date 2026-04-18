@@ -1,12 +1,12 @@
 # Graph Report - .  (2026-04-18)
 
 ## Corpus Check
-- 81 files · ~52,153 words
+- 81 files · ~52,781 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 517 nodes · 2053 edges · 58 communities detected
-- Extraction: 29% EXTRACTED · 71% INFERRED · 0% AMBIGUOUS · INFERRED: 1463 edges (avg confidence: 0.52)
+- 537 nodes · 2381 edges · 59 communities detected
+- Extraction: 25% EXTRACTED · 75% INFERRED · 0% AMBIGUOUS · INFERRED: 1784 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -68,18 +68,19 @@
 - [[_COMMUNITY_Community 55|Community 55]]
 - [[_COMMUNITY_Community 56|Community 56]]
 - [[_COMMUNITY_Community 57|Community 57]]
+- [[_COMMUNITY_Community 58|Community 58]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `User` - 86 edges
-2. `TripMember` - 86 edges
-3. `IdeaBinItem` - 77 edges
-4. `Event` - 76 edges
-5. `IdeaBinItem` - 75 edges
-6. `IngestRequest` - 63 edges
-7. `Trip` - 57 edges
-8. `NotificationType` - 50 edges
-9. `TripDay` - 45 edges
-10. `InvitationOut` - 45 edges
+1. `User` - 103 edges
+2. `TripMember` - 103 edges
+3. `IdeaBinItem` - 94 edges
+4. `Event` - 93 edges
+5. `IdeaBinItem` - 93 edges
+6. `IngestRequest` - 80 edges
+7. `NotificationType` - 67 edges
+8. `Trip` - 66 edges
+9. `TripDay` - 54 edges
+10. `InvitationOut` - 54 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `NLPService.parse_quick_add` --implements--> `LLM Intent Extraction Pipeline (Architecture Concept)`  [INFERRED]
@@ -103,36 +104,36 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.35
-Nodes (65): Event, Notification, Trip, TripDay, IdeaBinItem, IdeaBinItemBase, IdeaBinItemCreate, IngestRequest (+57 more)
+Cohesion: 0.32
+Nodes (73): Notification, Trip, TripDay, IdeaBinItem, IdeaBinItemBase, IdeaBinItemCreate, IngestRequest, InvitationOut (+65 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.16
-Nodes (46): Group, GroupMember, BaseModel, GroupBase, GroupCreate, GroupDetailOut, GroupInvitationOut, GroupInviteRequest (+38 more)
+Cohesion: 0.12
+Nodes (55): Group, GroupMember, IdeaTag, BaseModel, GroupBase, GroupCreate, GroupDetailOut, GroupInvitationOut (+47 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.18
-Nodes (46): EventVote, IdeaBinItem, IdeaVote, TripMember, User, Base, Event, EventBase (+38 more)
+Cohesion: 0.21
+Nodes (53): Event, EventVote, IdeaBinItem, IdeaVote, TripMember, User, Base, Event (+45 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.09
-Nodes (31): create_event(), delete_event(), get_events(), move_event_to_bin(), quick_add_event(), trigger_ripple_engine(), update_event(), _extract_time_hint() (+23 more)
+Nodes (35): create_event(), delete_event(), _event_with_votes(), move_event_to_bin(), quick_add_event(), trigger_ripple_engine(), update_event(), _extract_time_hint() (+27 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.12
-Nodes (22): IdeaTag, copy_idea_to_trip(), list_idea_tags(), Idea-scoped endpoints: tags + cross-trip copy (provenance)., Replace the tag list for this idea. Requires admin or view_with_vote., Copy an idea into another trip, preserving provenance via origin_idea_id.     Ca, set_idea_tags(), CopyIdeaRequest (+14 more)
-
-### Community 5 - "Community 5"
 Cohesion: 0.11
 Nodes (19): LLM Intent Extraction Pipeline (Architecture Concept), Offline-First Sync Layer (Architecture Concept), Ripple Engine (Architecture Concept), Timeline Map Split View (Architecture Concept), System Architecture Document, Concierge Phase Concept, Natural Language Quick Add Concept, Conflict Resolution and Ripple Engine Concept (+11 more)
 
-### Community 6 - "Community 6"
+### Community 5 - "Community 5"
 Cohesion: 0.27
 Nodes (18): create_event(), create_idea(), create_trip(), invite(), invite_and_accept(), Votes on ideas + events: role gating, tally, vote transfer on move-to-bin / bin-, Invite invitee and have them accept — returns the TripMember dict., test_admin_can_vote_on_event() (+10 more)
 
-### Community 7 - "Community 7"
+### Community 6 - "Community 6"
 Cohesion: 0.31
 Nodes (16): _classify(), get_today_widget(), _pick_default(), Pick the most relevant trip for the Today Widget.      Priority: in_trip (active, Bucket and cap trips: up to 1 active, MAX_PAST past, MAX_UPCOMING upcoming., One page of the widget carousel — a single trip in context., Return the index into the merged pages list that should display first.      Prio, Return the default page index. Page order: past … | active | upcoming …      Pri (+8 more)
+
+### Community 7 - "Community 7"
+Cohesion: 0.2
+Nodes (13): get_trip_member(), Role gating helpers for trip-scoped actions., require_trip_admin(), require_trip_member(), require_vote_role(), get_event_votes(), get_idea_votes(), _tally_event() (+5 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.22
@@ -211,12 +212,12 @@ Cohesion: 0.5
 Nodes (0): 
 
 ### Community 27 - "Community 27"
-Cohesion: 0.67
-Nodes (2): ProtectedRoute(), useAuth()
+Cohesion: 0.5
+Nodes (0): 
 
 ### Community 28 - "Community 28"
 Cohesion: 0.67
-Nodes (0): 
+Nodes (2): ProtectedRoute(), useAuth()
 
 ### Community 29 - "Community 29"
 Cohesion: 0.67
@@ -304,33 +305,37 @@ Nodes (1): Test: Trips Integration
 
 ### Community 50 - "Community 50"
 Cohesion: 1.0
-Nodes (1): Return the default page from the paginated widget response.
+Nodes (1): Trip data with the requesting user's role attached.
 
 ### Community 51 - "Community 51"
 Cohesion: 1.0
-Nodes (1): Product Brainstorm Document
+Nodes (1): Return the default page from the paginated widget response.
 
 ### Community 52 - "Community 52"
 Cohesion: 1.0
-Nodes (1): Idea Bin Ingestion Concept
+Nodes (1): Product Brainstorm Document
 
 ### Community 53 - "Community 53"
 Cohesion: 1.0
-Nodes (1): README: Local Dev Setup
+Nodes (1): Idea Bin Ingestion Concept
 
 ### Community 54 - "Community 54"
 Cohesion: 1.0
-Nodes (1): Test Suite README
+Nodes (1): README: Local Dev Setup
 
 ### Community 55 - "Community 55"
 Cohesion: 1.0
-Nodes (1): Claude AI Config
+Nodes (1): Test Suite README
 
 ### Community 56 - "Community 56"
 Cohesion: 1.0
-Nodes (1): Python Dependencies
+Nodes (1): Claude AI Config
 
 ### Community 57 - "Community 57"
+Cohesion: 1.0
+Nodes (1): Python Dependencies
+
+### Community 58 - "Community 58"
 Cohesion: 1.0
 Nodes (1): Graph Report
 
@@ -339,7 +344,7 @@ Nodes (1): Graph Report
   frontend/components/trip/VibeCheck.tsx · relation: references
 
 ## Knowledge Gaps
-- **71 isolated node(s):** `Tailwind Config`, `Vitest Config`, `PostCSS Config`, `RootLayout`, `GSAP Animation Layer` (+66 more)
+- **72 isolated node(s):** `Tailwind Config`, `Vitest Config`, `PostCSS Config`, `RootLayout`, `GSAP Animation Layer` (+67 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 30`** (2 nodes): `PostCSS Config`, `Tailwind Config`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -381,21 +386,23 @@ Nodes (1): Graph Report
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 49`** (1 nodes): `Test: Trips Integration`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 50`** (1 nodes): `Return the default page from the paginated widget response.`
+- **Thin community `Community 50`** (1 nodes): `Trip data with the requesting user's role attached.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 51`** (1 nodes): `Product Brainstorm Document`
+- **Thin community `Community 51`** (1 nodes): `Return the default page from the paginated widget response.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 52`** (1 nodes): `Idea Bin Ingestion Concept`
+- **Thin community `Community 52`** (1 nodes): `Product Brainstorm Document`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 53`** (1 nodes): `README: Local Dev Setup`
+- **Thin community `Community 53`** (1 nodes): `Idea Bin Ingestion Concept`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 54`** (1 nodes): `Test Suite README`
+- **Thin community `Community 54`** (1 nodes): `README: Local Dev Setup`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 55`** (1 nodes): `Claude AI Config`
+- **Thin community `Community 55`** (1 nodes): `Test Suite README`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 56`** (1 nodes): `Python Dependencies`
+- **Thin community `Community 56`** (1 nodes): `Claude AI Config`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 57`** (1 nodes): `Graph Report`
+- **Thin community `Community 57`** (1 nodes): `Python Dependencies`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 58`** (1 nodes): `Graph Report`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
@@ -403,15 +410,15 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `LLM Itinerary Adaptation Intent (VibeCheck)` and `Settings / Config (config.py)`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **Why does `Event` connect `Community 0` to `Community 2`, `Community 5`, `Community 7`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
-- **Why does `User` connect `Community 2` to `Community 0`, `Community 1`, `Community 4`, `Community 7`, `Community 14`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
-- **Why does `TripMember` connect `Community 2` to `Community 0`, `Community 1`, `Community 3`, `Community 4`, `Community 7`?**
+- **Why does `Event` connect `Community 2` to `Community 0`, `Community 4`, `Community 6`?**
+  _High betweenness centrality (0.048) - this node is a cross-community bridge._
+- **Why does `User` connect `Community 2` to `Community 0`, `Community 1`, `Community 6`, `Community 14`?**
+  _High betweenness centrality (0.035) - this node is a cross-community bridge._
+- **Why does `TripMember` connect `Community 2` to `Community 0`, `Community 1`, `Community 3`, `Community 6`, `Community 7`?**
   _High betweenness centrality (0.032) - this node is a cross-community bridge._
-- **Are the 84 inferred relationships involving `User` (e.g. with `Users Endpoint Router` and `POST /users/register`) actually correct?**
-  _`User` has 84 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 84 inferred relationships involving `TripMember` (e.g. with `Create a single event (e.g. from idea bin drag-to-timeline).` and `Update event time or sort_order.`) actually correct?**
-  _`TripMember` has 84 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 75 inferred relationships involving `IdeaBinItem` (e.g. with `Create a single event (e.g. from idea bin drag-to-timeline).` and `Update event time or sort_order.`) actually correct?**
-  _`IdeaBinItem` has 75 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 101 inferred relationships involving `User` (e.g. with `Users Endpoint Router` and `POST /users/register`) actually correct?**
+  _`User` has 101 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 101 inferred relationships involving `TripMember` (e.g. with `Build an Event response schema with vote tallies attached.` and `Create a single event (e.g. from idea bin drag-to-timeline).`) actually correct?**
+  _`TripMember` has 101 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 92 inferred relationships involving `IdeaBinItem` (e.g. with `Build an Event response schema with vote tallies attached.` and `Create a single event (e.g. from idea bin drag-to-timeline).`) actually correct?**
+  _`IdeaBinItem` has 92 INFERRED edges - model-reasoned connections that need verification._

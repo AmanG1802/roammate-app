@@ -1,4 +1,4 @@
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from pydantic import BaseModel, field_validator
 
 
@@ -20,3 +20,12 @@ class VoteTally(BaseModel):
     up: int = 0
     down: int = 0
     my_vote: int = 0  # -1, 0, 1
+
+
+class VoterInfo(BaseModel):
+    name: str
+
+
+class VoterList(BaseModel):
+    up_voters: List[VoterInfo] = []
+    down_voters: List[VoterInfo] = []

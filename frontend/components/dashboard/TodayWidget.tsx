@@ -12,6 +12,7 @@ type TodayEvent = {
   start_time: string | null;
   end_time: string | null;
   is_next: boolean;
+  is_ongoing: boolean;
 };
 
 type TodayTrip = {
@@ -62,7 +63,10 @@ const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
 
     const load = useCallback(async () => {
       try {
-        const res = await fetch(`${API}/dashboard/today`, { headers: authHeaders() });
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const localISO = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        const res = await fetch(`${API}/dashboard/today?client_now=${encodeURIComponent(localISO)}`, { headers: authHeaders() });
         if (res.ok) {
           const d: WidgetData = await res.json();
           setData(d);
@@ -244,6 +248,7 @@ function PreTripCard({ page }: { page: Page }) {
 function InTripCard({ page }: { page: Page }) {
   const trip = page.trip;
   const events = page.today_events ?? [];
+  const ongoing = events.find((e) => e.is_ongoing) ?? null;
   const next = events.find((e) => e.is_next) ?? null;
   const dayLabel = page.day_number && page.total_days
     ? `Day ${page.day_number} of ${page.total_days}`
@@ -267,6 +272,27 @@ function InTripCard({ page }: { page: Page }) {
           Open Trip <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
+
+      {ongoing && (
+        <div className="bg-white rounded-2xl border border-emerald-100 p-4 mb-3 shadow-sm">
+          <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Ongoing</div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-black text-slate-900 truncate">{ongoing.title}</p>
+              {ongoing.location_name && (
+                <div className="flex items-center gap-1 text-xs text-slate-500 font-bold mt-0.5 truncate">
+                  <MapPin className="w-3 h-3" /> {ongoing.location_name}
+                </div>
+              )}
+            </div>
+            {ongoing.start_time && ongoing.end_time && (
+              <div className="flex items-center gap-1 text-sm text-slate-700 font-black shrink-0">
+                <Clock className="w-3.5 h-3.5" /> {formatTime(ongoing.start_time)} – {formatTime(ongoing.end_time)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {next && (
         <div className="bg-white rounded-2xl border border-amber-100 p-4 mb-3 shadow-sm">
@@ -295,11 +321,11 @@ function InTripCard({ page }: { page: Page }) {
             <div
               key={e.id}
               className={`flex items-center justify-between gap-4 px-3 py-2 rounded-xl ${
-                e.is_next ? 'bg-white/60' : 'hover:bg-white/40'
+                e.is_ongoing ? 'bg-emerald-50/60' : e.is_next ? 'bg-white/60' : 'hover:bg-white/40'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-1.5 h-1.5 rounded-full ${e.is_next ? 'bg-amber-500' : 'bg-slate-300'}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${e.is_ongoing ? 'bg-emerald-500' : e.is_next ? 'bg-amber-500' : 'bg-slate-300'}`} />
                 <span className="font-bold text-slate-700 text-sm truncate">{e.title}</span>
               </div>
               <span className="text-xs text-slate-400 font-bold shrink-0">{formatTime(e.start_time)}</span>

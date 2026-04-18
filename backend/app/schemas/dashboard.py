@@ -13,6 +13,7 @@ class TodayEvent(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     is_next: bool = False
+    is_ongoing: bool = False
     model_config = {"from_attributes": True}
 
 

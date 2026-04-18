@@ -74,10 +74,6 @@ export default function TripPlannerPage() {
   }, [tripId]);
 
   useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
-
-  useEffect(() => {
     if (mode === 'people') fetchMembers();
   }, [mode, fetchMembers]);
 
@@ -176,7 +172,8 @@ export default function TripPlannerPage() {
 
     loadTripDays(tripId, token);
     loadEvents(tripId, token);
-  }, [tripId, loadTripDays, loadEvents]);
+    fetchMembers();
+  }, [tripId, loadTripDays, loadEvents, fetchMembers]);
 
   useEffect(() => {
     if (!tripId) return;
@@ -293,6 +290,9 @@ export default function TripPlannerPage() {
               lng: r.lng ?? 0,
               time_hint: r.time_hint ?? null,
               added_by: r.added_by ?? null,
+              up: r.up ?? 0,
+              down: r.down ?? 0,
+              my_vote: r.my_vote ?? 0,
             })));
           }
         } catch { /* ignore */ }

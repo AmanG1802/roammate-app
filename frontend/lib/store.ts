@@ -60,6 +60,9 @@ export interface Event {
   lng: number;
   sort_order: number;
   added_by?: string | null;
+  up?: number;
+  down?: number;
+  my_vote?: number;
 }
 
 export interface Idea {
@@ -69,6 +72,9 @@ export interface Idea {
   lng: number;
   time_hint?: string | null;  // e.g. "2pm" extracted from input text
   added_by?: string | null;   // first name of user who added the idea
+  up?: number;
+  down?: number;
+  my_vote?: number;
 }
 
 export interface TripDay {
@@ -138,6 +144,9 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
     lng: (raw.lng as number) ?? 0,
     sort_order: (raw.sort_order as number) ?? 0,
     added_by: (raw.added_by as string) ?? null,
+    up: (raw.up as number) ?? 0,
+    down: (raw.down as number) ?? 0,
+    my_vote: (raw.my_vote as number) ?? 0,
   };
 }
 
@@ -211,6 +220,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     const maxOrder = events.reduce((m, e) => Math.max(m, e.sort_order), 0);
 
     try {
+      const numId = parseInt(ideaId, 10);
       const res = await fetch(`${API}/events/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -224,6 +234,7 @@ export const useTripStore = create<TripState>((set, get) => ({
           end_time: startTime ? toLocalISOString(new Date(startTime.getTime() + 3600_000)) : null,
           sort_order: maxOrder + 1,
           added_by: idea.added_by ?? null,
+          source_idea_id: !isNaN(numId) ? numId : null,
         }),
       });
 
@@ -258,7 +269,6 @@ export const useTripStore = create<TripState>((set, get) => ({
     // Optimistically remove from timeline
     set((s) => ({ events: s.events.filter((e) => e.id !== eventId) }));
 
-    // Restore time_hint from the event's start_time so the clock badge reappears in the bin.
     const restoredIdea: Idea = {
       id: `restored-${eventId}`,
       title: event.title,
@@ -266,6 +276,9 @@ export const useTripStore = create<TripState>((set, get) => ({
       lng: event.lng,
       time_hint: event.start_time ? formatTimeHint(event.start_time) : undefined,
       added_by: event.added_by ?? null,
+      up: event.up ?? 0,
+      down: event.down ?? 0,
+      my_vote: event.my_vote ?? 0,
     };
     set((s) => ({ ideas: [restoredIdea, ...s.ideas] }));
 
@@ -277,11 +290,10 @@ export const useTripStore = create<TripState>((set, get) => ({
         });
         if (res.ok) {
           const idea = await res.json();
-          // Replace the optimistic restored idea with the real DB-backed one
           set((s) => ({
             ideas: s.ideas.map((i) =>
               i.id === `restored-${eventId}`
-                ? { id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0, time_hint: idea.time_hint ?? null, added_by: idea.added_by ?? null }
+                ? { id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0, time_hint: idea.time_hint ?? null, added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0 }
                 : i
             ),
           }));

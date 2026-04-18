@@ -396,8 +396,8 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                       </div>
                     )}
 
-                    <div className="mt-2" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                      <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" />
+                    <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                      <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" initial={event.up != null ? { up: event.up ?? 0, down: event.down ?? 0, my_vote: event.my_vote ?? 0 } : undefined} />
                     </div>
 
                     {index < visibleEvents.length - 1 && !filterDay && (
