@@ -297,6 +297,10 @@ export const useTripStore = create<TripState>((set, get) => ({
                 : i
             ),
           }));
+          // Nudge IdeaBin to re-fetch so enrichment (photo, description, category, etc.) hydrates
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('idea-bin:refresh'));
+          }
         }
       } catch {
         // Optimistic state still reflects user intent

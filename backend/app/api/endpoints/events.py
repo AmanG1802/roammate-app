@@ -17,6 +17,28 @@ from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
 
 
+_ENRICH_FIELDS = (
+    "description", "category", "address", "photo_url", "rating",
+    "price_level", "types", "opening_hours", "phone", "website",
+)
+
+
+def _event_to_schema(event: EventModel, up: int, down: int, mine: int) -> Event:
+    return Event(
+        id=event.id, trip_id=event.trip_id, title=event.title,
+        place_id=event.place_id, location_name=event.location_name,
+        lat=event.lat, lng=event.lng, day_date=event.day_date,
+        start_time=event.start_time, end_time=event.end_time,
+        is_locked=event.is_locked, event_type=event.event_type,
+        sort_order=event.sort_order, added_by=event.added_by,
+        description=event.description, category=event.category,
+        address=event.address, photo_url=event.photo_url, rating=event.rating,
+        price_level=event.price_level, types=event.types,
+        opening_hours=event.opening_hours, phone=event.phone, website=event.website,
+        up=up, down=down, my_vote=mine,
+    )
+
+
 async def _event_with_votes(db, event: EventModel, user_id: int) -> Event:
     """Build an Event response schema with vote tallies attached."""
     up = (await db.execute(
@@ -28,15 +50,7 @@ async def _event_with_votes(db, event: EventModel, user_id: int) -> Event:
     mine = (await db.execute(
         select(EventVote.value).where(EventVote.event_id == event.id, EventVote.user_id == user_id)
     )).scalars().first() or 0
-    return Event(
-        id=event.id, trip_id=event.trip_id, title=event.title,
-        place_id=event.place_id, location_name=event.location_name,
-        lat=event.lat, lng=event.lng, day_date=event.day_date,
-        start_time=event.start_time, end_time=event.end_time,
-        is_locked=event.is_locked, event_type=event.event_type,
-        sort_order=event.sort_order, added_by=event.added_by,
-        up=up, down=down, my_vote=mine,
-    )
+    return _event_to_schema(event, up, down, mine)
 
 router = APIRouter()
 
@@ -69,12 +83,36 @@ async def create_event(
         event_type=event_in.event_type,
         sort_order=event_in.sort_order,
         added_by=event_in.added_by,
+        description=event_in.description,
+        category=event_in.category,
+        address=event_in.address,
+        photo_url=event_in.photo_url,
+        rating=event_in.rating,
+        price_level=event_in.price_level,
+        types=event_in.types,
+        opening_hours=event_in.opening_hours,
+        phone=event_in.phone,
+        website=event_in.website,
     )
+
+    # Carry Google Maps enrichment + votes from the source idea (if any)
+    if event_in.source_idea_id is not None:
+        src_idea = (await db.execute(
+            select(IdeaBinItemModel).where(IdeaBinItemModel.id == event_in.source_idea_id)
+        )).scalars().first()
+        if src_idea is not None:
+            for f in _ENRICH_FIELDS:
+                if getattr(event, f) is None:
+                    setattr(event, f, getattr(src_idea, f, None))
+            if not event.place_id:
+                event.place_id = src_idea.place_id
+            if not event.location_name:
+                event.location_name = src_idea.address or event.location_name
+
     db.add(event)
     await db.commit()
     await db.refresh(event)
 
-    # Transfer votes from the source idea (if this came from the idea bin)
     if event_in.source_idea_id is not None:
         src_votes = (await db.execute(
             select(IdeaVote).where(IdeaVote.idea_id == event_in.source_idea_id)
@@ -229,6 +267,16 @@ async def move_event_to_bin(
         lng=event.lng,
         time_hint=hint,
         added_by=event.added_by,
+        description=event.description,
+        category=event.category,
+        address=event.address,
+        photo_url=event.photo_url,
+        rating=event.rating,
+        price_level=event.price_level,
+        types=event.types,
+        opening_hours=event.opening_hours,
+        phone=event.phone,
+        website=event.website,
     )
     trip_id = event.trip_id
     title = event.title
@@ -273,6 +321,9 @@ async def move_event_to_bin(
         id=idea.id, trip_id=idea.trip_id, title=idea.title,
         place_id=idea.place_id, lat=idea.lat, lng=idea.lng,
         url_source=idea.url_source, time_hint=idea.time_hint, added_by=idea.added_by,
+        description=idea.description, category=idea.category, address=idea.address,
+        photo_url=idea.photo_url, rating=idea.rating, price_level=idea.price_level,
+        types=idea.types, opening_hours=idea.opening_hours, phone=idea.phone, website=idea.website,
         up=up, down=down, my_vote=mine,
     )
 

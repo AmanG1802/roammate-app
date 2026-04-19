@@ -73,9 +73,9 @@ export default function BrainstormChat({
   const hasAssistant = messages.some((m) => m.role === 'assistant');
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2 shrink-0">
-        <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+    <div className="flex flex-col h-full bg-indigo-50/40">
+      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2 shrink-0 bg-white">
+        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
           <Sparkles className="w-5 h-5" />
         </div>
         <div>
@@ -97,10 +97,10 @@ export default function BrainstormChat({
         {messages.map((m) => (
           <div
             key={m.id}
-            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm font-medium ${
+            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm font-medium shadow-sm ${
               m.role === 'user'
-                ? 'ml-auto bg-indigo-600 text-white'
-                : 'bg-slate-50 text-slate-700 border border-slate-100'
+                ? 'ml-auto bg-indigo-600 text-white shadow-indigo-100'
+                : 'bg-white text-slate-700 border border-slate-100'
             }`}
           >
             {m.content}
@@ -108,12 +108,12 @@ export default function BrainstormChat({
         ))}
       </div>
 
-      <div className="border-t border-slate-100 p-4 space-y-2 shrink-0">
+      <div className="border-t border-slate-100 p-4 space-y-2 shrink-0 bg-white">
         {hasAssistant && (
           <button
             onClick={extract}
             disabled={extracting}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 text-amber-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-amber-100 transition-all disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-xl text-xs font-black hover:bg-indigo-100 transition-all disabled:opacity-50"
           >
             {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             Create items from chat

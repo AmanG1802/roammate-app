@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTripStore } from '@/lib/store';
-import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle } from 'lucide-react';
+import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 
@@ -57,7 +57,10 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   const [isIngesting, setIsIngesting] = useState(false);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [editingTimeVal, setEditingTimeVal] = useState('');
-  const [extras, setExtras] = useState<Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null }>>({});
+  const [extras, setExtras] = useState<Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null; address?: string | null; category?: string | null }>>({});
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [popoverTop, setPopoverTop] = useState<number>(0);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { ideas, addIdea, setIdeas, removeIdea } = useTripStore();
 
   const loadIdeas = useCallback(() => {
@@ -84,12 +87,14 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
             my_vote: item.my_vote ?? 0,
           }))
         );
-        const extraMap: Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null }> = {};
+        const extraMap: Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null; address?: string | null; category?: string | null }> = {};
         for (const item of data) {
           extraMap[item.id.toString()] = {
             description: item.description ?? null,
             photo_url: item.photo_url ?? null,
             rating: item.rating ?? null,
+            address: item.address ?? null,
+            category: item.category ?? null,
           };
         }
         setExtras(extraMap);
@@ -234,7 +239,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-3">
+      <div className="flex-1 overflow-y-auto p-5 space-y-3 relative">
         <AnimatePresence initial={false}>
           {ideas.length === 0 ? (
             <motion.div
@@ -249,7 +254,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
               <p className="text-sm font-black uppercase tracking-widest">Bin is Empty</p>
             </motion.div>
           ) : (
-            ideas.map((idea) => (
+            ideas.map((idea) => {
+              const isOpen = openId === idea.id;
+              return (
               <motion.div
                 key={idea.id}
                 layout
@@ -259,112 +266,193 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                 draggable={!readOnly}
                 onDragStartCapture={(e) => { if (!readOnly) e.dataTransfer.setData('ideaId', idea.id); }}
                 data-testid={`idea-card-${idea.id}`}
-                className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm cursor-grab active:cursor-grabbing hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-50/50 transition-all group relative overflow-hidden"
+                ref={(el) => { cardRefs.current[idea.id] = el; }}
+                className={`p-3 bg-white border rounded-2xl shadow-sm cursor-grab active:cursor-grabbing transition-all group relative overflow-hidden flex flex-col gap-1.5 ${
+                  isOpen ? 'border-indigo-200 ring-2 ring-indigo-100' : 'border-slate-100 hover:border-indigo-100 hover:shadow-md'
+                }`}
               >
                 <div className="absolute top-0 left-0 w-1 h-full bg-indigo-100 group-hover:bg-indigo-500 transition-colors" />
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 rounded-xl transition-colors shrink-0 mt-0.5">
-                    <MapPin className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-black text-slate-800 block truncate">
-                      {idea.title}
-                    </span>
 
-                    {extras[idea.id]?.photo_url && (
-                      <img
-                        src={extras[idea.id]!.photo_url as string}
-                        alt=""
-                        className="mt-2 w-full h-24 object-cover rounded-lg"
-                      />
-                    )}
-                    {extras[idea.id]?.description && (
-                      <p className="mt-1 text-[11px] text-slate-500 font-medium line-clamp-2">
-                        {extras[idea.id]!.description}
-                      </p>
-                    )}
-                    {extras[idea.id]?.rating != null && (
-                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold">
-                        ★ {extras[idea.id]!.rating}
-                      </span>
-                    )}
-
-                    {!readOnly && editingTimeId === idea.id ? (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <input
-                          autoFocus
-                          type="time"
-                          value={editingTimeVal}
-                          onChange={(e) => setEditingTimeVal(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleSaveTime(idea.id)}
-                          className="w-24 px-2 py-0.5 text-[11px] font-bold border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        />
-                        <button
-                          onClick={() => handleSaveTime(idea.id)}
-                          className="p-0.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-500 transition-colors"
-                        >
-                          <Check className="w-2.5 h-2.5" />
-                        </button>
-                        <button
-                          onClick={() => setEditingTimeId(null)}
-                          className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
-                        >
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {idea.time_hint ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold">
-                            <Clock className="w-2.5 h-2.5" />
-                            {idea.time_hint}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 text-slate-400 rounded-lg text-[10px] font-bold">
-                            <Clock className="w-2.5 h-2.5" />
-                            No time
-                          </span>
-                        )}
-                        {!readOnly && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingTimeVal(hintToTimeValue(idea.time_hint));
-                              setEditingTimeId(idea.id);
-                            }}
-                            className="p-0.5 text-slate-300 hover:text-indigo-500 transition-colors opacity-0 group-hover:opacity-100"
-                            title="Edit time"
-                          >
-                            <Pencil className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {idea.added_by && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <UserCircle className="w-2.5 h-2.5 text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-400">{idea.added_by}</span>
-                      </div>
-                    )}
-                    <div className="mt-2 flex justify-end">
-                      <VoteControl kind="idea" id={idea.id} canVote={canVote} size="sm" initial={idea.up != null ? { up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0 } : undefined} />
-                    </div>
-                  </div>
-
+                {/* Row 1: MapPin | Title | Trash */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span className="text-sm font-black text-slate-900 truncate leading-tight flex-1 min-w-0">
+                    {idea.title}
+                  </span>
                   {!readOnly && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteIdea(idea.id); }}
-                      className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                      className="p-0.5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
                       title="Delete idea"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
+
+                {/* Row 2: Info | Rating | Time | Pencil */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (openId === idea.id) { setOpenId(null); return; }
+                      const card = cardRefs.current[idea.id];
+                      if (card) setPopoverTop(card.offsetTop + card.offsetHeight + 8);
+                      setOpenId(idea.id);
+                    }}
+                    className={`p-0.5 rounded-md transition-colors shrink-0 ${
+                      isOpen ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                    }`}
+                    title="Details"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                  </button>
+                  {extras[idea.id]?.rating != null && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
+                      <Star className="w-2.5 h-2.5 text-slate-400" /> {extras[idea.id]!.rating}
+                    </span>
+                  )}
+                  {!readOnly && editingTimeId === idea.id ? (
+                    <div className="flex items-center gap-1 min-w-0">
+                      <input
+                        autoFocus
+                        type="time"
+                        value={editingTimeVal}
+                        onChange={(e) => setEditingTimeVal(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveTime(idea.id)}
+                        className="w-20 px-1.5 py-0.5 text-[11px] font-bold border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
+                      <button
+                        onClick={() => handleSaveTime(idea.id)}
+                        className="p-0.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                      >
+                        <Check className="w-2.5 h-2.5" />
+                      </button>
+                      <button
+                        onClick={() => setEditingTimeId(null)}
+                        className="p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 truncate min-w-0">
+                        <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{idea.time_hint ?? 'No time'}</span>
+                      </span>
+                      {!readOnly && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTimeVal(hintToTimeValue(idea.time_hint));
+                            setEditingTimeId(idea.id);
+                          }}
+                          className="p-0.5 text-slate-300 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                          title="Edit time"
+                        >
+                          <Pencil className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Row 3: Category */}
+                <div className="min-w-0">
+                  {extras[idea.id]?.category ? (
+                    <span className="inline-block text-[9px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md truncate max-w-full">
+                      {extras[idea.id]!.category}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">—</span>
+                  )}
+                </div>
+
+                {/* Row 4: added_by | vote */}
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <div className="flex items-center gap-1 min-w-0">
+                    {idea.added_by ? (
+                      <>
+                        <UserCircle className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                        <span className="text-[10px] font-bold text-slate-400 truncate">{idea.added_by}</span>
+                      </>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-300">—</span>
+                    )}
+                  </div>
+                  <VoteControl kind="idea" id={idea.id} canVote={canVote} size="sm" initial={idea.up != null ? { up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0 } : undefined} />
+                </div>
               </motion.div>
-            ))
+              );
+            })
           )}
         </AnimatePresence>
+
+        {openId != null && (() => {
+          const idea = ideas.find((i) => i.id === openId);
+          if (!idea) return null;
+          const ex = extras[idea.id] ?? {};
+          return (
+            <div
+              className="absolute left-5 right-5 z-20"
+              style={{ top: popoverTop, height: 220 }}
+            >
+              <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+                <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-slate-100 shrink-0">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-slate-900 leading-tight truncate">{idea.title}</p>
+                      {ex.address && (
+                        <p className="text-[10px] font-medium text-slate-500 truncate mt-0.5">{ex.address}</p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setOpenId(null)}
+                    className="p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-md transition-colors shrink-0"
+                    title="Close"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {ex.photo_url && (
+                    <img
+                      src={ex.photo_url}
+                      alt=""
+                      className="w-full h-24 object-cover rounded-lg border border-slate-100"
+                    />
+                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {ex.rating != null && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-50 text-slate-700 rounded-md text-[10px] font-bold">
+                        <Star className="w-2.5 h-2.5 text-slate-500" /> {ex.rating}
+                      </span>
+                    )}
+                    {idea.time_hint && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-50 text-slate-700 rounded-md text-[10px] font-bold">
+                        <Clock className="w-2.5 h-2.5 text-slate-500" /> {idea.time_hint}
+                      </span>
+                    )}
+                    {ex.category && (
+                      <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[9px] font-black uppercase tracking-widest">
+                        {ex.category}
+                      </span>
+                    )}
+                  </div>
+                  {ex.description && (
+                    <p className="text-[11px] font-medium text-slate-500 leading-relaxed">{ex.description}</p>
+                  )}
+                  {!ex.photo_url && !ex.description && !ex.address && (
+                    <p className="text-[11px] font-medium text-slate-400 italic">No additional details available.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

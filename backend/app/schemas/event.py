@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 from pydantic import BaseModel, field_validator
 from datetime import datetime, date, timezone
 
@@ -32,6 +32,16 @@ class EventBase(BaseModel):
     event_type: Optional[str] = None
     sort_order: int = 0
     added_by: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    address: Optional[str] = None
+    photo_url: Optional[str] = None
+    rating: Optional[float] = None
+    price_level: Optional[int] = None
+    types: Optional[Any] = None
+    opening_hours: Optional[Any] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
 
     @field_validator("start_time", "end_time", mode="after")
     @classmethod

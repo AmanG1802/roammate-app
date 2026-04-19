@@ -208,12 +208,59 @@ function HeroShell({
   } as const;
   return (
     <div
-      className={`rounded-[2rem] border border-slate-100 bg-gradient-to-br ${toneMap[tone]} p-8 pb-10 shadow-sm`}
+      className={`rounded-3xl border border-slate-100 bg-gradient-to-br ${toneMap[tone]} p-5 pb-6 shadow-sm min-h-[340px] flex flex-col`}
     >
-      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest mb-3">
+      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest mb-2">
         {badgeIcon} {badge}
       </div>
       {children}
+    </div>
+  );
+}
+
+type SlotKind = 'ongoing' | 'next' | 'upcoming';
+
+function EventSlot({ event, kind }: { event: TodayEvent | null; kind: SlotKind }) {
+  if (!event) {
+    return (
+      <div className="bg-white/50 rounded-xl border border-dashed border-slate-200 px-3 h-[60px] flex items-center justify-center">
+        <p className="text-xs font-bold text-slate-400">Day's all yours from here.</p>
+      </div>
+    );
+  }
+  const styles = {
+    ongoing: { border: 'border-emerald-100', label: 'Ongoing', labelColor: 'text-emerald-600' },
+    next: { border: 'border-amber-100', label: 'Up Next', labelColor: 'text-amber-600' },
+    upcoming: { border: 'border-slate-100', label: 'Coming Up', labelColor: 'text-slate-500' },
+  }[kind];
+
+  const timeLabel =
+    kind === 'ongoing' && event.start_time && event.end_time
+      ? `${formatTime(event.start_time)} – ${formatTime(event.end_time)}`
+      : event.start_time
+        ? formatTime(event.start_time)
+        : '';
+
+  return (
+    <div className={`bg-white rounded-xl border ${styles.border} px-3 py-2 h-[60px] shadow-sm`}>
+      <div className={`text-[9px] font-black ${styles.labelColor} uppercase tracking-widest leading-none`}>
+        {styles.label}
+      </div>
+      <div className="flex items-center justify-between gap-3 mt-0.5">
+        <div className="min-w-0">
+          <p className="font-black text-slate-900 text-sm truncate leading-tight">{event.title}</p>
+          {event.location_name && (
+            <div className="flex items-center gap-1 text-[11px] text-slate-500 font-bold truncate leading-tight">
+              <MapPin className="w-2.5 h-2.5" /> {event.location_name}
+            </div>
+          )}
+        </div>
+        {timeLabel && (
+          <div className="flex items-center gap-1 text-xs text-slate-700 font-black shrink-0">
+            <Clock className="w-3 h-3" /> {timeLabel}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -226,19 +273,19 @@ function PreTripCard({ page }: { page: Page }) {
     : 'TBD';
   return (
     <HeroShell badge={days <= 0 ? 'Trip Day' : `${days} day${days === 1 ? '' : 's'} to go`} badgeIcon={<Plane className="w-3.5 h-3.5 -rotate-45" />} tone="indigo">
-      <div className="flex items-end justify-between flex-wrap gap-6">
+      <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 mb-1 leading-tight">{trip.name}</h2>
-          <div className="flex items-center gap-2 text-slate-500 text-sm font-bold">
-            <Calendar className="w-4 h-4" />
+          <h2 className="text-xl font-black text-slate-900 mb-1 leading-tight">{trip.name}</h2>
+          <div className="flex items-center gap-1.5 text-slate-500 text-xs font-bold">
+            <Calendar className="w-3.5 h-3.5" />
             {startLabel}
           </div>
         </div>
         <Link
           href={`/trips/${trip.id}`}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg font-black text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
         >
-          Plan Itinerary <ChevronRight className="w-4 h-4" />
+          Plan Itinerary <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>
     </HeroShell>
@@ -248,18 +295,34 @@ function PreTripCard({ page }: { page: Page }) {
 function InTripCard({ page }: { page: Page }) {
   const trip = page.trip;
   const events = page.today_events ?? [];
-  const ongoing = events.find((e) => e.is_ongoing) ?? null;
-  const next = events.find((e) => e.is_next) ?? null;
+  const ongoingIdx = events.findIndex((e) => e.is_ongoing);
+  const ongoing = ongoingIdx >= 0 ? events[ongoingIdx] : null;
+  const nextIdx = events.findIndex((e) => e.is_next && !e.is_ongoing);
+  const upcomingStart = nextIdx >= 0 ? nextIdx : ongoingIdx >= 0 ? ongoingIdx + 1 : 0;
+  const upcoming = events.slice(upcomingStart).filter((e) => !e.is_ongoing);
+
+  const slots: Array<{ event: TodayEvent | null; kind: SlotKind }> = ongoing
+    ? [
+        { event: ongoing, kind: 'ongoing' },
+        { event: upcoming[0] ?? null, kind: 'next' },
+        { event: upcoming[1] ?? null, kind: 'upcoming' },
+      ]
+    : [
+        { event: upcoming[0] ?? null, kind: 'next' },
+        { event: upcoming[1] ?? null, kind: 'upcoming' },
+        { event: upcoming[2] ?? null, kind: 'upcoming' },
+      ];
+
   const dayLabel = page.day_number && page.total_days
     ? `Day ${page.day_number} of ${page.total_days}`
     : page.day_number ? `Day ${page.day_number}` : 'Today';
 
   return (
     <HeroShell badge={dayLabel} badgeIcon={<Sparkles className="w-3.5 h-3.5" />} tone="amber">
-      <div className="flex items-start justify-between gap-6 mb-5">
+      <div className="flex items-start justify-between gap-4 mb-3">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 mb-1 leading-tight">{trip.name}</h2>
-          <p className="text-slate-500 text-sm font-bold">
+          <h2 className="text-xl font-black text-slate-900 mb-0.5 leading-tight">{trip.name}</h2>
+          <p className="text-slate-500 text-xs font-bold">
             {events.length === 0
               ? 'No events scheduled today.'
               : `${events.length} event${events.length === 1 ? '' : 's'} on deck.`}
@@ -267,72 +330,17 @@ function InTripCard({ page }: { page: Page }) {
         </div>
         <Link
           href={`/trips/${trip.id}`}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-xl font-black text-sm hover:bg-indigo-600 transition-all shrink-0"
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-lg font-black text-xs hover:bg-indigo-600 transition-all shrink-0"
         >
-          Open Trip <ChevronRight className="w-4 h-4" />
+          Open Trip <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
-      {ongoing && (
-        <div className="bg-white rounded-2xl border border-emerald-100 p-4 mb-3 shadow-sm">
-          <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Ongoing</div>
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="font-black text-slate-900 truncate">{ongoing.title}</p>
-              {ongoing.location_name && (
-                <div className="flex items-center gap-1 text-xs text-slate-500 font-bold mt-0.5 truncate">
-                  <MapPin className="w-3 h-3" /> {ongoing.location_name}
-                </div>
-              )}
-            </div>
-            {ongoing.start_time && ongoing.end_time && (
-              <div className="flex items-center gap-1 text-sm text-slate-700 font-black shrink-0">
-                <Clock className="w-3.5 h-3.5" /> {formatTime(ongoing.start_time)} – {formatTime(ongoing.end_time)}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {next && (
-        <div className="bg-white rounded-2xl border border-amber-100 p-4 mb-3 shadow-sm">
-          <div className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Up Next</div>
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="font-black text-slate-900 truncate">{next.title}</p>
-              {next.location_name && (
-                <div className="flex items-center gap-1 text-xs text-slate-500 font-bold mt-0.5 truncate">
-                  <MapPin className="w-3 h-3" /> {next.location_name}
-                </div>
-              )}
-            </div>
-            {next.start_time && (
-              <div className="flex items-center gap-1 text-sm text-slate-700 font-black shrink-0">
-                <Clock className="w-3.5 h-3.5" /> {formatTime(next.start_time)}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {events.length > 0 && (
-        <div className="space-y-1">
-          {events.map((e) => (
-            <div
-              key={e.id}
-              className={`flex items-center justify-between gap-4 px-3 py-2 rounded-xl ${
-                e.is_ongoing ? 'bg-emerald-50/60' : e.is_next ? 'bg-white/60' : 'hover:bg-white/40'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-1.5 h-1.5 rounded-full ${e.is_ongoing ? 'bg-emerald-500' : e.is_next ? 'bg-amber-500' : 'bg-slate-300'}`} />
-                <span className="font-bold text-slate-700 text-sm truncate">{e.title}</span>
-              </div>
-              <span className="text-xs text-slate-400 font-bold shrink-0">{formatTime(e.start_time)}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="space-y-2">
+        {slots.map((s, i) => (
+          <EventSlot key={s.event ? s.event.id : `empty-${i}`} event={s.event} kind={s.kind} />
+        ))}
+      </div>
     </HeroShell>
   );
 }
@@ -342,18 +350,18 @@ function PostTripCard({ page }: { page: Page }) {
   const days = page.days_since_end ?? 0;
   return (
     <HeroShell badge={`Wrapped ${days} day${days === 1 ? '' : 's'} ago`} badgeIcon={<History className="w-3.5 h-3.5" />} tone="rose">
-      <div className="flex items-end justify-between gap-6 flex-wrap">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 mb-1 leading-tight">{trip.name}</h2>
-          <p className="text-slate-500 text-sm font-bold">
+          <h2 className="text-xl font-black text-slate-900 mb-0.5 leading-tight">{trip.name}</h2>
+          <p className="text-slate-500 text-xs font-bold">
             {page.total_events ?? 0} memories captured across {page.total_days ?? '—'} days.
           </p>
         </div>
         <Link
           href={`/trips/${trip.id}`}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-rose-600 text-white rounded-xl font-black text-sm hover:bg-rose-700 transition-all shadow-lg shadow-rose-100"
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 text-white rounded-lg font-black text-xs hover:bg-rose-700 transition-all shadow-lg shadow-rose-100"
         >
-          See Recap <ChevronRight className="w-4 h-4" />
+          See Recap <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>
     </HeroShell>

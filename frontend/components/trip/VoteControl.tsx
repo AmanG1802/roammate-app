@@ -42,14 +42,34 @@ function AnimatedCount({ value, className }: { value: number; className?: string
   );
 }
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function VoterPopup({ names }: { names: string[] }) {
   if (names.length === 0) return null;
+  const shown = names.length <= 4 ? names : names.slice(0, 3);
+  const extra = names.length <= 4 ? 0 : names.length - 3;
   return (
-    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 pointer-events-none">
-      <div className="bg-slate-800 text-white text-[10px] font-bold rounded-lg px-2.5 py-1.5 shadow-lg whitespace-nowrap max-w-[180px]">
-        {names.map((n, i) => (
-          <div key={i} className="truncate leading-relaxed">{n}</div>
+    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 pointer-events-none">
+      <div className="bg-white border border-slate-200 rounded-full shadow-lg px-1.5 py-1 flex items-center gap-1">
+        {shown.map((n, i) => (
+          <div
+            key={i}
+            title={n}
+            className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-black flex items-center justify-center"
+          >
+            {initialsOf(n)}
+          </div>
         ))}
+        {extra > 0 && (
+          <div className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[9px] font-black flex items-center justify-center">
+            +{extra}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -144,7 +164,6 @@ export default function VoteControl({
     if (tally.up > 0 || tally.down > 0) fetchVoters();
   };
 
-  const net = tally.up - tally.down;
   const btnBase = size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs';
   const iconCls = size === 'sm' ? 'w-2.5 h-2.5' : 'w-3 h-3';
   const containerCls = size === 'sm' ? 'gap-1' : 'gap-1.5';
@@ -152,9 +171,6 @@ export default function VoteControl({
   const disabledCls = canVote ? '' : 'opacity-60 cursor-not-allowed';
   const upActive = tally.my_vote === 1;
   const downActive = tally.my_vote === -1;
-
-  const netColor = net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-400';
-  const netSize = size === 'sm' ? 'text-[10px]' : 'text-xs';
 
   return (
     <div
@@ -209,11 +225,6 @@ export default function VoteControl({
           <VoterPopup names={voters.down_voters.map(v => v.name)} />
         )}
       </div>
-      {(tally.up > 0 || tally.down > 0) && (
-        <span className={`${netSize} font-black ${netColor} min-w-[1.5em] text-center tabular-nums`} aria-label={`Net score: ${net}`}>
-          <AnimatedCount value={net} className={netColor} />
-        </span>
-      )}
     </div>
   );
 }
