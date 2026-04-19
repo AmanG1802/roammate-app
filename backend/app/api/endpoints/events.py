@@ -19,7 +19,7 @@ from app.api.deps import get_current_user
 
 _ENRICH_FIELDS = (
     "description", "category", "address", "photo_url", "rating",
-    "price_level", "types", "opening_hours", "phone", "website",
+    "price_level", "types", "opening_hours", "phone", "website", "time_category",
 )
 
 
@@ -35,6 +35,7 @@ def _event_to_schema(event: EventModel, up: int, down: int, mine: int) -> Event:
         address=event.address, photo_url=event.photo_url, rating=event.rating,
         price_level=event.price_level, types=event.types,
         opening_hours=event.opening_hours, phone=event.phone, website=event.website,
+        time_category=event.time_category,
         up=up, down=down, my_vote=mine,
     )
 
@@ -93,6 +94,7 @@ async def create_event(
         opening_hours=event_in.opening_hours,
         phone=event_in.phone,
         website=event_in.website,
+        time_category=event_in.time_category,
     )
 
     # Carry Google Maps enrichment + votes from the source idea (if any)
@@ -172,6 +174,8 @@ async def update_event(
         event.end_time = update.end_time
     if update.sort_order is not None:
         event.sort_order = update.sort_order
+    if update.time_category is not None:
+        event.time_category = update.time_category
 
     await db.commit()
     await db.refresh(event)
@@ -266,6 +270,7 @@ async def move_event_to_bin(
         lat=event.lat,
         lng=event.lng,
         time_hint=hint,
+        time_category=event.time_category,
         added_by=event.added_by,
         description=event.description,
         category=event.category,
@@ -320,10 +325,11 @@ async def move_event_to_bin(
     return IdeaBinItem(
         id=idea.id, trip_id=idea.trip_id, title=idea.title,
         place_id=idea.place_id, lat=idea.lat, lng=idea.lng,
-        url_source=idea.url_source, time_hint=idea.time_hint, added_by=idea.added_by,
-        description=idea.description, category=idea.category, address=idea.address,
-        photo_url=idea.photo_url, rating=idea.rating, price_level=idea.price_level,
-        types=idea.types, opening_hours=idea.opening_hours, phone=idea.phone, website=idea.website,
+        url_source=idea.url_source, time_hint=idea.time_hint, time_category=idea.time_category,
+        added_by=idea.added_by, description=idea.description, category=idea.category,
+        address=idea.address, photo_url=idea.photo_url, rating=idea.rating,
+        price_level=idea.price_level, types=idea.types, opening_hours=idea.opening_hours,
+        phone=idea.phone, website=idea.website,
         up=up, down=down, my_vote=mine,
     )
 
@@ -378,6 +384,11 @@ async def get_events(
             start_time=e.start_time, end_time=e.end_time,
             is_locked=e.is_locked, event_type=e.event_type,
             sort_order=e.sort_order, added_by=e.added_by,
+            description=e.description, category=e.category,
+            address=e.address, photo_url=e.photo_url, rating=e.rating,
+            price_level=e.price_level, types=e.types,
+            opening_hours=e.opening_hours, phone=e.phone, website=e.website,
+            time_category=e.time_category,
             up=up_map.get(e.id, 0), down=down_map.get(e.id, 0),
             my_vote=my_map.get(e.id, 0),
         )

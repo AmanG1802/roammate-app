@@ -754,6 +754,8 @@ async def update_idea(
 
     if "time_hint" in update:
         item.time_hint = update["time_hint"]
+    if "time_category" in update:
+        item.time_category = update["time_category"]
     if "title" in update:
         item.title = update["title"]
 

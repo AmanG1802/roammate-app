@@ -97,6 +97,7 @@ class IdeaBinItem(Base):
     website = Column(String, nullable=True)
     url_source = Column(String)
     time_hint = Column(String, nullable=True)
+    time_category = Column(String, nullable=True)
     added_by = Column(String, nullable=True)
     origin_idea_id = Column(Integer, ForeignKey("idea_bin_item.id"), nullable=True, index=True)
 
@@ -123,6 +124,7 @@ class BrainstormBinItem(Base):
     phone = Column(String, nullable=True)
     website = Column(String, nullable=True)
     time_hint = Column(String, nullable=True)
+    time_category = Column(String, nullable=True)
     url_source = Column(String, nullable=True)
     added_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -218,5 +220,6 @@ class Event(Base):
     opening_hours = Column(JSON, nullable=True)
     phone = Column(String, nullable=True)
     website = Column(String, nullable=True)
+    time_category = Column(String, nullable=True)
 
     trip = relationship("Trip", back_populates="events")

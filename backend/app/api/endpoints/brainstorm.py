@@ -37,6 +37,7 @@ from app.schemas.trip import IdeaBinItem as IdeaBinItemSchema
 from app.services.roles import require_trip_member
 from app.services import llm_client, notification_service
 from app.schemas.notification import NotificationType
+from app.core.time_categories import TIME_CATEGORY_DEFAULTS
 
 router = APIRouter()
 
@@ -58,6 +59,7 @@ _COPY_FIELDS = (
     "phone",
     "website",
     "time_hint",
+    "time_category",
     "url_source",
 )
 
@@ -256,10 +258,14 @@ async def promote(
     promoter = _first_name(current_user) or None
     created: list[IdeaBinItem] = []
     for src in sources:
+        fields = {k: getattr(src, k) for k in _COPY_FIELDS}
+        # Auto-populate time_hint from time_category default when no explicit time is set
+        if not fields.get("time_hint") and fields.get("time_category"):
+            fields["time_hint"] = TIME_CATEGORY_DEFAULTS.get(fields["time_category"])
         idea = IdeaBinItem(
             trip_id=trip_id,
             added_by=promoter,
-            **{k: getattr(src, k) for k in _COPY_FIELDS},
+            **fields,
         )
         db.add(idea)
         created.append(idea)
@@ -300,8 +306,8 @@ async def promote(
             address=i.address, photo_url=i.photo_url, rating=i.rating,
             price_level=i.price_level, types=i.types, opening_hours=i.opening_hours,
             phone=i.phone, website=i.website,
-            url_source=i.url_source, time_hint=i.time_hint, added_by=i.added_by,
-            up=0, down=0, my_vote=0,
+            url_source=i.url_source, time_hint=i.time_hint, time_category=i.time_category,
+            added_by=i.added_by, up=0, down=0, my_vote=0,
         )
         for i in created
     ]

@@ -19,6 +19,7 @@ class BrainstormItemBase(BaseModel):
     phone: Optional[str] = None
     website: Optional[str] = None
     time_hint: Optional[str] = None
+    time_category: Optional[str] = None
     url_source: Optional[str] = None
 
 

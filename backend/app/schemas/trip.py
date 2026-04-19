@@ -76,6 +76,7 @@ class IdeaBinItemBase(BaseModel):
     website: Optional[str] = None
     url_source: Optional[str] = None
     time_hint: Optional[str] = None
+    time_category: Optional[str] = None
     added_by: Optional[str] = None
 
 class IdeaBinItemCreate(IdeaBinItemBase):

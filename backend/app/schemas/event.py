@@ -42,6 +42,7 @@ class EventBase(BaseModel):
     opening_hours: Optional[Any] = None
     phone: Optional[str] = None
     website: Optional[str] = None
+    time_category: Optional[str] = None
 
     @field_validator("start_time", "end_time", mode="after")
     @classmethod
@@ -57,6 +58,7 @@ class EventUpdate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     sort_order: Optional[int] = None
+    time_category: Optional[str] = None
 
     @field_validator("start_time", "end_time", mode="after")
     @classmethod
