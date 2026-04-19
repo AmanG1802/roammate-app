@@ -6,14 +6,14 @@ import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, Calendar, MapPin, Plane, Compass, Globe,
   Plus, X, Loader2, ChevronRight, Users, Clock, Pencil, Check,
-  ShieldCheck, Eye, Vote, ChevronDown,
+  ShieldCheck, Eye, Vote, ChevronDown, Lightbulb,
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 
 const ROLE_ICON_MAP: Record<string, { icon: typeof ShieldCheck; bg: string; fg: string }> = {
-  admin: { icon: ShieldCheck, bg: 'bg-amber-400', fg: 'text-amber-900' },
+  admin: { icon: ShieldCheck, bg: 'bg-indigo-500', fg: 'text-white' },
   view_only: { icon: Eye, bg: 'bg-sky-400', fg: 'text-sky-900' },
   view_with_vote: { icon: Vote, bg: 'bg-violet-400', fg: 'text-violet-900' },
 };
@@ -542,31 +542,45 @@ function TripHubContent() {
             </Link>
 
             <Link
-              href={`/trips?id=${tripId}&mode=concierge`}
-              onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=concierge`)}
-              className="hub-cta group flex items-center justify-between px-6 py-4 bg-indigo-600/15 border border-indigo-500/25 text-indigo-300 rounded-2xl font-black text-[15px] hover:bg-indigo-600/25 hover:border-indigo-400/40 transition-all"
+              href={`/trips?id=${tripId}&mode=brainstorm`}
+              onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=brainstorm`)}
+              className="hub-cta group flex items-center justify-between px-6 py-4 bg-indigo-500/15 border border-indigo-400/25 text-indigo-200 rounded-2xl font-black text-[15px] hover:bg-indigo-500/25 hover:border-indigo-400/40 transition-all"
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-500/20 rounded-xl flex items-center justify-center group-hover:bg-indigo-500/30 transition-colors">
-                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                <div className="w-8 h-8 bg-indigo-400/20 rounded-xl flex items-center justify-center group-hover:bg-indigo-400/30 transition-colors">
+                  <Lightbulb className="w-4 h-4 text-indigo-200" />
+                </div>
+                Go to Brainstorm
+              </div>
+              <ChevronRight className="w-5 h-5 text-indigo-300/50 group-hover:translate-x-0.5 group-hover:text-indigo-200 transition-all" />
+            </Link>
+
+            <Link
+              href={`/trips?id=${tripId}&mode=concierge`}
+              onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=concierge`)}
+              className="hub-cta group flex items-center justify-between px-6 py-4 bg-white/10 border border-white/15 text-slate-200 rounded-2xl font-black text-[15px] hover:bg-white/15 hover:border-white/25 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-500/25 rounded-xl flex items-center justify-center group-hover:bg-indigo-500/35 transition-colors">
+                  <Sparkles className="w-4 h-4 text-indigo-300" />
                 </div>
                 Live Concierge
               </div>
-              <ChevronRight className="w-5 h-5 text-indigo-600/50 group-hover:translate-x-0.5 group-hover:text-indigo-400 transition-all" />
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-slate-200 transition-all" />
             </Link>
 
             <Link
               href={`/trips?id=${tripId}&mode=people`}
               onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=people`)}
-              className="hub-cta group flex items-center justify-between px-6 py-4 bg-white/5 border border-white/10 text-slate-400 rounded-2xl font-black text-[15px] hover:bg-white/10 hover:border-white/20 hover:text-slate-300 transition-all"
+              className="hub-cta group flex items-center justify-between px-6 py-4 bg-white/5 border border-white/10 text-slate-300 rounded-2xl font-black text-[15px] hover:bg-white/10 hover:border-white/20 transition-all"
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-white/10 rounded-xl flex items-center justify-center group-hover:bg-white/15 transition-colors">
-                  <Users className="w-4 h-4 text-slate-400 group-hover:text-slate-300" />
+                  <Users className="w-4 h-4 text-slate-300" />
                 </div>
                 People
               </div>
-              <ChevronRight className="w-5 h-5 text-white/20 group-hover:translate-x-0.5 group-hover:text-slate-400 transition-all" />
+              <ChevronRight className="w-5 h-5 text-white/25 group-hover:translate-x-0.5 group-hover:text-slate-200 transition-all" />
             </Link>
           </div>
         </div>

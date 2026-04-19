@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import NotificationBell, { type NotificationBellHandle } from '@/components/layout/NotificationBell';
 import GroupsPanel from '@/components/groups/GroupsPanel';
 import TodayWidget, { type TodayWidgetHandle } from '@/components/dashboard/TodayWidget';
+import DashboardTripPlanner from '@/components/dashboard/DashboardTripPlanner';
 
 type Section = 'dashboard' | 'trips' | 'invitations' | 'groups';
 
@@ -303,6 +304,7 @@ export default function DashboardPage() {
                     {currentAndUpcoming.length === 0 ? "No upcoming trips — create your first one." : `You have ${currentAndUpcoming.length} ${currentAndUpcoming.length === 1 ? 'trip' : 'trips'} on the horizon.`}
                   </p>
                 </div>
+                <DashboardTripPlanner onTripCreated={refreshDashboard} />
                 <TodayWidget ref={widgetRef} onNewTrip={openCreateModal} />
                 <TripGrid
                   trips={currentAndUpcoming.slice(0, 6)}

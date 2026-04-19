@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: Optional[str] = None
     GOOGLE_MAPS_API_KEY: Optional[str] = None
+    LLM_ENABLED: bool = False
     
     REDIS_URL: str = "redis://redis:6379/0"
 

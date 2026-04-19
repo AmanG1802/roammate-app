@@ -482,7 +482,11 @@ async def get_idea_bin(
     return [
         IdeaBinItem(
             id=i.id, trip_id=i.trip_id, title=i.title,
+            description=i.description, category=i.category,
             place_id=i.place_id, lat=i.lat, lng=i.lng,
+            address=i.address, photo_url=i.photo_url, rating=i.rating,
+            price_level=i.price_level, types=i.types, opening_hours=i.opening_hours,
+            phone=i.phone, website=i.website,
             url_source=i.url_source, time_hint=i.time_hint, added_by=i.added_by,
             up=up_map.get(i.id, 0), down=down_map.get(i.id, 0),
             my_vote=my_map.get(i.id, 0),
@@ -750,6 +754,8 @@ async def update_idea(
 
     if "time_hint" in update:
         item.time_hint = update["time_hint"]
+    if "time_category" in update:
+        item.time_category = update["time_category"]
     if "title" in update:
         item.title = update["title"]
 

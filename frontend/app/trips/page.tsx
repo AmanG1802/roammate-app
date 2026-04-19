@@ -7,17 +7,19 @@ import {
   LayoutGrid, Map as MapIcon, Sparkles, ChevronLeft,
   ChevronDown, Plus, ChevronRight, Calendar, Trash2, AlertTriangle,
   Users, Mail, Loader2, Check, X, UserPlus, ShieldCheck, Eye, Vote,
+  Lightbulb,
 } from 'lucide-react';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import Timeline from '@/components/trip/Timeline';
 import IdeaBin from '@/components/trip/IdeaBin';
+import BrainstormSection from '@/components/trip/BrainstormSection';
 import GoogleMap from '@/components/map/GoogleMap';
 // Collaborators header removed — invite flow lives in People tab now
 import ConciergeActionBar from '@/components/trip/ConciergeActionBar';
 import { useTripStore, TripDay } from '@/lib/store';
 import { addDays, format, isToday, parseISO } from 'date-fns';
 
-type Mode = 'plan' | 'concierge' | 'people';
+type Mode = 'brainstorm' | 'plan' | 'concierge' | 'people';
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin', icon: ShieldCheck, color: 'text-amber-600 bg-amber-50 border-amber-200' },
@@ -34,7 +36,11 @@ export default function TripPlannerPage() {
   const router = useRouter();
   const tripId = searchParams.get('id');
   const rawMode = searchParams.get('mode') as Mode | null;
-  const initialMode: Mode = rawMode === 'concierge' ? 'concierge' : rawMode === 'people' ? 'people' : 'plan';
+  const initialMode: Mode =
+    rawMode === 'concierge' ? 'concierge'
+    : rawMode === 'people' ? 'people'
+    : rawMode === 'brainstorm' ? 'brainstorm'
+    : 'plan';
   const { user: currentUser } = useAuth(true);
   const [trip, setTrip] = useState<any>(null);
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -362,6 +368,7 @@ export default function TripPlannerPage() {
           </Link>
 
           <nav className="flex flex-col gap-2 w-full px-2">
+            {sidebarBtn('brainstorm', <Lightbulb className="w-5 h-5" />, 'Ideas')}
             {sidebarBtn('plan', <MapIcon className="w-5 h-5" />, 'Plan')}
             {sidebarBtn('concierge', <Sparkles className="w-5 h-5" />, 'Live')}
             {sidebarBtn('people', <Users className="w-5 h-5" />, 'People')}
@@ -396,13 +403,15 @@ export default function TripPlannerPage() {
                       ? 'bg-green-50 text-green-600 border-green-100'
                       : mode === 'people'
                       ? 'bg-violet-50 text-violet-600 border-violet-100'
+                      : mode === 'brainstorm'
+                      ? 'bg-amber-50 text-amber-600 border-amber-100'
                       : 'bg-indigo-50 text-indigo-600 border-indigo-100'
                   }`}>
-                    {mode === 'plan' ? 'Planning' : mode === 'concierge' ? 'Live Concierge' : 'People'}
+                    {mode === 'plan' ? 'Planning' : mode === 'concierge' ? 'Live Concierge' : mode === 'brainstorm' ? 'Brainstorm' : 'People'}
                   </span>
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  {mode === 'plan' ? 'Full Itinerary View' : mode === 'concierge' ? 'Day-by-Day View' : 'Trip Members'}
+                  {mode === 'plan' ? 'Full Itinerary View' : mode === 'concierge' ? 'Day-by-Day View' : mode === 'brainstorm' ? 'Chat + Bin' : 'Trip Members'}
                 </p>
               </div>
             </div>
@@ -410,6 +419,11 @@ export default function TripPlannerPage() {
             {/* intentionally empty — invite moved to People tab */}
             <div />
           </header>
+
+          {/* ── Brainstorm Mode ───────────────────────────────────────────── */}
+          {mode === 'brainstorm' && (
+            <BrainstormSection tripId={tripId} />
+          )}
 
           {/* ── Plan Mode ─────────────────────────────────────────────────── */}
           {mode === 'plan' && (

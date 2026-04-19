@@ -63,6 +63,11 @@ export interface Event {
   up?: number;
   down?: number;
   my_vote?: number;
+  category?: string | null;
+  description?: string | null;
+  photo_url?: string | null;
+  rating?: number | null;
+  address?: string | null;
 }
 
 export interface Idea {
@@ -147,6 +152,11 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
     up: (raw.up as number) ?? 0,
     down: (raw.down as number) ?? 0,
     my_vote: (raw.my_vote as number) ?? 0,
+    category: (raw.category as string) ?? null,
+    description: (raw.description as string) ?? null,
+    photo_url: (raw.photo_url as string) ?? null,
+    rating: (raw.rating as number) ?? null,
+    address: (raw.address as string) ?? null,
   };
 }
 
@@ -297,6 +307,10 @@ export const useTripStore = create<TripState>((set, get) => ({
                 : i
             ),
           }));
+          // Nudge IdeaBin to re-fetch so enrichment (photo, description, category, etc.) hydrates
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('idea-bin:refresh'));
+          }
         }
       } catch {
         // Optimistic state still reflects user intent
