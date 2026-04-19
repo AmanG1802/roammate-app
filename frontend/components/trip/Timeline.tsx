@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useTripStore, Event, Idea } from '@/lib/store';
 import { format } from 'date-fns';
-import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check } from 'lucide-react';
+import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
+import { categoryAccent } from '@/lib/categoryColors';
 
 interface TimelineProps {
   tripId: string | null;
@@ -151,8 +152,8 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [tooltipId, setTooltipId] = useState<string | null>(null);
 
-  // Load persisted events from API on mount
   useEffect(() => {
     if (!tripId) return;
     const token = localStorage.getItem('token');
@@ -170,7 +171,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
 
   const noDaysExist = tripDays.length === 0;
 
-  // ── Drag from Idea Bin → Timeline (onto empty area) ───────────────────────
   const handleDropFromBin = (e: React.DragEvent) => {
     e.preventDefault();
     if (readOnly) return;
@@ -183,7 +183,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
   };
 
-  // ── Per-event drag handlers ───────────────────────────────────────────────
   const handleEventDragStart = (e: React.DragEvent, eventId: string) => {
     e.dataTransfer.setData('reorderEventId', eventId);
     setDraggingId(eventId);
@@ -196,12 +195,10 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
 
   const handleEventDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    // Stop propagation so the outer handleDropFromBin doesn't also fire
     e.stopPropagation();
 
     const token = localStorage.getItem('token');
 
-    // ── Case 1: idea dropped from Idea Bin onto an event card ─────────────
     const ideaId = e.dataTransfer.getData('ideaId');
     if (ideaId) {
       if (noDaysExist) { setDraggingId(null); setDragOverId(null); return; }
@@ -213,7 +210,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
       return;
     }
 
-    // ── Case 2: event reorder (drag within timeline) ───────────────────────
     const sourceId = e.dataTransfer.getData('reorderEventId');
     if (!sourceId || sourceId === targetId) {
       setDraggingId(null);
@@ -231,7 +227,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     ordered.splice(insertAt, 0, moved);
 
     const updated = ordered.map((ev, i) => ({ ...ev, sort_order: i }));
-    // Use setEventsRaw so sortEvents doesn't undo the manual drag order.
     setEventsRaw(updated);
     updated.forEach((ev) => reorderEvent(ev.id, ev.sort_order, token));
 
@@ -283,19 +278,11 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
               const isConflict = prevEvent ? hasConflict(prevEvent, event) : false;
               const isDragging = draggingId === event.id;
               const isDragTarget = dragOverId === event.id;
+              const isTooltipOpen = tooltipId === event.id;
+              const accent = categoryAccent(event.category);
+              const hasDetails = !!(event.description || event.photo_url || event.rating != null || event.address);
 
               return (
-                /*
-                 * draggable + drag handlers are on motion.div directly.
-                 *
-                 * onDragStartCapture (capture phase) is used instead of onDragStart because
-                 * framer-motion overrides the onDragStart prop with its own pointer-event
-                 * handler. The capture variant is not overridden and carries the correct
-                 * React.DragEvent type with a valid dataTransfer object.
-                 *
-                 * onDragOver, onDrop, onDragEndCapture are standard React HTML events that
-                 * framer-motion does NOT override, so they work without the Capture suffix.
-                 */
                 <motion.div
                   key={event.id}
                   layout
@@ -314,30 +301,47 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                     <div className="absolute top-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full -translate-y-2" />
                   )}
 
+                  {/* Timeline dot — colored by category */}
                   <div className="absolute left-0 top-5 w-9 h-9 flex items-center justify-center">
-                    <div className="w-3.5 h-3.5 bg-indigo-600 rounded-full border-[3px] border-white shadow-sm group-hover:scale-110 transition-transform z-10" />
+                    <div className={`w-3.5 h-3.5 ${accent.dot} rounded-full border-[3px] border-white shadow-sm group-hover:scale-110 transition-transform z-10`} />
                   </div>
 
                   <div className={`p-4 bg-white border rounded-2xl shadow-sm hover:shadow-md transition-all ${
                     isConflict ? 'border-red-200' : 'border-slate-100 hover:border-indigo-100'
                   }`}>
-                    <div className="flex justify-between items-start">
+                    {/* Main row */}
+                    <div className="flex justify-between items-start gap-3">
+                      {/* Left: grip + title/meta */}
                       <div className="flex items-start gap-2 flex-1 min-w-0">
                         {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-black text-slate-900 leading-tight mb-0.5 truncate">
+                          <h4 className="font-black text-slate-900 leading-tight truncate">
                             {event.title}
                           </h4>
-                          <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                            <MapPin className="w-2.5 h-2.5" />
-                            <span>Activity</span>
+                          {/* Category + address */}
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            {event.category ? (
+                              <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${accent.badge}`}>
+                                {event.category}
+                              </span>
+                            ) : (
+                              <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                                <MapPin className="w-2.5 h-2.5" />
+                                <span>Activity</span>
+                              </div>
+                            )}
+                            {event.address && (
+                              <span className="text-[10px] font-medium text-slate-400 truncate max-w-[140px]">
+                                {event.address}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex flex-col items-end gap-1 shrink-0 ml-3">
+                      {/* Right: time + info + move-to-bin */}
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
                         {readOnly ? (
-                          /* Read-only time badge — no pencil, no click */
                           event.start_time ? (
                             <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black ${
                               isConflict
@@ -360,6 +364,23 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                             onEdit={() => setEditingId(event.id)}
                           />
                         )}
+
+                        {/* Info tooltip toggle */}
+                        {hasDetails && (
+                          <button
+                            onClick={() => setTooltipId(isTooltipOpen ? null : event.id)}
+                            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors ${
+                              isTooltipOpen
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100'
+                            }`}
+                            title="Details"
+                          >
+                            <Info className="w-3 h-3" />
+                            {isTooltipOpen ? 'Hide' : 'Details'}
+                          </button>
+                        )}
+
                         {!readOnly && (
                           <button
                             title="Send back to Idea Bin"
@@ -376,6 +397,44 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                         )}
                       </div>
                     </div>
+
+                    {/* Inline detail panel */}
+                    <AnimatePresence>
+                      {isTooltipOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                            {event.photo_url && (
+                              <img
+                                src={event.photo_url}
+                                alt=""
+                                className="w-full h-28 object-cover rounded-lg border border-slate-100"
+                              />
+                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {event.rating != null && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
+                                  <Star className="w-2.5 h-2.5 text-amber-400" /> {event.rating}
+                                </span>
+                              )}
+                              {event.added_by && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold">
+                                  <UserCircle className="w-2.5 h-2.5" /> {event.added_by}
+                                </span>
+                              )}
+                            </div>
+                            {event.description && (
+                              <p className="text-xs font-medium text-slate-500 leading-relaxed">{event.description}</p>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     {!readOnly && editingId === event.id && (
                       <TimeEditor

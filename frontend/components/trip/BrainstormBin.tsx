@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
-import { Lightbulb, Trash2, Loader2, MapPin, Info, Star, Clock, X } from 'lucide-react';
+import { Lightbulb, Trash2, Loader2, MapPin, Info, Star, Clock, X, PackagePlus } from 'lucide-react';
+import { categoryAccent } from '@/lib/categoryColors';
 
 export type BrainstormItem = {
   id: number;
@@ -32,6 +33,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
   const [working, setWorking] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [popoverTop, setPopoverTop] = useState<number>(0);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -91,6 +93,18 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
     });
   };
 
+  const clearAll = async () => {
+    if (!clearConfirm) { setClearConfirm(true); return; }
+    setClearConfirm(false);
+    setItems([]);
+    setOpenId(null);
+    exitSelection();
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/items`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+  };
+
   const toggleDetails = (id: number) => {
     if (openId === id) { setOpenId(null); return; }
     const card = cardRefs.current[id];
@@ -102,60 +116,91 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
 
   return (
     <div className="flex flex-col h-full bg-white">
-      <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2 shrink-0">
-        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-          <Lightbulb className="w-5 h-5" />
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
+        <div className="p-2.5 bg-gradient-to-br from-amber-400 to-orange-500 text-white rounded-xl shadow-sm shadow-amber-200/60 shrink-0">
+          <Lightbulb className="w-4 h-4" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h3 className="text-base font-black text-slate-900 tracking-tight">Brainstorm Bin</h3>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            {items.length} item{items.length === 1 ? '' : 's'}
+            Saved ideas
           </p>
         </div>
+        {items.length > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={clearAll}
+              onBlur={() => setClearConfirm(false)}
+              title={clearConfirm ? 'Click again to confirm' : 'Clear all items'}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer border ${
+                clearConfirm
+                  ? 'bg-rose-500 text-white border-rose-500'
+                  : 'bg-white text-rose-400 border-rose-100 hover:bg-rose-50 hover:border-rose-200'
+              }`}
+            >
+              <Trash2 className="w-2.5 h-2.5" />
+              {clearConfirm ? 'Sure?' : 'Clear'}
+            </button>
+            <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-black border border-amber-100 tabular-nums">
+              {items.length}
+            </span>
+          </div>
+        )}
       </div>
 
+      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         {loading && items.length === 0 ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 text-slate-300 animate-spin" />
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-20 opacity-40">
-            <p className="text-sm font-black uppercase tracking-widest text-slate-400">Bin is Empty</p>
-            <p className="text-xs font-medium text-slate-400 mt-1">
-              Chat on the left, then &quot;Create items from chat&quot;.
-            </p>
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="w-14 h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center">
+              <Lightbulb className="w-7 h-7 text-slate-300" />
+            </div>
+            <div className="text-center max-w-[180px]">
+              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Bin is Empty</p>
+              <p className="text-xs font-medium text-slate-400 mt-1.5 leading-relaxed">
+                Chat on the left, then &quot;Create items from chat&quot;.
+              </p>
+            </div>
           </div>
         ) : (
-          <div ref={gridRef} className="grid grid-cols-3 gap-3 relative">
+          <div ref={gridRef} className="grid grid-cols-2 gap-3 relative">
             {items.map((item) => {
               const isSelected = selected.has(item.id);
               const isOpen = openId === item.id;
+              const accent = categoryAccent(item.category);
               return (
                 <div
                   key={item.id}
                   ref={(el) => { cardRefs.current[item.id] = el; }}
                   onClick={() => selectionMode && toggleSelect(item.id)}
-                  className={`min-w-0 bg-white rounded-xl p-2 flex flex-col gap-1.5 transition-all relative group ${
+                  className={`relative min-w-0 bg-white rounded-2xl p-3 pl-4 flex flex-col gap-1.5 transition-all group overflow-hidden cursor-pointer ${
                     selectionMode
-                      ? `cursor-pointer ${
-                          isSelected
-                            ? 'border-2 border-indigo-500 ring-2 ring-indigo-100'
-                            : 'border border-slate-100 hover:border-indigo-100'
-                        }`
-                      : `border ${isOpen ? 'border-indigo-200 ring-2 ring-indigo-100' : 'border-slate-100 hover:border-indigo-100'}`
+                      ? isSelected
+                        ? 'border-2 border-indigo-500 ring-2 ring-indigo-100 shadow-md shadow-indigo-100/50'
+                        : 'border border-slate-100 hover:border-indigo-100 hover:shadow-sm'
+                      : `border ${isOpen ? 'border-indigo-200 ring-2 ring-indigo-100 shadow-md shadow-indigo-100/40' : 'border-slate-100 hover:border-indigo-100 hover:shadow-sm'}`
                   }`}
                 >
-                  {/* Row 1: MapPin | Title | Trash */}
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                    <span className="text-[11px] font-black text-slate-900 leading-tight truncate flex-1 min-w-0">
+                  {/* Left accent bar */}
+                  <div className={`absolute left-0 top-0 w-1 h-full ${accent.bar} rounded-l-2xl transition-all group-hover:w-1.5`} />
+
+                  {/* Row 1: [MapPin slot] Title + Trash */}
+                  <div className="flex items-start gap-1.5 min-w-0">
+                    <div className="w-3.5 flex justify-center shrink-0 pt-0.5">
+                      <MapPin className="w-3 h-3 text-indigo-400" />
+                    </div>
+                    <span className="text-xs font-black text-slate-900 leading-snug flex-1 min-w-0 line-clamp-2">
                       {item.title}
                     </span>
                     {!selectionMode && (
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
-                        className="p-0.5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                        className="p-0.5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0 cursor-pointer"
                         title="Delete"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -163,45 +208,52 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                     )}
                   </div>
 
-                  {/* Row 2: Info | Rating | Time */}
+                  {/* Row 2: [Info slot] Rating + Time */}
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleDetails(item.id); }}
-                      className={`p-0.5 rounded-md transition-colors shrink-0 ${
-                        isOpen
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
-                      }`}
-                      title="Details"
-                    >
-                      <Info className="w-3 h-3" />
-                    </button>
+                    <div className="w-3.5 flex justify-center shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleDetails(item.id); }}
+                        className={`-m-0.5 p-0.5 rounded-md transition-colors cursor-pointer ${
+                          isOpen
+                            ? 'bg-indigo-600 text-white'
+                            : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                        }`}
+                        title="Details"
+                      >
+                        <Info className="w-3 h-3" />
+                      </button>
+                    </div>
                     {item.rating != null && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
-                        <Star className="w-2.5 h-2.5 text-slate-400" /> {item.rating}
+                        <Star className="w-2.5 h-2.5 text-amber-400" /> {item.rating}
                       </span>
                     )}
                     {item.time_hint && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 truncate min-w-0">
-                        <Clock className="w-2.5 h-2.5 shrink-0" /> <span className="truncate">{item.time_hint}</span>
+                        <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{item.time_hint}</span>
                       </span>
                     )}
                   </div>
 
-                  {/* Row 3: Category */}
-                  <div className="min-w-0">
-                    {item.category ? (
-                      <span className="inline-block text-[9px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md truncate max-w-full">
-                        {item.category}
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">—</span>
-                    )}
+                  {/* Row 3: [spacer] Category badge */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="w-3.5 shrink-0" />
+                    <div className="min-w-0">
+                      {item.category ? (
+                        <span className={`inline-block text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md truncate max-w-full ${accent.badge}`}>
+                          {item.category}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">—</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
             })}
 
+            {/* Detail popover — absolutely positioned inside the grid */}
             {openItem && (
               <div
                 className="absolute left-0 right-0 z-20"
@@ -214,38 +266,45 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
         )}
       </div>
 
+      {/* Footer actions */}
       {items.length > 0 && (
         <div className="border-t border-slate-100 px-4 py-3 flex items-center justify-center gap-2 shrink-0 bg-white">
           {!selectionMode ? (
             <>
               <button
                 onClick={() => setSelectionMode(true)}
-                className="px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg text-xs font-black hover:bg-indigo-100 transition-all"
+                className="px-3.5 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-xs font-black hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer"
               >
                 Select
               </button>
               <button
                 onClick={() => promote(null)}
                 disabled={working}
-                className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-black hover:bg-indigo-200 transition-all disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-black hover:from-indigo-600 hover:to-violet-600 transition-all shadow-sm shadow-indigo-200/40 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {working ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Add All to Idea Bin'}
+                {working
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <PackagePlus className="w-3.5 h-3.5" />}
+                Add All to Idea Bin
               </button>
             </>
           ) : (
             <>
               <button
                 onClick={exitSelection}
-                className="px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-xs font-black hover:bg-slate-100 transition-all"
+                className="px-3.5 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-xs font-black hover:bg-slate-50 transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={() => promote(Array.from(selected))}
                 disabled={working || selected.size === 0}
-                className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-black hover:bg-indigo-200 transition-all disabled:opacity-40"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-black hover:from-indigo-600 hover:to-violet-600 transition-all shadow-sm shadow-indigo-200/40 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                {working ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Send ${selected.size} to Idea Bin`}
+                {working
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <PackagePlus className="w-3.5 h-3.5" />}
+                {selected.size > 0 ? `Send ${selected.size} to Idea Bin` : 'Select items'}
               </button>
             </>
           )}
@@ -256,11 +315,13 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
 });
 
 function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () => void }) {
+  const accent = categoryAccent(item.category);
   return (
     <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+      {/* Popover header */}
       <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-slate-100 shrink-0">
         <div className="flex items-start gap-2 min-w-0">
-          <MapPin className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+          <div className={`w-1 self-stretch rounded-full shrink-0 ${accent.bar}`} />
           <div className="min-w-0">
             <p className="text-sm font-black text-slate-900 leading-tight truncate">{item.title}</p>
             {item.address && (
@@ -270,7 +331,7 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
         </div>
         <button
           onClick={onClose}
-          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-colors shrink-0"
+          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-colors shrink-0 cursor-pointer"
           title="Close"
         >
           <X className="w-4 h-4" />
@@ -279,26 +340,29 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {item.photo_url && (
-          <img
-            src={item.photo_url}
-            alt=""
-            className="w-full h-36 object-cover rounded-xl border border-slate-100"
-          />
+          <div className="relative w-full h-36 rounded-xl overflow-hidden border border-slate-100">
+            <img
+              src={item.photo_url}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+          </div>
         )}
 
         <div className="flex items-center gap-2 flex-wrap">
           {item.rating != null && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold">
-              <Star className="w-3 h-3 text-slate-500" /> {item.rating}
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100">
+              <Star className="w-3 h-3 text-amber-400" /> {item.rating}
             </span>
           )}
           {item.time_hint && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold">
-              <Clock className="w-3 h-3 text-slate-500" /> {item.time_hint}
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-100">
+              <Clock className="w-3 h-3 text-slate-400" /> {item.time_hint}
             </span>
           )}
           {item.category && (
-            <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest">
+            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${accent.badge}`}>
               {item.category}
             </span>
           )}

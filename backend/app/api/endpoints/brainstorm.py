@@ -307,6 +307,24 @@ async def promote(
     ]
 
 
+@router.delete("/{trip_id}/brainstorm/items", status_code=204)
+async def clear_items(
+    trip_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete all brainstorm bin items for the current user on this trip."""
+    await require_trip_member(db, trip_id, current_user.id)
+    stmt = select(BrainstormBinItem).where(
+        BrainstormBinItem.trip_id == trip_id,
+        BrainstormBinItem.user_id == current_user.id,
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    for row in rows:
+        await db.delete(row)
+    await db.commit()
+
+
 @router.delete("/{trip_id}/brainstorm/items/{item_id}", status_code=204)
 async def delete_item(
     trip_id: int,

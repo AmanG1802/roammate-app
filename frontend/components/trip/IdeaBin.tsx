@@ -5,6 +5,7 @@ import { useTripStore } from '@/lib/store';
 import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
+import { categoryAccent } from '@/lib/categoryColors';
 
 /** Extract a time hint from a text fragment, e.g. "Eiffel Tower at 2pm" → "2pm" */
 function extractTimeHint(text: string): string | null {
@@ -52,7 +53,6 @@ function timeValueToHint(val: string): string | null {
 }
 
 export default function IdeaBin({ tripId, readOnly = false, canVote = false }: { tripId: string | null; readOnly?: boolean; canVote?: boolean }) {
-  // readOnly = non-admin user. They CAN add ideas but CANNOT delete/edit time/drag-to-timeline.
   const [inputText, setInputText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
@@ -149,7 +149,6 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
         }
       }
 
-      // Fallback / demo mode: parse locally with time extraction
       const fragments = inputText.split(/[,\n]/);
       fragments
         .map((raw) => {
@@ -256,6 +255,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
           ) : (
             ideas.map((idea) => {
               const isOpen = openId === idea.id;
+              const accent = categoryAccent(extras[idea.id]?.category);
               return (
               <motion.div
                 key={idea.id}
@@ -267,15 +267,18 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                 onDragStartCapture={(e) => { if (!readOnly) e.dataTransfer.setData('ideaId', idea.id); }}
                 data-testid={`idea-card-${idea.id}`}
                 ref={(el) => { cardRefs.current[idea.id] = el; }}
-                className={`p-3 bg-white border rounded-2xl shadow-sm cursor-grab active:cursor-grabbing transition-all group relative overflow-hidden flex flex-col gap-1.5 ${
+                className={`p-3 pl-4 bg-white border rounded-2xl shadow-sm cursor-grab active:cursor-grabbing transition-all group relative overflow-hidden flex flex-col gap-1.5 ${
                   isOpen ? 'border-indigo-200 ring-2 ring-indigo-100' : 'border-slate-100 hover:border-indigo-100 hover:shadow-md'
                 }`}
               >
-                <div className="absolute top-0 left-0 w-1 h-full bg-indigo-100 group-hover:bg-indigo-500 transition-colors" />
+                {/* Left accent bar */}
+                <div className={`absolute left-0 top-0 w-1 h-full ${accent.bar} rounded-l-2xl transition-all group-hover:w-1.5`} />
 
-                {/* Row 1: MapPin | Title | Trash */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                {/* Row 1: [MapPin slot] Title | Trash */}
+                <div className="flex items-start gap-1.5 min-w-0">
+                  <div className="w-3.5 flex justify-center shrink-0 pt-0.5">
+                    <MapPin className="w-3 h-3 text-indigo-400" />
+                  </div>
                   <span className="text-sm font-black text-slate-900 truncate leading-tight flex-1 min-w-0">
                     {idea.title}
                   </span>
@@ -290,26 +293,28 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                   )}
                 </div>
 
-                {/* Row 2: Info | Rating | Time | Pencil */}
+                {/* Row 2: [Info slot] Rating | Time | Pencil */}
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (openId === idea.id) { setOpenId(null); return; }
-                      const card = cardRefs.current[idea.id];
-                      if (card) setPopoverTop(card.offsetTop + card.offsetHeight + 8);
-                      setOpenId(idea.id);
-                    }}
-                    className={`p-0.5 rounded-md transition-colors shrink-0 ${
-                      isOpen ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
-                    }`}
-                    title="Details"
-                  >
-                    <Info className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="w-3.5 flex justify-center shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (openId === idea.id) { setOpenId(null); return; }
+                        const card = cardRefs.current[idea.id];
+                        if (card) setPopoverTop(card.offsetTop + card.offsetHeight + 8);
+                        setOpenId(idea.id);
+                      }}
+                      className={`-m-0.5 p-0.5 rounded-md transition-colors ${
+                        isOpen ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                      }`}
+                      title="Details"
+                    >
+                      <Info className="w-3 h-3" />
+                    </button>
+                  </div>
                   {extras[idea.id]?.rating != null && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
-                      <Star className="w-2.5 h-2.5 text-slate-400" /> {extras[idea.id]!.rating}
+                      <Star className="w-2.5 h-2.5 text-amber-400" /> {extras[idea.id]!.rating}
                     </span>
                   )}
                   {!readOnly && editingTimeId === idea.id ? (
@@ -358,20 +363,24 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                   )}
                 </div>
 
-                {/* Row 3: Category */}
-                <div className="min-w-0">
-                  {extras[idea.id]?.category ? (
-                    <span className="inline-block text-[9px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md truncate max-w-full">
-                      {extras[idea.id]!.category}
-                    </span>
-                  ) : (
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">—</span>
-                  )}
+                {/* Row 3: [spacer] Category */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="w-3.5 shrink-0" />
+                  <div className="min-w-0">
+                    {extras[idea.id]?.category ? (
+                      <span className={`inline-block text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md truncate max-w-full ${accent.badge}`}>
+                        {extras[idea.id]!.category}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">—</span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Row 4: added_by | vote */}
-                <div className="flex items-center justify-between gap-2 min-w-0">
-                  <div className="flex items-center gap-1 min-w-0">
+                {/* Row 4: [spacer] added_by | Vote */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="w-3.5 shrink-0" />
+                  <div className="flex items-center gap-1 flex-1 min-w-0">
                     {idea.added_by ? (
                       <>
                         <UserCircle className="w-2.5 h-2.5 text-slate-400 shrink-0" />
@@ -393,6 +402,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
           const idea = ideas.find((i) => i.id === openId);
           if (!idea) return null;
           const ex = extras[idea.id] ?? {};
+          const accent = categoryAccent(ex.category);
           return (
             <div
               className="absolute left-5 right-5 z-20"
@@ -401,7 +411,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
               <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
                 <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-slate-100 shrink-0">
                   <div className="flex items-start gap-2 min-w-0">
-                    <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                    <div className={`w-1 self-stretch rounded-full shrink-0 ${accent.bar}`} />
                     <div className="min-w-0">
                       <p className="text-xs font-black text-slate-900 leading-tight truncate">{idea.title}</p>
                       {ex.address && (
@@ -427,8 +437,8 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                   )}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {ex.rating != null && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-50 text-slate-700 rounded-md text-[10px] font-bold">
-                        <Star className="w-2.5 h-2.5 text-slate-500" /> {ex.rating}
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
+                        <Star className="w-2.5 h-2.5 text-amber-400" /> {ex.rating}
                       </span>
                     )}
                     {idea.time_hint && (
@@ -437,7 +447,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                       </span>
                     )}
                     {ex.category && (
-                      <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[9px] font-black uppercase tracking-widest">
+                      <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${accent.badge}`}>
                         {ex.category}
                       </span>
                     )}
