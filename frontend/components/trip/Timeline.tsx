@@ -318,8 +318,8 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                           <h4 className="font-black text-slate-900 leading-tight truncate">
                             {event.title}
                           </h4>
-                          {/* Category */}
-                          <div className="flex items-center gap-1.5 mt-1.5">
+                          {/* Category + Details button */}
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                             {event.category ? (
                               <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${accent.badge}`}>
                                 {event.category}
@@ -330,11 +330,25 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                                 <span>Activity</span>
                               </div>
                             )}
+                            {hasDetails && (
+                              <button
+                                onClick={() => setTooltipId(isTooltipOpen ? null : event.id)}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors ${
+                                  isTooltipOpen
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100'
+                                }`}
+                                title="Details"
+                              >
+                                <Info className="w-3 h-3" />
+                                {isTooltipOpen ? 'Hide' : 'Details'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
 
-                      {/* Right: time + info + move-to-bin */}
+                      {/* Right: time + move-to-bin */}
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         {readOnly ? (
                           event.start_time ? (
@@ -358,22 +372,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                             isConflict={isConflict}
                             onEdit={() => setEditingId(event.id)}
                           />
-                        )}
-
-                        {/* Info tooltip toggle */}
-                        {hasDetails && (
-                          <button
-                            onClick={() => setTooltipId(isTooltipOpen ? null : event.id)}
-                            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors ${
-                              isTooltipOpen
-                                ? 'bg-indigo-600 text-white'
-                                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100'
-                            }`}
-                            title="Details"
-                          >
-                            <Info className="w-3 h-3" />
-                            {isTooltipOpen ? 'Hide' : 'Details'}
-                          </button>
                         )}
 
                         {!readOnly && (

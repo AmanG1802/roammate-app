@@ -12,6 +12,7 @@ export type BrainstormItem = {
   photo_url?: string | null;
   rating?: number | null;
   time_hint?: string | null;
+  time_category?: string | null;
   address?: string | null;
 };
 
@@ -208,7 +209,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                     )}
                   </div>
 
-                  {/* Row 2: [Info slot] Rating + Time */}
+                  {/* Row 2: [Info slot] Rating + Time category */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div className="w-3.5 flex justify-center shrink-0">
                       <button
@@ -228,10 +229,10 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                         <Star className="w-2.5 h-2.5 text-amber-400" /> {item.rating}
                       </span>
                     )}
-                    {item.time_hint && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 truncate min-w-0">
-                        <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{item.time_hint}</span>
+                    {(item.time_category ?? item.time_hint) && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400 truncate min-w-0">
+                        <Clock className="w-2.5 h-2.5 text-slate-300 shrink-0" />
+                        <span className="truncate">{item.time_category ?? item.time_hint}</span>
                       </span>
                     )}
                   </div>
