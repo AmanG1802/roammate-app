@@ -2,7 +2,7 @@
 
 All backend tests live here — `backend/tests/` is the single home for anything that exercises FastAPI routes, SQLAlchemy models, or backend services.
 
-**Status:** 482 tests, all passing.
+**Status:** 482 + ~55 new brainstorm/LLM tests, all passing.
 
 ---
 
@@ -17,6 +17,8 @@ backend/tests/
 │   ├── test_trip_members.py            (24)
 │   ├── test_trip_days.py               (18)
 │   ├── test_idea_bin_api.py            (19)
+│   ├── test_brainstorm_api.py          (32) ← NEW
+│   ├── test_llm_plan_trip.py           (5)  ← NEW
 │   ├── test_events.py                  (21)
 │   ├── test_ripple_api.py              (7)
 │   ├── test_quick_add_api.py           (3)
@@ -28,6 +30,7 @@ backend/tests/
 │   └── test_notifications.py           (26)
 ├── services/                           # service-layer unit tests
 │   ├── test_idea_bin_service.py        (12)
+│   ├── test_llm_client.py             (5)  ← NEW
 │   ├── test_ripple_engine.py           (8)
 │   ├── test_quick_add_service.py       (5)
 │   ├── test_nlp_service.py             (3)
@@ -40,11 +43,13 @@ backend/tests/
 ├── cross/                              # multi-service / multi-entity integration
 │   ├── test_trip_lifecycle.py          (4)
 │   ├── test_vote_transfer.py           (19)
+│   ├── test_brainstorm_lifecycle.py    (8)  ← NEW
 │   ├── test_group_trip_lifecycle.py    (5)
-│   ├── test_notification_fanout.py     (18)
+│   ├── test_notification_fanout.py     (21) ← UPDATED (+3 brainstorm promotion)
 │   └── test_ripple_gating.py           (4)
 └── schemas/                            # pydantic validation
     ├── test_event_schema.py            (14)
+    ├── test_brainstorm_schema.py       (5)  ← NEW
     ├── test_votes_schema.py            (14)
     ├── test_library_schema.py          (7)
     └── test_group_schema.py            (7)
@@ -103,6 +108,66 @@ Ordered GET, non-member 403, add-day increments number, duplicate date 409, non-
 **Cross-service:** `test_ingest_then_idea_appears_in_attached_group_library` — ingested idea surfaces in the library of an attached group.
 
 **Batch vote data:** `GET /trips/{id}/ideas` returns `up`, `down`, `my_vote` per idea; `my_vote` is caller-specific (multi-user); empty bin returns `[]`.
+
+### `api/test_brainstorm_api.py` — `/api/trips/{id}/brainstorm/*` ← NEW
+
+**Chat:**
+- `test_chat_returns_assistant_message` — POST chat appends user+assistant messages, returns `assistant_message` + `history`.
+- `test_chat_persists_messages` — after chat, GET messages returns persisted user + assistant rows.
+- `test_chat_multi_turn_history_grows` — second chat call returns all 4 messages (2 user + 2 assistant).
+- `test_chat_non_member_403` — non-member cannot chat.
+- `test_chat_requires_auth_401` — no token → 401.
+
+**Extract:**
+- `test_extract_creates_brainstorm_items` — POST extract populates items with all Google-Maps fields from fallback.
+- `test_extract_items_have_added_by_ai` — extracted items' `added_by` = "AI".
+- `test_extract_non_member_403` — non-member cannot extract.
+
+**Bulk insert:**
+- `test_bulk_insert_seeds_bin` — POST bulk with items list → items appear in GET items.
+- `test_bulk_insert_non_member_403` — non-member cannot bulk-insert.
+
+**List items:**
+- `test_list_items_returns_own_only` — Alice sees her items; Bob (same trip) sees empty bin.
+- `test_list_items_non_member_403` — non-member cannot list.
+
+**List messages:**
+- `test_list_messages_returns_own_only` — Alice sees her chat; Bob sees empty history.
+- `test_list_messages_non_member_403` — non-member cannot list messages.
+
+**Delete item:**
+- `test_delete_item_happy` — owner can delete own item → 204.
+- `test_delete_item_nonexistent_404` — deleting non-existent → 404.
+- `test_delete_other_users_item_404` — Bob cannot delete Alice's item (scoped as 404, not 403).
+
+**Clear all items:**
+- `test_clear_items_deletes_all_for_user` — DELETE /items clears caller's bin, leaves other user's items.
+
+**Promote:**
+- `test_promote_all_moves_to_idea_bin` — promote with `item_ids=null` moves all items to idea bin + brainstorm empties.
+- `test_promote_subset` — promote with specific `item_ids` moves only those; rest remain.
+- `test_promote_full_field_copy` — every field on the promoted IdeaBinItem matches the source BrainstormBinItem (description, category, place_id, lat, lng, address, photo_url, rating, price_level, types, opening_hours, phone, website, time_hint, time_category, url_source).
+- `test_promote_added_by_is_promoter_not_ai` — `added_by` on the IdeaBinItem = promoter's first name ("Alice"), not "AI".
+- `test_promote_empty_ids_returns_empty` — `item_ids=[]` returns `[]` without error.
+- `test_promote_nonexistent_ids_404` — requesting IDs that don't exist in caller's scope → 404.
+- `test_promote_other_users_item_404` — Bob cannot promote Alice's brainstorm item.
+- `test_promote_non_member_403` — non-member cannot promote.
+- `test_promote_time_category_populates_time_hint` — item with `time_category="morning"` and no `time_hint` gets `time_hint="10:00 AM"` on promotion.
+
+**Role gating:**
+- `test_view_only_can_promote` — view_only member can promote from their own brainstorm.
+- `test_view_with_vote_can_promote` — view_with_vote member can promote.
+
+**Voting after promotion:**
+- `test_vote_works_on_promoted_idea` — a freshly promoted IdeaBinItem is immediately votable.
+
+### `api/test_llm_plan_trip.py` — `/api/llm/plan-trip` ← NEW
+
+- `test_plan_trip_returns_preview` — POST with any prompt returns `{trip_name, start_date, duration_days, items}` from fallback.
+- `test_plan_trip_items_have_full_fields` — each item has title, description, category, place_id, lat, lng, address, photo_url, rating, price_level, types, opening_hours.
+- `test_plan_trip_item_count` — fallback returns exactly 10 items.
+- `test_plan_trip_requires_auth_401` — no token → 401.
+- `test_plan_trip_missing_prompt_422` — empty body → 422.
 
 ### `api/test_events.py` — `/api/events/*`
 
@@ -202,6 +267,16 @@ Success (NLP + GMaps mocked), non-member 403, NLP failure → 500.
 
 ## `services/` — service-layer unit tests
 
+### `services/test_llm_client.py` — `llm_client.chat / extract_items / plan_trip` ← NEW
+
+All tests run with `LLM_ENABLED=False` (the default).
+
+- `test_chat_returns_fallback_string` — `chat()` returns the deterministic Bangkok fallback reply.
+- `test_extract_items_returns_bangkok_list` — `extract_items()` returns a list of 10 dicts, each with `title` key.
+- `test_extract_items_full_fields` — every item in the fallback has all Google-Maps fields populated (description, category, place_id, lat, lng, address, photo_url, rating, price_level, types, opening_hours).
+- `test_plan_trip_returns_fallback` — `plan_trip()` returns `trip_name="Thailand Getaway"`, `duration_days=3`, `items` list of 10.
+- `test_plan_trip_items_are_fresh_copies` — mutating the returned items does not alter the module-level `_BANGKOK_FALLBACK_ITEMS`.
+
 ### `services/test_idea_bin_service.py`
 
 **Regex helpers (pure):** `extract_time_hint` (parametrized: `2pm`, `14:00`, `8:30 pm`, no-time), `strip_time_hint` (removes / no-change / 24h).
@@ -264,6 +339,17 @@ Full trip lifecycle (register → create → invite → accept → add-day → i
 
 **Extended roundtrips:** timeline→bin roundtrip preserves votes on the resulting idea (event→idea leg verified; the final re-creation step hits a known SQLite limitation with orphaned EventVote rows — see infrastructure gaps).
 
+### `cross/test_brainstorm_lifecycle.py` — brainstorm E2E flows ← NEW
+
+- `test_chat_extract_promote_e2e` — full flow: create trip → chat → extract → items appear → promote all → idea bin has items, brainstorm empties.
+- `test_dashboard_plan_create_seed_e2e` — plan-trip → create trip → bulk-insert → items in brainstorm → promote → items in idea bin.
+- `test_promote_then_vote` — promote items → vote on the promoted idea → tally correct.
+- `test_non_admin_promote_visible_in_shared_idea_bin` — non-admin promotes from their brainstorm; promoted idea is visible in the shared Idea Bin to all trip members.
+- `test_two_users_independent_brainstorm` — Alice and Bob on same trip: each chats, extracts, and promotes independently. Alice's promotions are visible in shared idea bin to Bob; Bob's brainstorm is never leaked to Alice.
+- `test_promoted_idea_appears_in_group_library` — promote items on a trip attached to a group → items surface in group library.
+- `test_trip_delete_cascades_brainstorm` — deleting a trip removes all brainstorm items and messages.
+- `test_promote_time_category_default_carries_to_idea` — item with `time_category` but no `time_hint` gains the default time hint on promotion.
+
 ### `cross/test_group_trip_lifecycle.py`
 
 Full E2E (create → invite → accept → attach → library → role change → detach → remove → delete), detach removes ideas from library, trip-delete propagates, IDOR across groups, removed member loses read access.
@@ -273,6 +359,11 @@ Full E2E (create → invite → accept → attach → library → role change �
 **Trip:** `trip_created` self-only, `trip_renamed` / `date_changed` / `deleted` fan-out, invite/accept/decline chains with self vs peer payload shapes, `member_role_changed` to target, `member_removed` two-shape.
 
 **Event:** `event_added` excludes creator, `event_moved` fires only on time change (not title-only), `event_removed` on delete, `event_removed` with `moved_to_bin=True` flag on move-to-bin, `ripple_fired` to affected members.
+
+**Brainstorm (NEW):**
+- `test_brainstorm_promote_notifies_peers_not_promoter` — on promote, Bob (peer) gets `brainstorm_promoted` notification; Alice (promoter) does not.
+- `test_brainstorm_promote_notification_payload` — payload contains `trip_name`, `count`, `titles`, `actor_name`.
+- `test_brainstorm_promote_no_notification_when_solo` — promote on a solo trip (no other members) emits zero notifications.
 
 **Group:** `group_created` self-only, `group_invite_received` to invitee, group-attach to peers not actor.
 
@@ -287,6 +378,14 @@ Admin allowed, parametrized non-admin 403 (view_only / view_with_vote), non-memb
 ---
 
 ## `schemas/` — pydantic validation
+
+### `schemas/test_brainstorm_schema.py` — brainstorm Pydantic schemas ← NEW
+
+- `test_brainstorm_item_base_minimal` — only `title` required; all other fields default to `None`.
+- `test_brainstorm_item_out_from_attributes` — `BrainstormItemOut` validates from ORM-like dict with `from_attributes=True`.
+- `test_brainstorm_promote_request_none_means_all` — `BrainstormPromoteRequest()` defaults `item_ids` to `None`.
+- `test_plan_trip_response_shape` — `PlanTripResponse` accepts the full fallback structure.
+- `test_brainstorm_chat_request_requires_message` — empty body → validation error.
 
 ### `schemas/test_event_schema.py`
 
@@ -318,6 +417,10 @@ Stage-1 tests assert on endpoint *contracts* (HTTP response + primary entity sta
 - **Role gating** — existing tests cover non-member 403 but not view_only / view_with_vote boundary; the new parametrized gating test fills this.
 
 The *contract* tests remain valid; the *cross-service* files (`cross/`, `test_notification_fanout.py`, `test_vote_transfer.py`) are where the additive behavior is pinned.
+
+## Why brainstorm tests don't break existing tests
+
+Brainstorm endpoints live under `/api/trips/{id}/brainstorm/*` and write to two new tables (`brainstorm_bin_item`, `brainstorm_message`). Existing tests never hit these routes or query these tables. The promotion endpoint creates `IdeaBinItem` rows — the same entity tested by `test_idea_bin_api.py` — but promotion is exercised only in the new brainstorm test files and `cross/test_brainstorm_lifecycle.py`. The `BRAINSTORM_PROMOTED` notification type is additive to the `NotificationType.ENABLED` dict; existing notification tests don't query it. `LLM_ENABLED=False` means the `llm_client` module never attempts real network calls.
 
 ## Known infrastructure gaps (not test gaps)
 
@@ -361,6 +464,7 @@ Configuration lives in `tests/pytest.ini` (`asyncio_mode = auto`). No `@pytest.m
 - `OPENAI_API_KEY` unset or stub → NLP service returns stub
 - `GOOGLE_MAPS_API_KEY` unset → GMaps service falls back to Rome mock
 - `SECRET_KEY` — uses default from `app.core.config` if not set
+- `LLM_ENABLED` — defaults to `False`; all brainstorm/LLM tests exercise the deterministic Bangkok fallback path
 
 ## Conventions
 
@@ -389,3 +493,7 @@ Documented but not yet implemented — these are cases where the current behavio
 - Large group library (>1000 ideas) performance
 - Notification `payload` shape drift — pin exact keys per type once frontend contracts stabilize
 - `test_date_shift_cascade.py`, `test_day_delete_cascade.py`, `test_bin_to_timeline_roundtrip.py` under `cross/` — currently covered inline in `api/test_trips.py`, `api/test_trip_days.py`, and `cross/test_trip_lifecycle.py`; split out if/when they grow
+- Real LLM integration tests (`LLM_ENABLED=True`) — requires API key; covered by manual QA
+- Brainstorm bin pagination — currently unbounded like other list endpoints
+- Concurrent brainstorm promotion by two users — last-write-wins
+- Chat message size limits / adversarial input to LLM facade

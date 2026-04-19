@@ -291,6 +291,80 @@ async def test_group_invite_received(
     assert any(n["type"] == "group_invite_received" for n in await inbox(client, second_auth_headers))
 
 
+# ── Brainstorm promotion ──────────────────────────────────────────────────────
+
+_SAMPLE_ITEM = {
+    "title": "Grand Palace",
+    "description": "Royal complex",
+    "category": "sight",
+}
+
+
+@pytest.mark.asyncio
+async def test_brainstorm_promote_notifies_peers_not_promoter(
+    client, auth_headers, second_auth_headers
+):
+    trip = await mk_trip(client, auth_headers, "BS")
+    await invite_accept(client, auth_headers, second_auth_headers, trip["id"], "bob@test.com")
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/bulk",
+        json={"items": [_SAMPLE_ITEM]},
+        headers=auth_headers,
+    )
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/promote",
+        json={"item_ids": None},
+        headers=auth_headers,
+    )
+    alice_notifs = [n for n in await inbox(client, auth_headers) if n["type"] == "brainstorm_promoted"]
+    bob_notifs = [n for n in await inbox(client, second_auth_headers) if n["type"] == "brainstorm_promoted"]
+    assert alice_notifs == []
+    assert len(bob_notifs) == 1
+
+
+@pytest.mark.asyncio
+async def test_brainstorm_promote_notification_payload(
+    client, auth_headers, second_auth_headers
+):
+    trip = await mk_trip(client, auth_headers, "Payload")
+    await invite_accept(client, auth_headers, second_auth_headers, trip["id"], "bob@test.com")
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/bulk",
+        json={"items": [_SAMPLE_ITEM]},
+        headers=auth_headers,
+    )
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/promote",
+        json={"item_ids": None},
+        headers=auth_headers,
+    )
+    bob_notifs = [n for n in await inbox(client, second_auth_headers) if n["type"] == "brainstorm_promoted"]
+    payload = bob_notifs[0]["payload"]
+    assert payload["trip_name"] == "Payload"
+    assert payload["count"] == 1
+    assert "Grand Palace" in payload["titles"]
+    assert payload["actor_name"] == "Alice Smith"
+
+
+@pytest.mark.asyncio
+async def test_brainstorm_promote_no_notification_when_solo(
+    client, auth_headers
+):
+    trip = await mk_trip(client, auth_headers, "Solo")
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/bulk",
+        json={"items": [_SAMPLE_ITEM]},
+        headers=auth_headers,
+    )
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/promote",
+        json={"item_ids": None},
+        headers=auth_headers,
+    )
+    alice_notifs = [n for n in await inbox(client, auth_headers) if n["type"] == "brainstorm_promoted"]
+    assert alice_notifs == []
+
+
 # ── Disabled type suppression ────────────────────────────────────────────────
 
 @pytest.mark.asyncio
