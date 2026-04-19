@@ -280,7 +280,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
               const isDragTarget = dragOverId === event.id;
               const isTooltipOpen = tooltipId === event.id;
               const accent = categoryAccent(event.category);
-              const hasDetails = !!(event.description || event.photo_url || event.rating != null || event.address);
+              const hasDetails = !!(event.description || event.photo_url || event.rating != null || event.address || event.end_time);
 
               return (
                 <motion.div
@@ -318,8 +318,8 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                           <h4 className="font-black text-slate-900 leading-tight truncate">
                             {event.title}
                           </h4>
-                          {/* Category + address */}
-                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {/* Category */}
+                          <div className="flex items-center gap-1.5 mt-1.5">
                             {event.category ? (
                               <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${accent.badge}`}>
                                 {event.category}
@@ -329,11 +329,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                                 <MapPin className="w-2.5 h-2.5" />
                                 <span>Activity</span>
                               </div>
-                            )}
-                            {event.address && (
-                              <span className="text-[10px] font-medium text-slate-400 truncate max-w-[140px]">
-                                {event.address}
-                              </span>
                             )}
                           </div>
                         </div>
@@ -422,12 +417,23 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                                   <Star className="w-2.5 h-2.5 text-amber-400" /> {event.rating}
                                 </span>
                               )}
+                              {event.start_time && event.end_time && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[10px] font-bold border border-indigo-100">
+                                  <Clock className="w-2.5 h-2.5" /> {format(event.start_time, 'h:mm a')} – {format(event.end_time, 'h:mm a')}
+                                </span>
+                              )}
                               {event.added_by && (
                                 <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold">
                                   <UserCircle className="w-2.5 h-2.5" /> {event.added_by}
                                 </span>
                               )}
                             </div>
+                            {event.address && (
+                              <div className="flex items-start gap-1 text-[10px] font-medium text-slate-500">
+                                <MapPin className="w-2.5 h-2.5 shrink-0 mt-0.5 text-slate-400" />
+                                <span>{event.address}</span>
+                              </div>
+                            )}
                             {event.description && (
                               <p className="text-xs font-medium text-slate-500 leading-relaxed">{event.description}</p>
                             )}
@@ -446,13 +452,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                         }}
                         onCancel={() => setEditingId(null)}
                       />
-                    )}
-
-                    {event.start_time && event.end_time && editingId !== event.id && (
-                      <div className="mt-2 text-xs text-slate-400 font-medium">
-                        <Clock className="w-3 h-3 inline mr-1" />
-                        {format(event.start_time, 'h:mm a')} – {format(event.end_time, 'h:mm a')}
-                      </div>
                     )}
 
                     <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
