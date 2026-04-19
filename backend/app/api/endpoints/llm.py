@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from app.api.deps import get_current_user
 from app.models.all_models import User
 from app.schemas.brainstorm import PlanTripRequest, PlanTripResponse, BrainstormItemBase
-from app.services import llm_client
+from app.services.llm.registry import get_dashboard_client
 
 router = APIRouter()
 
@@ -15,7 +15,8 @@ async def plan_trip(
 ):
     """Return a trip preview (name + duration + seed items). Not persisted —
     the client decides whether to actually create the trip."""
-    result = await llm_client.plan_trip(body.prompt)
+    client = get_dashboard_client()
+    result = await client.plan_trip(body.prompt)
     return PlanTripResponse(
         trip_name=result["trip_name"],
         start_date=result.get("start_date"),

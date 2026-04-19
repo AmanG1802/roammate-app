@@ -19,9 +19,15 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-key-change-in-production"
 
     OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
     GOOGLE_MAPS_API_KEY: Optional[str] = None
+
     LLM_ENABLED: bool = False
-    
+    LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"
+    LLM_MODEL: str = "gpt-4o-mini"     # model name within the chosen provider
+    LLM_MAX_TOKENS: int = 2000
+
     REDIS_URL: str = "redis://redis:6379/0"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)

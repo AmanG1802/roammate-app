@@ -35,7 +35,10 @@ from app.schemas.brainstorm import (
 )
 from app.schemas.trip import IdeaBinItem as IdeaBinItemSchema
 from app.services.roles import require_trip_member
-from app.services import llm_client, notification_service
+from app.services import notification_service
+from app.services.llm.registry import get_brainstorm_client
+from app.services.llm.place_enricher import enrich_items
+from app.services.llm.dedup import deduplicate
 from app.schemas.notification import NotificationType
 from app.core.time_categories import TIME_CATEGORY_DEFAULTS
 
@@ -134,7 +137,8 @@ async def chat(
     )
     db.add(user_msg)
 
-    assistant_content = await llm_client.chat(history, body.message)
+    client = get_brainstorm_client()
+    assistant_content = await client.chat(history, body.message, trip_id=trip_id)
     assistant_msg = BrainstormMessage(
         trip_id=trip_id,
         user_id=current_user.id,
@@ -173,7 +177,17 @@ async def extract(
     history_rows = (await db.execute(stmt)).scalars().all()
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
-    raw_items = await llm_client.extract_items(history)
+    client = get_brainstorm_client()
+    raw_items = await client.extract_items(history, trip_id=trip_id)
+    raw_items = await enrich_items(raw_items)
+
+    existing_stmt = select(BrainstormBinItem).where(
+        BrainstormBinItem.trip_id == trip_id,
+        BrainstormBinItem.user_id == current_user.id,
+    )
+    existing_rows = (await db.execute(existing_stmt)).scalars().all()
+    raw_items = deduplicate(raw_items, existing_rows)
+
     created: list[BrainstormBinItem] = []
     for item in raw_items:
         row = BrainstormBinItem(
@@ -255,11 +269,28 @@ async def promote(
     if not sources:
         return []
 
+    # Enrich any items missing a place_id before promoting
+    unenriched = [
+        {k: getattr(src, k) for k in _COPY_FIELDS}
+        for src in sources
+        if not getattr(src, "place_id", None)
+    ]
+    if unenriched:
+        enriched_dicts = await enrich_items(unenriched)
+        _enriched_by_title = {d["title"]: d for d in enriched_dicts}
+        for src in sources:
+            if not getattr(src, "place_id", None) and src.title in _enriched_by_title:
+                enriched = _enriched_by_title[src.title]
+                for fld in ("place_id", "lat", "lng", "address", "photo_url",
+                            "rating", "opening_hours", "phone", "website"):
+                    val = enriched.get(fld)
+                    if val is not None:
+                        setattr(src, fld, val)
+
     promoter = _first_name(current_user) or None
     created: list[IdeaBinItem] = []
     for src in sources:
         fields = {k: getattr(src, k) for k in _COPY_FIELDS}
-        # Auto-populate time_hint from time_category default when no explicit time is set
         if not fields.get("time_hint") and fields.get("time_category"):
             fields["time_hint"] = TIME_CATEGORY_DEFAULTS.get(fields["time_category"])
         idea = IdeaBinItem(
