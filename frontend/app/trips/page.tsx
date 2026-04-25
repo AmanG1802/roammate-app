@@ -663,11 +663,14 @@ export default function TripPlannerPage() {
                         >
                           {/* Avatar */}
                           <div
-                            className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-sm text-white shrink-0 ${
+                            className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-sm text-white shrink-0 overflow-hidden ${
                               isInvited ? 'bg-slate-300' : 'bg-indigo-600'
                             }`}
                           >
-                            {initials || '?'}
+                            {member.user?.avatar_url
+                              ? <img src={member.user.avatar_url} alt={name} className="w-full h-full object-cover" />
+                              : initials || '?'
+                            }
                           </div>
 
                           {/* Name + email */}

@@ -19,9 +19,19 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-key-change-in-production"
 
     OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
     GOOGLE_MAPS_API_KEY: Optional[str] = None
+
     LLM_ENABLED: bool = False
-    
+    LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"
+    LLM_MODEL: str = "gpt-4o-mini"     # model name within the chosen provider
+
+    # Per-operation output token caps. The chat path falls back to
+    # BaseLLMModel.DEFAULT_MAX_TOKENS when no override is provided.
+    LLM_MAX_TOKENS_EXTRACT: int = 3000
+    LLM_MAX_TOKENS_PLAN: int = 4000
+
     REDIS_URL: str = "redis://redis:6379/0"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)

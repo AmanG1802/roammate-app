@@ -8,9 +8,8 @@ from app.models.all_models import (
     IdeaBinItem as IdeaBinItemModel, IdeaVote, EventVote,
 )
 from app.schemas.event import Event, EventCreate, EventUpdate, RippleRequest
-from app.schemas.trip import IngestRequest, IdeaBinItem
+from app.schemas.trip import IdeaBinItem
 from app.services.ripple_engine import ripple_engine
-from app.services.quick_add import quick_add_service
 from app.services import notification_service
 from app.services.roles import require_trip_admin
 from app.schemas.notification import NotificationType
@@ -435,47 +434,5 @@ async def trigger_ripple_engine(
                 )
                 await db.commit()
         return [await _event_with_votes(db, e, current_user.id) for e in updated_events]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/quick-add/{trip_id}", response_model=Event)
-async def quick_add_event(
-    trip_id: int,
-    request: IngestRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    NLP Quick Add: Parses text like "Colosseum tour at 2pm" and creates a scheduled event.
-    """
-    stmt = select(TripMember).where(
-        TripMember.trip_id == trip_id,
-        TripMember.user_id == current_user.id,
-    )
-    res = await db.execute(stmt)
-    if not res.scalars().first():
-        raise HTTPException(status_code=403, detail="Not a member of this trip")
-
-    try:
-        event = await quick_add_service.process_text(
-            db=db,
-            trip_id=trip_id,
-            text=request.text,
-        )
-        recipients = await notification_service.trip_member_ids(
-            db, trip_id, exclude_user_id=current_user.id
-        )
-        if recipients:
-            await notification_service.emit(
-                db,
-                recipient_ids=recipients,
-                type=NotificationType.EVENT_ADDED,
-                payload={"event_id": event.id, "title": event.title, "via": "quick_add"},
-                actor_id=current_user.id,
-                trip_id=trip_id,
-            )
-            await db.commit()
-        return await _event_with_votes(db, event, current_user.id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -440,10 +440,13 @@ function TripHubContent() {
                 return (
                   <div key={member.id} className="hub-avatar group relative">
                     <div
-                      className="w-11 h-11 rounded-full border-2 border-slate-800 flex items-center justify-center font-black text-sm text-white shadow-lg cursor-default transition-all hover:scale-110 hover:border-indigo-400 hover:shadow-indigo-900/40"
+                      className="w-11 h-11 rounded-full border-2 border-slate-800 flex items-center justify-center font-black text-sm text-white shadow-lg cursor-default transition-all hover:scale-110 hover:border-indigo-400 hover:shadow-indigo-900/40 overflow-hidden"
                       style={{ backgroundColor: AVATAR_PALETTE[i % AVATAR_PALETTE.length] }}
                     >
-                      {getInitials(member.user?.name ?? '?')}
+                      {member.user?.avatar_url
+                        ? <img src={member.user.avatar_url} alt={member.user?.name ?? ''} className="w-full h-full object-cover" />
+                        : getInitials(member.user?.name ?? '?')
+                      }
                     </div>
                     <div className={`absolute -top-1 -right-1 w-4 h-4 ${roleCfg.bg} rounded-full flex items-center justify-center shadow-sm`}>
                       <RIcon className={`w-2.5 h-2.5 ${roleCfg.fg}`} />
