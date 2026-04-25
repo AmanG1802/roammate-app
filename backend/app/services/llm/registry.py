@@ -22,7 +22,7 @@ from app.services.llm.models.claude_model import ClaudeModel
 from app.services.llm.models.gemini_model import GeminiModel
 from app.services.llm.models.openai_model import OpenAIModel
 from app.services.llm.services.base import BaseLLMService
-from app.services.llm.services.roammate_v1 import RoammateServiceV1
+from app.services.llm.services.v1.roammate_v1 import RoammateServiceV1
 
 _MODEL_MAP: dict[str, type[BaseLLMModel]] = {
     "openai": OpenAIModel,

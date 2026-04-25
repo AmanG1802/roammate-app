@@ -6,6 +6,9 @@ Pipeline for each method:
 When ``LLM_ENABLED`` is False the service returns deterministic Bangkok
 fallback data so the full pipeline exercises real code paths without an
 API key.
+
+Prompt templates and per-version assets live alongside this module under
+``./prompts`` — they are versioned with the service strategy.
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ from app.services.llm.token_tracker import track as track_tokens
 
 log = logging.getLogger(__name__)
 
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
+_PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 HISTORY_TRIM_COUNT = 6
 
@@ -37,7 +40,7 @@ HISTORY_TRIM_COUNT = 6
 # ── Prompt loading ───────────────────────────────────────────────────────────
 
 def _load_prompt(filename: str) -> str:
-    """Load a prompt template file from the prompts directory."""
+    """Load a prompt template file from the v1 prompts directory."""
     path = _PROMPTS_DIR / filename
     return path.read_text(encoding="utf-8")
 
@@ -163,6 +166,7 @@ class RoammateServiceV1(BaseLLMService):
             {"role": "user", "content": user_message},
         ]
 
+        # No max_tokens override → model falls back to BaseLLMModel.DEFAULT_MAX_TOKENS.
         response = await self._model.complete(messages)
         _log_and_track("chat", response, context)
         return response.content
@@ -187,7 +191,7 @@ class RoammateServiceV1(BaseLLMService):
             messages,
             response_schema=LLMExtractResponse,
             temperature=0.3,
-            max_tokens=3000,
+            max_tokens=settings.LLM_MAX_TOKENS_EXTRACT,
         )
         _log_and_track("extract", response, context)
 
@@ -240,7 +244,7 @@ class RoammateServiceV1(BaseLLMService):
             messages,
             response_schema=LLMPlanResponse,
             temperature=0.7,
-            max_tokens=4000,
+            max_tokens=settings.LLM_MAX_TOKENS_PLAN,
         )
         _log_and_track("plan_trip", response, context)
 

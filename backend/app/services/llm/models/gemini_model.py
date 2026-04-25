@@ -32,10 +32,14 @@ class GeminiModel(BaseLLMModel):
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int | None = None,
         response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
         from google.genai import types
+
+        effective_max_tokens = (
+            max_tokens if max_tokens is not None else self.DEFAULT_MAX_TOKENS
+        )
 
         system_text = ""
         contents: list[types.Content] = []
@@ -50,7 +54,7 @@ class GeminiModel(BaseLLMModel):
 
         config_kwargs: dict[str, Any] = {
             "temperature": temperature,
-            "max_output_tokens": max_tokens,
+            "max_output_tokens": effective_max_tokens,
         }
         if system_text:
             config_kwargs["system_instruction"] = system_text

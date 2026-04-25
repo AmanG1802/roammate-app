@@ -26,7 +26,11 @@ class Settings(BaseSettings):
     LLM_ENABLED: bool = False
     LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"
     LLM_MODEL: str = "gpt-4o-mini"     # model name within the chosen provider
-    LLM_MAX_TOKENS: int = 2000
+
+    # Per-operation output token caps. The chat path falls back to
+    # BaseLLMModel.DEFAULT_MAX_TOKENS when no override is provided.
+    LLM_MAX_TOKENS_EXTRACT: int = 3000
+    LLM_MAX_TOKENS_PLAN: int = 4000
 
     REDIS_URL: str = "redis://redis:6379/0"
 

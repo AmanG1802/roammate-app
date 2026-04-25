@@ -36,15 +36,24 @@ class LLMResponse:
 class BaseLLMModel(ABC):
     """Wrapper around a single LLM provider."""
 
+    # Fallback output-token cap used when a caller does not pass max_tokens.
+    # Per-operation overrides (extract, plan) live in app.core.config.
+    DEFAULT_MAX_TOKENS: int = 2000
+
     @abstractmethod
     async def complete(
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int | None = None,
         response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
-        """Send messages and return a structured response."""
+        """Send messages and return a structured response.
+
+        ``max_tokens=None`` means "use ``DEFAULT_MAX_TOKENS``" — concrete
+        implementations are expected to resolve the fallback before calling
+        the underlying SDK.
+        """
         ...
 
     @abstractmethod

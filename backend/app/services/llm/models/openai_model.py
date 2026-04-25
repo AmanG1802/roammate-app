@@ -31,15 +31,18 @@ class OpenAIModel(BaseLLMModel):
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int | None = None,
         response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
+        effective_max_tokens = (
+            max_tokens if max_tokens is not None else self.DEFAULT_MAX_TOKENS
+        )
 
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_tokens": effective_max_tokens,
         }
         if response_schema is not None:
             kwargs["response_format"] = {

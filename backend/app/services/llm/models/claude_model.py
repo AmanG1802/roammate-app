@@ -32,9 +32,13 @@ class ClaudeModel(BaseLLMModel):
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int | None = None,
         response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
+        effective_max_tokens = (
+            max_tokens if max_tokens is not None else self.DEFAULT_MAX_TOKENS
+        )
+
         system_text = ""
         chat_messages: list[dict[str, str]] = []
         for msg in messages:
@@ -47,7 +51,7 @@ class ClaudeModel(BaseLLMModel):
             "model": self._model,
             "messages": chat_messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_tokens": effective_max_tokens,
         }
         if system_text:
             kwargs["system"] = system_text
