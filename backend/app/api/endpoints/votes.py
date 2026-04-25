@@ -146,12 +146,12 @@ async def get_idea_voters(
     await require_trip_member(db, idea.trip_id, current_user.id)
 
     rows = (await db.execute(
-        select(IdeaVote.value, User.name)
+        select(IdeaVote.value, User.name, User.avatar_url)
         .join(User, User.id == IdeaVote.user_id)
         .where(IdeaVote.idea_id == idea_id)
     )).all()
-    up_voters = [VoterInfo(name=r.name or "Unknown") for r in rows if r.value == 1]
-    down_voters = [VoterInfo(name=r.name or "Unknown") for r in rows if r.value == -1]
+    up_voters = [VoterInfo(name=r.name or "Unknown", avatar_url=r.avatar_url) for r in rows if r.value == 1]
+    down_voters = [VoterInfo(name=r.name or "Unknown", avatar_url=r.avatar_url) for r in rows if r.value == -1]
     return VoterList(up_voters=up_voters, down_voters=down_voters)
 
 
@@ -167,10 +167,10 @@ async def get_event_voters(
     await require_trip_member(db, ev.trip_id, current_user.id)
 
     rows = (await db.execute(
-        select(EventVote.value, User.name)
+        select(EventVote.value, User.name, User.avatar_url)
         .join(User, User.id == EventVote.user_id)
         .where(EventVote.event_id == event_id)
     )).all()
-    up_voters = [VoterInfo(name=r.name or "Unknown") for r in rows if r.value == 1]
-    down_voters = [VoterInfo(name=r.name or "Unknown") for r in rows if r.value == -1]
+    up_voters = [VoterInfo(name=r.name or "Unknown", avatar_url=r.avatar_url) for r in rows if r.value == 1]
+    down_voters = [VoterInfo(name=r.name or "Unknown", avatar_url=r.avatar_url) for r in rows if r.value == -1]
     return VoterList(up_voters=up_voters, down_voters=down_voters)

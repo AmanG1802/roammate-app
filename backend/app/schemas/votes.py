@@ -24,6 +24,7 @@ class VoteTally(BaseModel):
 
 class VoterInfo(BaseModel):
     name: str
+    avatar_url: Optional[str] = None
 
 
 class VoterList(BaseModel):

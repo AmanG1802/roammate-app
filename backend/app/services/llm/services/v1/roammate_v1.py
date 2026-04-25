@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.config.persona_catalog import Persona, PERSONA_DESCRIPTIONS
 from app.core.config import settings
 from app.core.time_categories import TIME_CATEGORY_DEFAULTS
 from app.schemas.llm import LLMExtractResponse, LLMItem, LLMPlanResponse
@@ -84,11 +85,26 @@ def _trim_history(
     return history[-max_messages:]
 
 
+def _pack_user_persona(personas: list[str] | None) -> str:
+    """Return a compact persona hint string for the system prompt."""
+    if not personas:
+        return ""
+    valid = Persona._value2member_map_
+    descriptors = [
+        PERSONA_DESCRIPTIONS[Persona(p)]
+        for p in personas
+        if p in valid
+    ]
+    if not descriptors:
+        return ""
+    return "User preferences: " + " ".join(descriptors)
+
+
 def _pack_trip_context(context: dict[str, Any] | None) -> str:
     """Build a compact pipe-delimited context string for concierge.
 
     Expects context keys: events_today (list[dict]), upcoming (list[dict]),
-    role (str), members (list[str]).
+    role (str), members (list[str]), personas (list[str] | None).
     """
     if not context:
         return ""
@@ -110,6 +126,9 @@ def _pack_trip_context(context: dict[str, Any] | None) -> str:
     role = context.get("role")
     if role:
         parts.append(f"Role: {role}")
+    persona_line = _pack_user_persona(context.get("personas"))
+    if persona_line:
+        parts.append(persona_line)
     return "\n".join(parts)
 
 
@@ -158,6 +177,9 @@ class RoammateServiceV1(BaseLLMService):
         else:
             template = _load_prompt("brainstorm_chat_v1.txt")
             system_prompt = template.replace("{context_block}", context_block)
+            persona_line = _pack_user_persona((context or {}).get("personas"))
+            if persona_line:
+                system_prompt = system_prompt + "\n" + persona_line
 
         trimmed = _trim_history(history)
         messages = [

@@ -138,7 +138,9 @@ async def chat(
     db.add(user_msg)
 
     client = get_brainstorm_client()
-    assistant_content = await client.chat(history, body.message, trip_id=trip_id)
+    assistant_content = await client.chat(
+        history, body.message, trip_id=trip_id, personas=current_user.personas
+    )
     assistant_msg = BrainstormMessage(
         trip_id=trip_id,
         user_id=current_user.id,
@@ -178,7 +180,7 @@ async def extract(
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
     client = get_brainstorm_client()
-    raw_items = await client.extract_items(history, trip_id=trip_id)
+    raw_items = await client.extract_items(history, trip_id=trip_id, personas=current_user.personas)
     raw_items = await enrich_items(raw_items)
 
     existing_stmt = select(BrainstormBinItem).where(

@@ -9,6 +9,13 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     name = Column(String)
     hashed_password = Column(String, nullable=True)
+    personas = Column(JSON, nullable=True, default=None)
+    avatar_url = Column(String, nullable=True)
+    home_city = Column(String, nullable=True)
+    timezone = Column(String, nullable=True)
+    currency = Column(String(8), nullable=True)
+    travel_blurb = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
     trips = relationship("TripMember", back_populates="user")
 
 class Trip(Base):

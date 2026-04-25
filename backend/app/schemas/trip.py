@@ -8,6 +8,7 @@ class UserInTrip(BaseModel):
     id: int
     name: str
     email: str
+    avatar_url: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
