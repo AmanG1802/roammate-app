@@ -55,8 +55,10 @@ async def test_ingest_creates_items_with_place(db_session, _seed_trip):
     with patch(
         "app.services.idea_bin.google_maps_service.find_place",
         new=AsyncMock(return_value={
-            "name": "Colosseum", "place_id": "c1",
-            "geometry": {"location": {"lat": 1.0, "lng": 2.0}},
+            # Places API (New) shape — see ``GoogleMapsService.find_place``.
+            "id": "c1",
+            "displayName": {"text": "Colosseum", "languageCode": "en"},
+            "location": {"latitude": 1.0, "longitude": 2.0},
         }),
     ):
         items = await idea_bin_service.ingest_from_text(

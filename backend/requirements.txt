@@ -15,6 +15,7 @@ langchain
 python-dotenv
 python-dateutil
 httpx
+cachetools
 celery
 redis
 pytest

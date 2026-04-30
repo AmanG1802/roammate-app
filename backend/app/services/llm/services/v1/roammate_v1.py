@@ -220,7 +220,9 @@ class RoammateServiceV1(BaseLLMService):
         try:
             data = json.loads(response.content)
             parsed = LLMExtractResponse(**data)
-            return [llm_item_to_brainstorm(item) for item in parsed.items]
+            # ``user_output`` is intentionally discarded — the persistence path
+            # only cares about ``map_output``.  See plan §"User-output persistence".
+            return [llm_item_to_brainstorm(item) for item in parsed.map_output]
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             log.warning("LLM extract parse failed (%s), using fallback", exc)
             return [dict(item) for item in BANGKOK_FALLBACK_ITEMS]
@@ -273,11 +275,13 @@ class RoammateServiceV1(BaseLLMService):
         try:
             data = json.loads(response.content)
             parsed = LLMPlanResponse(**data)
+            # ``user_output`` is discarded for persistence — the dashboard preview
+            # only needs the structured trip preview.  See plan §"User-output persistence".
             return {
                 "trip_name": parsed.trip_name,
                 "start_date": pre.start_date.isoformat() if pre.start_date else None,
                 "duration_days": parsed.duration_days,
-                "items": [llm_item_to_brainstorm(item) for item in parsed.items],
+                "items": [llm_item_to_brainstorm(item) for item in parsed.map_output],
             }
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             log.warning("LLM plan_trip parse failed (%s), using fallback", exc)

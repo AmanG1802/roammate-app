@@ -37,14 +37,28 @@ class LLMItem(BaseModel):
 
 
 class LLMExtractResponse(BaseModel):
-    """Schema for extract_items structured output."""
+    """Schema for extract_items structured output.
 
-    items: list[LLMItem]
+    The LLM returns both a short natural-language ``user_output`` (echoed
+    back to the user as a friendly confirmation) and a flat
+    ``map_output`` list of itinerary candidates.  Only ``map_output`` is
+    persisted — ``user_output`` is for the chat UI.
+    """
+
+    user_output: str = Field(default="", description="Short confirmation text for the user")
+    map_output: list[LLMItem] = Field(default_factory=list)
 
 
 class LLMPlanResponse(BaseModel):
-    """Schema for plan_trip structured output."""
+    """Schema for plan_trip structured output.
 
+    ``user_output`` is a short narrative blurb shown in the planner;
+    ``trip_name`` and ``duration_days`` are top-level fields used by the
+    create-trip flow; ``map_output`` is the iterable list of itinerary
+    items that downstream code enriches via Google Maps.
+    """
+
+    user_output: str = Field(default="", description="Narrative blurb for the user")
     trip_name: str
     duration_days: int = Field(ge=1)
-    items: list[LLMItem]
+    map_output: list[LLMItem] = Field(default_factory=list)

@@ -21,7 +21,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
+
+    # Google Maps
+    # GOOGLE_MAPS_MOCK=True forces MockGoogleMapsService everywhere; the real
+    # API key is only used when GOOGLE_MAPS_MOCK is False.
+    GOOGLE_MAPS_MOCK: bool = True
     GOOGLE_MAPS_API_KEY: Optional[str] = None
+    GOOGLE_MAPS_API_VERSION: str = "v1"   # "v1" (legacy) | "v2" (new)
 
     LLM_ENABLED: bool = False
     LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"

@@ -37,7 +37,7 @@ from app.schemas.trip import IdeaBinItem as IdeaBinItemSchema
 from app.services.roles import require_trip_member
 from app.services import notification_service
 from app.services.llm.registry import get_brainstorm_client
-from app.services.llm.place_enricher import enrich_items
+from app.services.google_maps import get_google_maps_service
 from app.services.llm.dedup import deduplicate
 from app.schemas.notification import NotificationType
 from app.core.time_categories import TIME_CATEGORY_DEFAULTS
@@ -181,7 +181,7 @@ async def extract(
 
     client = get_brainstorm_client()
     raw_items = await client.extract_items(history, trip_id=trip_id, personas=current_user.personas)
-    raw_items = await enrich_items(raw_items)
+    raw_items = await get_google_maps_service().enrich_items(raw_items)
 
     existing_stmt = select(BrainstormBinItem).where(
         BrainstormBinItem.trip_id == trip_id,
@@ -278,7 +278,7 @@ async def promote(
         if not getattr(src, "place_id", None)
     ]
     if unenriched:
-        enriched_dicts = await enrich_items(unenriched)
+        enriched_dicts = await get_google_maps_service().enrich_items(unenriched)
         _enriched_by_title = {d["title"]: d for d in enriched_dicts}
         for src in sources:
             if not getattr(src, "place_id", None) and src.title in _enriched_by_title:

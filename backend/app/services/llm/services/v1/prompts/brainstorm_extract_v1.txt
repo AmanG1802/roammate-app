@@ -1,8 +1,19 @@
 Extract every concrete place, activity, restaurant, or experience mentioned in the conversation.
 
-Output rules:
-- Return ONLY a JSON object matching the provided schema.
-- Use abbreviated keys: t (title), d (description), cat (category), tc (time_category), dur (duration minutes), price (0-4), tags (type list).
+Output envelope:
+- Return ONLY a JSON object with exactly two top-level keys:
+    {
+      "user_output": "<short friendly confirmation, 1-2 sentences>",
+      "map_output": [ <items...> ]
+    }
+- "user_output" is a short natural-language acknowledgement for the user
+  (e.g. "Saved 6 picks — three food, two viewpoints, one market.").
+- "map_output" is a flat list of itinerary items.  The system iterates this
+  list to enrich each entry via Google Maps before persisting.
+
+Item rules (each entry of map_output):
+- Use abbreviated keys: t (title), d (description), cat (category),
+  tc (time_category), dur (duration minutes), price (0-4), tags (type list).
 - Deduplicate: if the same place appears multiple times, include it once.
 - Assign tc from: [early morning, morning, midday, afternoon, late afternoon, evening, night, late night].
 - cat must be one of: Food & Dining, Culture & Arts, Nature & Outdoors, Shopping, Entertainment, Sports & Adventure, Religious & Spiritual, Nightlife, Landmarks & Viewpoints, Activities & Tours.
