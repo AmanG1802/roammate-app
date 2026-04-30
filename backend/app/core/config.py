@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_MOCK: bool = True
     GOOGLE_MAPS_API_KEY: Optional[str] = None
     GOOGLE_MAPS_API_VERSION: str = "v1"   # "v1" (legacy) | "v2" (new)
+    GOOGLE_MAPS_FETCH_PHOTOS: bool = True
+    GOOGLE_MAPS_FETCH_RATING: bool = True
 
     LLM_ENABLED: bool = False
     LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"

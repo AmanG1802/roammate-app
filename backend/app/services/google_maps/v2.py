@@ -18,6 +18,7 @@ from typing import Any, Optional
 
 import httpx
 
+from app.core.config import settings
 from app.services.google_maps import cache as gmap_cache
 from app.services.google_maps.base import BaseMapService, RoutePoint
 from app.services.google_maps.breaker import breaker
@@ -36,9 +37,17 @@ _SEARCH_TEXT_FIELD_MASK = (
     "places.id,places.displayName,places.formattedAddress,"
     "places.location,places.types"
 )
-_PLACE_DETAILS_FIELD_MASK = (
-    "id,displayName,formattedAddress,location,rating,priceLevel,types,photos"
-)
+_PLACE_DETAILS_FIELD_MASK_BASE = "id,displayName,formattedAddress,location,types"
+
+
+def _build_details_field_mask() -> str:
+    """Build the Place Details field mask based on feature flags."""
+    parts = [_PLACE_DETAILS_FIELD_MASK_BASE]
+    if settings.GOOGLE_MAPS_FETCH_RATING:
+        parts.append("rating,priceLevel")
+    if settings.GOOGLE_MAPS_FETCH_PHOTOS:
+        parts.append("photos")
+    return ",".join(parts)
 _ROUTES_FIELD_MASK = (
     "routes.duration,routes.distanceMeters,"
     "routes.polyline.encodedPolyline,"
@@ -173,8 +182,10 @@ class MapServiceV2(BaseMapService):
         if not place_id:
             return None
 
+        field_mask = _build_details_field_mask()
+
         cached, state = await gmap_cache.get_place_details(
-            place_id, _PLACE_DETAILS_FIELD_MASK
+            place_id, field_mask
         )
         if cached is not gmap_cache.MISS:
             track_call(
@@ -199,7 +210,7 @@ class MapServiceV2(BaseMapService):
         url = _PLACE_DETAILS_URL.format(place_id=place_id)
         headers = {
             "X-Goog-Api-Key": self.api_key or "",
-            "X-Goog-FieldMask": _PLACE_DETAILS_FIELD_MASK,
+            "X-Goog-FieldMask": field_mask,
         }
         try:
             if client is not None:
@@ -248,7 +259,7 @@ class MapServiceV2(BaseMapService):
         await breaker.record_success()
         result = data
         await gmap_cache.set_place_details(
-            place_id, _PLACE_DETAILS_FIELD_MASK, result
+            place_id, field_mask, result
         )
         track_call(
             op="place_details",
@@ -287,19 +298,20 @@ class MapServiceV2(BaseMapService):
         if address:
             item["address"] = address
 
-        rating = details.get("rating")
-        if rating is not None:
-            item["rating"] = rating
+        if settings.GOOGLE_MAPS_FETCH_RATING:
+            rating = details.get("rating")
+            if rating is not None:
+                item["rating"] = rating
+            price_enum = details.get("priceLevel")
+            if isinstance(price_enum, str):
+                mapped = _PRICE_LEVEL_ENUM_TO_INT.get(price_enum)
+                if mapped is not None:
+                    item["price_level"] = mapped
 
-        price_enum = details.get("priceLevel")
-        if isinstance(price_enum, str):
-            mapped = _PRICE_LEVEL_ENUM_TO_INT.get(price_enum)
-            if mapped is not None:
-                item["price_level"] = mapped
-
-        photos = details.get("photos") or []
-        if photos and photos[0].get("name"):
-            item["photo_url"] = self.photo_url(photos[0]["name"])
+        if settings.GOOGLE_MAPS_FETCH_PHOTOS:
+            photos = details.get("photos") or []
+            if photos and photos[0].get("name"):
+                item["photo_url"] = self.photo_url(photos[0]["name"])
 
         gtypes = details.get("types") or []
         if gtypes and not item.get("types"):

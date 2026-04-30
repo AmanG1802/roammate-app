@@ -52,6 +52,11 @@ function timeValueToHint(val: string): string | null {
   return m === 0 ? `${h}${ampm}` : `${h}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
+const SHOW_PHOTOS =
+  (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_PHOTOS ?? 'true').toLowerCase() === 'true';
+const SHOW_RATING =
+  (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_RATING ?? 'true').toLowerCase() === 'true';
+
 export default function IdeaBin({ tripId, readOnly = false, canVote = false }: { tripId: string | null; readOnly?: boolean; canVote?: boolean }) {
   const [inputText, setInputText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
@@ -312,7 +317,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                       <Info className="w-3 h-3" />
                     </button>
                   </div>
-                  {extras[idea.id]?.rating != null && (
+                  {SHOW_RATING && extras[idea.id]?.rating != null && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
                       <Star className="w-2.5 h-2.5 text-amber-400" /> {extras[idea.id]!.rating}
                     </span>
@@ -428,7 +433,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {ex.photo_url && (
+                  {SHOW_PHOTOS && ex.photo_url && (
                     <img
                       src={ex.photo_url}
                       alt=""
@@ -436,7 +441,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                     />
                   )}
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {ex.rating != null && (
+                    {SHOW_RATING && ex.rating != null && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
                         <Star className="w-2.5 h-2.5 text-amber-400" /> {ex.rating}
                       </span>
@@ -455,7 +460,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                   {ex.description && (
                     <p className="text-[11px] font-medium text-slate-500 leading-relaxed">{ex.description}</p>
                   )}
-                  {!ex.photo_url && !ex.description && !ex.address && (
+                  {(!SHOW_PHOTOS || !ex.photo_url) && !ex.description && !ex.address && (
                     <p className="text-[11px] font-medium text-slate-400 italic">No additional details available.</p>
                   )}
                 </div>

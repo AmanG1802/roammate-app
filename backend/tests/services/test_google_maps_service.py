@@ -379,3 +379,150 @@ async def test_factory_falls_back_to_mock_when_key_missing(monkeypatch):
     svc = get_google_maps_service()
     assert isinstance(svc, MockMapService)
     gmap_pkg.get_google_maps_service.cache_clear()
+
+
+# ── Feature flags (FETCH_PHOTOS / FETCH_RATING) ─────────────────────────────
+
+
+async def test_v1_apply_details_skips_rating_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_RATING", False)
+    svc = MapServiceV1(api_key="test-key")
+    item: dict = {"title": "Foo"}
+    details = {
+        "place_id": "p1",
+        "geometry": {"location": {"lat": 10.0, "lng": 20.0}},
+        "formatted_address": "Addr",
+        "rating": 4.5,
+        "price_level": 2,
+        "photos": [{"photo_reference": "ref_abc"}],
+        "types": ["bar"],
+    }
+    svc._apply_details(item, details)
+    assert item["place_id"] == "p1"
+    assert item["lat"] == 10.0
+    assert "rating" not in item
+    assert "price_level" not in item
+    assert "photo_url" in item
+
+
+async def test_v1_apply_details_skips_photos_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_PHOTOS", False)
+    svc = MapServiceV1(api_key="test-key")
+    item: dict = {"title": "Foo"}
+    details = {
+        "place_id": "p1",
+        "geometry": {"location": {"lat": 10.0, "lng": 20.0}},
+        "formatted_address": "Addr",
+        "rating": 4.5,
+        "price_level": 2,
+        "photos": [{"photo_reference": "ref_abc"}],
+        "types": ["bar"],
+    }
+    svc._apply_details(item, details)
+    assert "photo_url" not in item
+    assert item["rating"] == 4.5
+    assert item["price_level"] == 2
+
+
+async def test_v1_detail_fields_exclude_rating_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_RATING", False)
+    from app.services.google_maps.v1 import _build_detail_fields
+    fields = _build_detail_fields()
+    assert "rating" not in fields
+    assert "price_level" not in fields
+    assert "types" in fields
+
+
+async def test_v1_detail_fields_exclude_photos_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_PHOTOS", False)
+    from app.services.google_maps.v1 import _build_detail_fields
+    fields = _build_detail_fields()
+    assert "photos" not in fields
+    assert "types" in fields
+
+
+async def test_v2_apply_details_skips_rating_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_RATING", False)
+    svc = MapServiceV2(api_key="test-key")
+    item: dict = {"title": "Foo"}
+    details = {
+        "id": "p1",
+        "location": {"latitude": 10.0, "longitude": 20.0},
+        "formattedAddress": "Addr",
+        "rating": 4.5,
+        "priceLevel": "PRICE_LEVEL_EXPENSIVE",
+        "photos": [{"name": "places/p1/photos/abc"}],
+        "types": ["bar"],
+    }
+    svc._apply_details(item, details)
+    assert item["place_id"] == "p1"
+    assert "rating" not in item
+    assert "price_level" not in item
+    assert "photo_url" in item
+
+
+async def test_v2_apply_details_skips_photos_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_PHOTOS", False)
+    svc = MapServiceV2(api_key="test-key")
+    item: dict = {"title": "Foo"}
+    details = {
+        "id": "p1",
+        "location": {"latitude": 10.0, "longitude": 20.0},
+        "formattedAddress": "Addr",
+        "rating": 4.5,
+        "priceLevel": "PRICE_LEVEL_EXPENSIVE",
+        "photos": [{"name": "places/p1/photos/abc"}],
+        "types": ["bar"],
+    }
+    svc._apply_details(item, details)
+    assert "photo_url" not in item
+    assert item["rating"] == 4.5
+    assert item["price_level"] == 3
+
+
+async def test_v2_field_mask_excludes_rating_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_RATING", False)
+    from app.services.google_maps.v2 import _build_details_field_mask
+    mask = _build_details_field_mask()
+    assert "rating" not in mask
+    assert "priceLevel" not in mask
+    assert "types" in mask
+
+
+async def test_v2_field_mask_excludes_photos_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_PHOTOS", False)
+    from app.services.google_maps.v2 import _build_details_field_mask
+    mask = _build_details_field_mask()
+    assert "photos" not in mask
+    assert "types" in mask
+
+
+async def test_v2_field_mask_both_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_PHOTOS", False)
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_RATING", False)
+    from app.services.google_maps.v2 import _build_details_field_mask
+    mask = _build_details_field_mask()
+    assert "photos" not in mask
+    assert "rating" not in mask
+    assert "priceLevel" not in mask
+    assert "id" in mask
+    assert "types" in mask
+
+
+async def test_mock_apply_details_skips_rating_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_RATING", False)
+    svc = MockMapService()
+    items = [{"title": "Wat Pho"}]
+    enriched = await svc.enrich_items(items)
+    assert enriched[0]["place_id"] is not None
+    assert "rating" not in enriched[0]
+    assert "price_level" not in enriched[0]
+
+
+async def test_mock_apply_details_skips_photos_when_flag_off(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GOOGLE_MAPS_FETCH_PHOTOS", False)
+    svc = MockMapService()
+    items = [{"title": "Wat Pho"}]
+    enriched = await svc.enrich_items(items)
+    assert enriched[0]["place_id"] is not None
+    assert "photo_url" not in enriched[0]

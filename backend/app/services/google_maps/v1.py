@@ -18,6 +18,7 @@ from typing import Any, Optional
 
 import httpx
 
+from app.core.config import settings
 from app.services.google_maps import cache as gmap_cache
 from app.services.google_maps.base import BaseMapService, RoutePoint
 from app.services.google_maps.breaker import breaker
@@ -31,12 +32,18 @@ _PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 _DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
 _PHOTO_BASE = "https://maps.googleapis.com/maps/api/place/photo"
 
-# Kept lean: no opening_hours, formatted_phone_number, website.
 _FIND_FIELDS = "place_id,name,geometry,formatted_address"
-_DETAIL_FIELDS = (
-    "place_id,name,geometry,formatted_address,rating,"
-    "price_level,photos,types"
-)
+_DETAIL_FIELDS_BASE = "place_id,name,geometry,formatted_address,types"
+
+
+def _build_detail_fields() -> str:
+    """Build the Place Details fields string based on feature flags."""
+    parts = [_DETAIL_FIELDS_BASE]
+    if settings.GOOGLE_MAPS_FETCH_RATING:
+        parts.append("rating,price_level")
+    if settings.GOOGLE_MAPS_FETCH_PHOTOS:
+        parts.append("photos")
+    return ",".join(parts)
 
 
 class MapServiceV1(BaseMapService):
@@ -147,7 +154,9 @@ class MapServiceV1(BaseMapService):
         if not place_id:
             return None
 
-        cached, state = await gmap_cache.get_place_details(place_id, _DETAIL_FIELDS)
+        detail_fields = _build_detail_fields()
+
+        cached, state = await gmap_cache.get_place_details(place_id, detail_fields)
         if cached is not gmap_cache.MISS:
             track_call(
                 op="place_details",
@@ -170,7 +179,7 @@ class MapServiceV1(BaseMapService):
         t0 = time.monotonic()
         params = {
             "place_id": place_id,
-            "fields": _DETAIL_FIELDS,
+            "fields": detail_fields,
             "key": self.api_key,
         }
         try:
@@ -212,7 +221,7 @@ class MapServiceV1(BaseMapService):
 
         await breaker.record_success()
         result = data.get("result")
-        await gmap_cache.set_place_details(place_id, _DETAIL_FIELDS, result)
+        await gmap_cache.set_place_details(place_id, detail_fields, result)
         track_call(
             op="place_details",
             status="ok" if result else "zero_results",
@@ -241,17 +250,19 @@ class MapServiceV1(BaseMapService):
         item["lat"] = geo.get("lat")
         item["lng"] = geo.get("lng")
         item["address"] = details.get("formatted_address")
-        item["rating"] = details.get("rating")
 
-        price = details.get("price_level")
-        if price is not None:
-            item["price_level"] = price
+        if settings.GOOGLE_MAPS_FETCH_RATING:
+            item["rating"] = details.get("rating")
+            price = details.get("price_level")
+            if price is not None:
+                item["price_level"] = price
 
-        photos = details.get("photos") or []
-        if photos:
-            ref = photos[0].get("photo_reference")
-            if ref:
-                item["photo_url"] = self.photo_url(ref)
+        if settings.GOOGLE_MAPS_FETCH_PHOTOS:
+            photos = details.get("photos") or []
+            if photos:
+                ref = photos[0].get("photo_reference")
+                if ref:
+                    item["photo_url"] = self.photo_url(ref)
 
         gtypes = details.get("types") or []
         if gtypes and not item.get("types"):
