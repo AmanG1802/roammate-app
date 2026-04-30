@@ -22,7 +22,6 @@ from app.core.config import settings
 from app.services.google_maps import cache as gmap_cache
 from app.services.google_maps.base import BaseMapService, RoutePoint
 from app.services.google_maps.breaker import breaker
-from app.services.google_maps.tracker import track_call
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ class MapServiceV2(BaseMapService):
 
         cached, state = await gmap_cache.get_find_place(query)
         if cached is not gmap_cache.MISS:
-            track_call(
+            self._track(
                 op="find_place",
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
@@ -94,7 +93,7 @@ class MapServiceV2(BaseMapService):
             return cached
 
         if not await breaker.allow():
-            track_call(
+            self._track(
                 op="find_place",
                 status="circuit_open",
                 breaker_state="open",
@@ -131,7 +130,7 @@ class MapServiceV2(BaseMapService):
                     )
         except Exception as exc:
             await breaker.record_failure()
-            track_call(
+            self._track(
                 op="find_place",
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
@@ -144,7 +143,7 @@ class MapServiceV2(BaseMapService):
         latency_ms = int((time.monotonic() - t0) * 1000)
         if data is None:
             await breaker.record_failure()
-            track_call(
+            self._track(
                 op="find_place",
                 status="error",
                 latency_ms=latency_ms,
@@ -159,7 +158,7 @@ class MapServiceV2(BaseMapService):
         places = data.get("places") or []
         candidate = places[0] if places else None
         await gmap_cache.set_find_place(query, candidate)
-        track_call(
+        self._track(
             op="find_place",
             status="ok" if candidate else "zero_results",
             latency_ms=latency_ms,
@@ -188,7 +187,7 @@ class MapServiceV2(BaseMapService):
             place_id, field_mask
         )
         if cached is not gmap_cache.MISS:
-            track_call(
+            self._track(
                 op="place_details",
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
@@ -198,7 +197,7 @@ class MapServiceV2(BaseMapService):
             return cached
 
         if not await breaker.allow():
-            track_call(
+            self._track(
                 op="place_details",
                 status="circuit_open",
                 breaker_state="open",
@@ -232,7 +231,7 @@ class MapServiceV2(BaseMapService):
                     )
         except Exception as exc:
             await breaker.record_failure()
-            track_call(
+            self._track(
                 op="place_details",
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
@@ -245,7 +244,7 @@ class MapServiceV2(BaseMapService):
         latency_ms = int((time.monotonic() - t0) * 1000)
         if data is None or not data.get("id"):
             await breaker.record_failure()
-            track_call(
+            self._track(
                 op="place_details",
                 status="error",
                 latency_ms=latency_ms,
@@ -261,7 +260,7 @@ class MapServiceV2(BaseMapService):
         await gmap_cache.set_place_details(
             place_id, field_mask, result
         )
-        track_call(
+        self._track(
             op="place_details",
             status="ok" if result else "zero_results",
             latency_ms=latency_ms,

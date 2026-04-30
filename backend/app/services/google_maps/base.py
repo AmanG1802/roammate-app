@@ -141,6 +141,14 @@ class BaseMapService(abc.ABC):
     def __init__(self, api_key: Optional[str], *, _mock: bool = False) -> None:
         self.api_key = api_key
         self._is_mock = _mock
+        self._current_user_id: Optional[int] = None
+        self._current_trip_id: Optional[int] = None
+
+    def _track(self, **kwargs: Any) -> None:
+        """Wrapper around track_call that injects current user/trip context."""
+        kwargs.setdefault("user_id", self._current_user_id)
+        kwargs.setdefault("trip_id", self._current_trip_id)
+        track_call(**kwargs)
 
     # ── HTTP plumbing ────────────────────────────────────────────────────
 
@@ -285,14 +293,22 @@ class BaseMapService(abc.ABC):
             log.warning("enrich_item failed for %r", title, exc_info=True)
         return item
 
-    async def enrich_items(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def enrich_items(
+        self,
+        items: list[dict[str, Any]],
+        *,
+        user_id: Optional[int] = None,
+        trip_id: Optional[int] = None,
+    ) -> list[dict[str, Any]]:
         """Parallel hydration with bounded concurrency."""
         if not items:
             return items
         if not self._is_mock and not self.api_key:
-            track_call(op="enrich_batch", status="no_api_key", batch_size=len(items))
+            track_call(op="enrich_batch", status="no_api_key", batch_size=len(items), user_id=user_id, trip_id=trip_id)
             return items
 
+        self._current_user_id = user_id
+        self._current_trip_id = trip_id
         sem = asyncio.Semaphore(ENRICH_CONCURRENCY)
         t0 = time.monotonic()
 
@@ -314,7 +330,11 @@ class BaseMapService(abc.ABC):
             enriched_count=enriched,
             skipped_count=len(items) - enriched,
             breaker_state=breaker.state,
+            user_id=user_id,
+            trip_id=trip_id,
         )
+        self._current_user_id = None
+        self._current_trip_id = None
         return list(results)
 
     # ── Directions (shared cache + breaker + tracker) ────────────────────
@@ -322,6 +342,9 @@ class BaseMapService(abc.ABC):
     async def directions(
         self,
         waypoints: list[RoutePoint],
+        *,
+        user_id: Optional[int] = None,
+        trip_id: Optional[int] = None,
     ) -> Optional[RouteResult]:
         """Compute a driving route through the given waypoints."""
         if len(waypoints) < 2:
@@ -340,6 +363,8 @@ class BaseMapService(abc.ABC):
                 latency_ms=0,
                 cache_state=state,
                 waypoint_count=len(waypoints),
+                user_id=user_id,
+                trip_id=trip_id,
             )
             return route_from_dict(cached) if cached else None
 
@@ -349,6 +374,8 @@ class BaseMapService(abc.ABC):
                 status="circuit_open",
                 breaker_state="open",
                 waypoint_count=len(waypoints),
+                user_id=user_id,
+                trip_id=trip_id,
             )
             return None
 
@@ -364,6 +391,8 @@ class BaseMapService(abc.ABC):
                 error_class=exc.__class__.__name__,
                 waypoint_count=len(waypoints),
                 breaker_state=breaker.state,
+                user_id=user_id,
+                trip_id=trip_id,
             )
             return None
 
@@ -378,5 +407,7 @@ class BaseMapService(abc.ABC):
             total_distance_m=data.get("total_distance_m"),
             total_duration_s=data.get("total_duration_s"),
             cache_state="miss",
+            user_id=user_id,
+            trip_id=trip_id,
         )
         return route_from_dict(data)

@@ -23,8 +23,8 @@ async def plan_trip(
     cleanly if the circuit breaker is open.
     """
     client = get_dashboard_client()
-    result = await client.plan_trip(body.prompt)
-    enriched_items = await get_google_maps_service().enrich_items(result["items"])
+    result = await client.plan_trip(body.prompt, user_id=current_user.id)
+    enriched_items = await get_google_maps_service().enrich_items(result["items"], user_id=current_user.id)
     return PlanTripResponse(
         trip_name=result["trip_name"],
         start_date=result.get("start_date"),

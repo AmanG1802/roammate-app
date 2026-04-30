@@ -6,12 +6,43 @@ Phase 3: add Postgres ``token_usage`` table for dashboards and quotas.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Optional
 
 from app.services.llm.models.base import LLMResponse
 
 log = logging.getLogger("roammate.tokens")
+
+
+async def _persist_token_usage(record: dict[str, Any]) -> None:
+    """Fire-and-forget DB write — failures are logged, never raised."""
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.models.all_models import TokenUsage
+        from app.services.admin_costs import compute_token_cost
+
+        cost = compute_token_cost(
+            record["provider"], record["model"],
+            record["tokens_in"], record["tokens_out"],
+        )
+        row = TokenUsage(
+            user_id=record.get("user_id"),
+            trip_id=record.get("trip_id"),
+            op=record["op"],
+            provider=record["provider"],
+            model=record["model"],
+            tokens_in=record["tokens_in"],
+            tokens_out=record["tokens_out"],
+            tokens_total=record["tokens_total"],
+            source=record.get("source"),
+            cost_usd=cost,
+        )
+        async with AsyncSessionLocal() as session:
+            session.add(row)
+            await session.commit()
+    except Exception:
+        log.warning("_persist_token_usage failed", exc_info=True)
 
 
 def track(
@@ -46,3 +77,8 @@ def track(
         fields.update(extra)
 
     log.info("token_usage %s", " ".join(f"{k}={v}" for k, v in fields.items()))
+
+    try:
+        asyncio.create_task(_persist_token_usage(fields))
+    except RuntimeError:
+        pass

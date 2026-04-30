@@ -15,6 +15,7 @@ daily budget caps and per-trip cost attribution.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from typing import Any, Optional
@@ -27,6 +28,36 @@ def _hash_query(query: Optional[str]) -> Optional[str]:
     if not query:
         return None
     return hashlib.sha1(query.strip().casefold().encode("utf-8")).hexdigest()[:10]
+
+
+async def _persist_maps_usage(record: dict[str, Any]) -> None:
+    """Fire-and-forget DB write — failures are logged, never raised."""
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.models.all_models import GoogleMapsApiUsage
+        from app.services.admin_costs import compute_maps_cost
+
+        cost = compute_maps_cost(record["op"], record.get("cache_state"))
+        row = GoogleMapsApiUsage(
+            user_id=record.get("user_id"),
+            trip_id=record.get("trip_id"),
+            op=record["op"],
+            status=record["status"],
+            latency_ms=record.get("latency_ms"),
+            attempts=record.get("attempts"),
+            cache_state=record.get("cache_state"),
+            breaker_state=record.get("breaker_state"),
+            http_status=record.get("http_status"),
+            error_class=record.get("error_class"),
+            batch_size=record.get("batch_size"),
+            enriched_count=record.get("enriched_count"),
+            cost_usd=cost,
+        )
+        async with AsyncSessionLocal() as session:
+            session.add(row)
+            await session.commit()
+    except Exception:
+        log.warning("_persist_maps_usage failed", exc_info=True)
 
 
 def track_call(
@@ -47,6 +78,8 @@ def track_call(
     batch_size: Optional[int] = None,
     enriched_count: Optional[int] = None,
     skipped_count: Optional[int] = None,
+    user_id: Optional[int] = None,
+    trip_id: Optional[int] = None,
     extra: dict[str, Any] | None = None,
 ) -> None:
     """Emit one structured log line for a Google Maps interaction."""
@@ -81,7 +114,16 @@ def track_call(
         fields["enriched_count"] = enriched_count
     if skipped_count is not None:
         fields["skipped_count"] = skipped_count
+    if user_id is not None:
+        fields["user_id"] = user_id
+    if trip_id is not None:
+        fields["trip_id"] = trip_id
     if extra:
         fields.update(extra)
 
     log.info("google_api %s", " ".join(f"{k}={v}" for k, v in fields.items()))
+
+    try:
+        asyncio.create_task(_persist_maps_usage(fields))
+    except RuntimeError:
+        pass

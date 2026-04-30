@@ -14,11 +14,14 @@ class BrainstormChatClient(BaseLLMClient):
         history: list[dict[str, str]],
         user_message: str,
         trip_id: int | None = None,
+        user_id: int | None = None,
         personas: list[str] | None = None,
     ) -> str:
         context: dict[str, Any] = {"source": "brainstorm"}
         if trip_id is not None:
             context["trip_id"] = trip_id
+        if user_id is not None:
+            context["user_id"] = user_id
         if personas is not None:
             context["personas"] = personas
         return await self._service.chat(history, user_message, context=context)
@@ -27,11 +30,14 @@ class BrainstormChatClient(BaseLLMClient):
         self,
         history: list[dict[str, str]],
         trip_id: int | None = None,
+        user_id: int | None = None,
         personas: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         context: dict[str, Any] = {"source": "brainstorm"}
         if trip_id is not None:
             context["trip_id"] = trip_id
+        if user_id is not None:
+            context["user_id"] = user_id
         if personas is not None:
             context["personas"] = personas
         return await self._service.extract_items(history, context=context)

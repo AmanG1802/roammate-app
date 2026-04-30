@@ -18,8 +18,11 @@ class ConciergeChatClient(BaseLLMClient):
         history: list[dict[str, str]],
         user_message: str,
         trip_context: dict[str, Any] | None = None,
+        user_id: int | None = None,
     ) -> str:
         context: dict[str, Any] = {"source": "concierge"}
+        if user_id is not None:
+            context["user_id"] = user_id
         if trip_context:
             context.update(trip_context)
         return await self._service.chat(history, user_message, context=context)

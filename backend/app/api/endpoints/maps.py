@@ -162,7 +162,7 @@ async def compute_route(
         for e in routable
     ]
     service = get_google_maps_service()
-    route = await service.directions(waypoints)
+    route = await service.directions(waypoints, user_id=current_user.id, trip_id=trip_id)
     if route is None:
         return RouteResponse(
             ordered_event_ids=[str(e.id) for e in routable],

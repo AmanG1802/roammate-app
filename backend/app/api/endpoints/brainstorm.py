@@ -139,7 +139,7 @@ async def chat(
 
     client = get_brainstorm_client()
     assistant_content = await client.chat(
-        history, body.message, trip_id=trip_id, personas=current_user.personas
+        history, body.message, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas
     )
     assistant_msg = BrainstormMessage(
         trip_id=trip_id,
@@ -180,8 +180,8 @@ async def extract(
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
     client = get_brainstorm_client()
-    raw_items = await client.extract_items(history, trip_id=trip_id, personas=current_user.personas)
-    raw_items = await get_google_maps_service().enrich_items(raw_items)
+    raw_items = await client.extract_items(history, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas)
+    raw_items = await get_google_maps_service().enrich_items(raw_items, user_id=current_user.id, trip_id=trip_id)
 
     existing_stmt = select(BrainstormBinItem).where(
         BrainstormBinItem.trip_id == trip_id,

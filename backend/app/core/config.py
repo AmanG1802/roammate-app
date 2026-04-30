@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS_EXTRACT: int = 3000
     LLM_MAX_TOKENS_PLAN: int = 4000
 
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "password@123"
+    ADMIN_TOKEN_EXPIRE_HOURS: int = 4
+
     REDIS_URL: str = "redis://redis:6379/0"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
