@@ -10,9 +10,10 @@ async def test_ingest_success(client: AsyncClient, auth_headers):
     with patch(
         "app.services.idea_bin.google_maps_service.find_place",
         new=AsyncMock(return_value={
-            "name": "Colosseum",
-            "place_id": "c1",
-            "geometry": {"location": {"lat": 41.89, "lng": 12.49}},
+            # Places API (New) shape returned by ``find_place``.
+            "id": "c1",
+            "displayName": {"text": "Colosseum", "languageCode": "en"},
+            "location": {"latitude": 41.89, "longitude": 12.49},
         }),
     ):
         resp = await client.post(

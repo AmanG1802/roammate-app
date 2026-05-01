@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index, Numeric
 from datetime import datetime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -9,6 +9,13 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     name = Column(String)
     hashed_password = Column(String, nullable=True)
+    personas = Column(JSON, nullable=True, default=None)
+    avatar_url = Column(String, nullable=True)
+    home_city = Column(String, nullable=True)
+    timezone = Column(String, nullable=True)
+    currency = Column(String(8), nullable=True)
+    travel_blurb = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
     trips = relationship("TripMember", back_populates="user")
 
 class Trip(Base):
@@ -223,3 +230,40 @@ class Event(Base):
     time_category = Column(String, nullable=True)
 
     trip = relationship("Trip", back_populates="events")
+
+
+class TokenUsage(Base):
+    __tablename__ = "token_usage"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    trip_id = Column(Integer, ForeignKey("trip.id", ondelete="SET NULL"), nullable=True)
+    op = Column(String, nullable=False)
+    provider = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    tokens_in = Column(Integer, nullable=False)
+    tokens_out = Column(Integer, nullable=False)
+    tokens_total = Column(Integer, nullable=False)
+    source = Column(String, nullable=True)
+    cost_usd = Column(Numeric(10, 6), default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class GoogleMapsApiUsage(Base):
+    __tablename__ = "google_maps_api_usage"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    trip_id = Column(Integer, ForeignKey("trip.id", ondelete="SET NULL"), nullable=True)
+    op = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    latency_ms = Column(Integer, nullable=True)
+    attempts = Column(Integer, nullable=True)
+    cache_state = Column(String, nullable=True)
+    breaker_state = Column(String, nullable=True)
+    http_status = Column(Integer, nullable=True)
+    error_class = Column(String, nullable=True)
+    batch_size = Column(Integer, nullable=True)
+    enriched_count = Column(Integer, nullable=True)
+    cost_usd = Column(Numeric(10, 6), default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

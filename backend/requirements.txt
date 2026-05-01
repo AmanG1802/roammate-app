@@ -9,9 +9,13 @@ alembic
 python-jose[cryptography]
 bcrypt
 openai
+anthropic
+google-genai
 langchain
 python-dotenv
+python-dateutil
 httpx
+cachetools
 celery
 redis
 pytest

@@ -500,7 +500,7 @@ export default function TripPlannerPage() {
               </div>
               {/* Map */}
               <div className="flex-1 relative">
-                <GoogleMap />
+                <GoogleMap filterDay={planDay ?? undefined} tripId={tripId} />
               </div>
               {/* Idea Bin */}
               <div className="w-80 shrink-0 border-l border-slate-100 bg-white overflow-hidden flex flex-col">
@@ -546,7 +546,7 @@ export default function TripPlannerPage() {
 
               {/* Map + optional concierge overlay */}
               <div className="flex-1 relative">
-                <GoogleMap />
+                <GoogleMap filterDay={liveDay ?? undefined} tripId={tripId} />
                 {isCurrentDay && currentUserIsAdmin && (
                   <ConciergeActionBar />
                 )}
@@ -663,11 +663,14 @@ export default function TripPlannerPage() {
                         >
                           {/* Avatar */}
                           <div
-                            className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-sm text-white shrink-0 ${
+                            className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-sm text-white shrink-0 overflow-hidden ${
                               isInvited ? 'bg-slate-300' : 'bg-indigo-600'
                             }`}
                           >
-                            {initials || '?'}
+                            {member.user?.avatar_url
+                              ? <img src={member.user.avatar_url} alt={name} className="w-full h-full object-cover" />
+                              : initials || '?'
+                            }
                           </div>
 
                           {/* Name + email */}

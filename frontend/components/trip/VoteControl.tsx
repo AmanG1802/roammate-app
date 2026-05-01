@@ -6,7 +6,7 @@ import { ThumbsUp, ThumbsDown } from 'lucide-react';
 type Kind = 'idea' | 'event';
 
 type Tally = { up: number; down: number; my_vote: number };
-type VoterList = { up_voters: { name: string }[]; down_voters: { name: string }[] };
+type VoterList = { up_voters: { name: string; avatar_url?: string | null }[]; down_voters: { name: string; avatar_url?: string | null }[] };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -49,20 +49,23 @@ function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function VoterPopup({ names }: { names: string[] }) {
-  if (names.length === 0) return null;
-  const shown = names.length <= 4 ? names : names.slice(0, 3);
-  const extra = names.length <= 4 ? 0 : names.length - 3;
+function VoterPopup({ voters }: { voters: { name: string; avatar_url?: string | null }[] }) {
+  if (voters.length === 0) return null;
+  const shown = voters.length <= 4 ? voters : voters.slice(0, 3);
+  const extra = voters.length <= 4 ? 0 : voters.length - 3;
   return (
     <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 pointer-events-none">
       <div className="bg-white border border-slate-200 rounded-full shadow-lg px-1.5 py-1 flex items-center gap-1">
-        {shown.map((n, i) => (
+        {shown.map((v, i) => (
           <div
             key={i}
-            title={n}
-            className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-black flex items-center justify-center"
+            title={v.name}
+            className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-black flex items-center justify-center overflow-hidden shrink-0"
           >
-            {initialsOf(n)}
+            {v.avatar_url
+              ? <img src={v.avatar_url} alt={v.name} className="w-full h-full object-cover" />
+              : initialsOf(v.name)
+            }
           </div>
         ))}
         {extra > 0 && (
@@ -199,7 +202,7 @@ export default function VoteControl({
           <AnimatedCount value={tally.up} />
         </button>
         {hoverUp && voters && voters.up_voters.length > 0 && (
-          <VoterPopup names={voters.up_voters.map(v => v.name)} />
+          <VoterPopup voters={voters.up_voters} />
         )}
       </div>
       <div
@@ -222,7 +225,7 @@ export default function VoteControl({
           <AnimatedCount value={tally.down} />
         </button>
         {hoverDown && voters && voters.down_voters.length > 0 && (
-          <VoterPopup names={voters.down_voters.map(v => v.name)} />
+          <VoterPopup voters={voters.down_voters} />
         )}
       </div>
     </div>

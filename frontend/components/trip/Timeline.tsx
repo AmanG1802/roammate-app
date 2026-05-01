@@ -8,6 +8,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 import { categoryAccent } from '@/lib/categoryColors';
 
+const SHOW_PHOTOS =
+  (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_PHOTOS ?? 'true').toLowerCase() === 'true';
+const SHOW_RATING =
+  (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_RATING ?? 'true').toLowerCase() === 'true';
+
 interface TimelineProps {
   tripId: string | null;
   /** When set (Concierge mode), only events on this day are shown. */
@@ -280,7 +285,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
               const isDragTarget = dragOverId === event.id;
               const isTooltipOpen = tooltipId === event.id;
               const accent = categoryAccent(event.category);
-              const hasDetails = !!(event.description || event.photo_url || event.rating != null || event.address || event.end_time);
+              const hasDetails = !!(event.description || (SHOW_PHOTOS && event.photo_url) || (SHOW_RATING && event.rating != null) || event.address || event.end_time);
 
               return (
                 <motion.div
@@ -402,7 +407,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                           className="overflow-hidden"
                         >
                           <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                            {event.photo_url && (
+                            {SHOW_PHOTOS && event.photo_url && (
                               <img
                                 src={event.photo_url}
                                 alt=""
@@ -410,7 +415,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                               />
                             )}
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              {event.rating != null && (
+                              {SHOW_RATING && event.rating != null && (
                                 <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
                                   <Star className="w-2.5 h-2.5 text-amber-400" /> {event.rating}
                                 </span>

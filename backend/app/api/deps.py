@@ -34,3 +34,23 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+# ── Admin auth ────────────────────────────────────────────────────────────────
+
+admin_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/admin/login")
+
+
+def get_admin(token: str = Depends(admin_oauth2_scheme)) -> bool:
+    """Validate admin JWT — rejects regular user tokens."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload.get("admin"):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not an admin token")
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return True

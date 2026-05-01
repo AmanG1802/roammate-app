@@ -19,9 +19,31 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-key-change-in-production"
 
     OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+
+    # Google Maps
+    # GOOGLE_MAPS_MOCK=True forces MockGoogleMapsService everywhere; the real
+    # API key is only used when GOOGLE_MAPS_MOCK is False.
+    GOOGLE_MAPS_MOCK: bool = True
     GOOGLE_MAPS_API_KEY: Optional[str] = None
+    GOOGLE_MAPS_API_VERSION: str = "v1"   # "v1" (legacy) | "v2" (new)
+    GOOGLE_MAPS_FETCH_PHOTOS: bool = True
+    GOOGLE_MAPS_FETCH_RATING: bool = True
+
     LLM_ENABLED: bool = False
-    
+    LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"
+    LLM_MODEL: str = "gpt-4o-mini"     # model name within the chosen provider
+
+    # Per-operation output token caps. The chat path falls back to
+    # BaseLLMModel.DEFAULT_MAX_TOKENS when no override is provided.
+    LLM_MAX_TOKENS_EXTRACT: int = 3000
+    LLM_MAX_TOKENS_PLAN: int = 4000
+
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "password@123"
+    ADMIN_TOKEN_EXPIRE_HOURS: int = 4
+
     REDIS_URL: str = "redis://redis:6379/0"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)

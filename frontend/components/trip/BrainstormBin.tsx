@@ -21,6 +21,11 @@ function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+const SHOW_PHOTOS =
+  (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_PHOTOS ?? 'true').toLowerCase() === 'true';
+const SHOW_RATING =
+  (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_RATING ?? 'true').toLowerCase() === 'true';
+
 export type BrainstormBinHandle = { refresh: () => void };
 
 const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(function BrainstormBin(
@@ -224,7 +229,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                         <Info className="w-3 h-3" />
                       </button>
                     </div>
-                    {item.rating != null && (
+                    {SHOW_RATING && item.rating != null && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
                         <Star className="w-2.5 h-2.5 text-amber-400" /> {item.rating}
                       </span>
@@ -340,7 +345,7 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {item.photo_url && (
+        {SHOW_PHOTOS && item.photo_url && (
           <div className="relative w-full h-36 rounded-xl overflow-hidden border border-slate-100">
             <img
               src={item.photo_url}
@@ -352,7 +357,7 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
         )}
 
         <div className="flex items-center gap-2 flex-wrap">
-          {item.rating != null && (
+          {SHOW_RATING && item.rating != null && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100">
               <Star className="w-3 h-3 text-amber-400" /> {item.rating}
             </span>
@@ -373,7 +378,7 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
           <p className="text-sm font-medium text-slate-500 leading-relaxed">{item.description}</p>
         )}
 
-        {!item.photo_url && !item.description && !item.address && (
+        {(!SHOW_PHOTOS || !item.photo_url) && !item.description && !item.address && (
           <p className="text-xs font-medium text-slate-400 italic">No additional details available.</p>
         )}
       </div>

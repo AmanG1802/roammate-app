@@ -99,6 +99,43 @@ async def third_auth_headers(client: AsyncClient) -> dict:
     return await _register_and_login(client, "carol@test.com", "Carol Doe")
 
 
+@pytest_asyncio.fixture
+async def admin_headers(client: AsyncClient) -> dict:
+    """Authenticate as the configured admin and return Authorization headers."""
+    from app.core.config import settings
+    resp = await client.post(
+        "/api/admin/login",
+        json={
+            "username": settings.ADMIN_USERNAME,
+            "password": settings.ADMIN_PASSWORD,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def tracker_db(monkeypatch):
+    """Route fire-and-forget tracker DB writes to the in-memory test SQLite.
+
+    The token + maps trackers do ``from app.db.session import AsyncSessionLocal``
+    inside a fire-and-forget coroutine.  We monkeypatch that symbol so the
+    spawned task writes to the same engine the rest of the test session uses,
+    making the rows visible via ``db_session`` / API calls.
+    """
+    import app.db.session as _db_session_module
+    monkeypatch.setattr(_db_session_module, "AsyncSessionLocal", TestSessionLocal)
+    yield TestSessionLocal
+
+
+async def wait_for_tracker_writes() -> None:
+    """Yield control so create_task'd tracker persistence finishes."""
+    import asyncio
+    for _ in range(5):
+        await asyncio.sleep(0.02)
+
+
 # ── Convenience helpers (not fixtures) ───────────────────────────────────────
 
 async def create_trip(client: AsyncClient, headers: dict, **payload) -> dict:

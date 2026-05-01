@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, LogOut, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket } from 'lucide-react';
+import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -10,6 +10,9 @@ import NotificationBell, { type NotificationBellHandle } from '@/components/layo
 import GroupsPanel from '@/components/groups/GroupsPanel';
 import TodayWidget, { type TodayWidgetHandle } from '@/components/dashboard/TodayWidget';
 import DashboardTripPlanner from '@/components/dashboard/DashboardTripPlanner';
+import UserMenu from '@/components/UserMenu';
+import PersonaSoftPrompt from '@/components/PersonaSoftPrompt';
+import OnboardingPersonaModal from '@/components/OnboardingPersonaModal';
 
 type Section = 'dashboard' | 'trips' | 'invitations' | 'groups';
 
@@ -34,6 +37,8 @@ export default function DashboardPage() {
   const [invitationsLoading, setInvitationsLoading] = useState(false);
   const [respondingTo, setRespondingTo] = useState<number | null>(null);
   const [groupInvitesCount, setGroupInvitesCount] = useState(0);
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [showSkipToast, setShowSkipToast] = useState(false);
 
   const widgetRef = useRef<TodayWidgetHandle>(null);
   const bellRef = useRef<NotificationBellHandle>(null);
@@ -43,6 +48,56 @@ export default function DashboardPage() {
     bellRef.current?.refresh();
   }, []);
 
+  // Show persona onboarding modal once per login session when no persona is set
+  useEffect(() => {
+    if (!user) return;
+    const shownKey = `persona_modal_shown_${(user as any).id}`;
+    if (sessionStorage.getItem(shownKey)) return;
+    const p = (user as any).personas;
+    if (p === null || (Array.isArray(p) && p.length === 0)) {
+      sessionStorage.setItem(shownKey, '1');
+      setShowPersonaModal(true);
+    }
+  }, [user]);
+
+  const handlePersonaComplete = async (personas: string[]) => {
+    const token = localStorage.getItem('token');
+    const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+    try {
+      await fetch(`${API}/users/me/personas`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personas }),
+      });
+      const saved = localStorage.getItem('user');
+      if (saved) {
+        const u = JSON.parse(saved);
+        localStorage.setItem('user', JSON.stringify({ ...u, personas }));
+      }
+    } catch {}
+    setShowPersonaModal(false);
+  };
+
+  const handlePersonaSkip = async () => {
+    const token = localStorage.getItem('token');
+    const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+    try {
+      await fetch(`${API}/users/me/personas`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personas: [] }),
+      });
+      const saved = localStorage.getItem('user');
+      if (saved) {
+        const u = JSON.parse(saved);
+        localStorage.setItem('user', JSON.stringify({ ...u, personas: [] }));
+      }
+    } catch {}
+    setShowPersonaModal(false);
+    setShowSkipToast(true);
+    setTimeout(() => setShowSkipToast(false), 4000);
+  };
+
   const openCreateModal = () => {
     setNewTripName('');
     setNewTripStartDate('');
@@ -50,11 +105,6 @@ export default function DashboardPage() {
     setIsModalOpen(true);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    router.push('/');
-  };
 
   const onTripMutated = useCallback(() => {
     fetchTrips();
@@ -242,23 +292,13 @@ export default function DashboardPage() {
             </div>
           </nav>
 
-          {/* User info at the bottom */}
-          <div className="mt-auto pt-4 border-t border-slate-100 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-black text-xs shrink-0">
-              {user?.name ? getInitials(user.name) : '?'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-black text-slate-800 truncate">{user?.name ?? '—'}</p>
-              <p className="text-[10px] font-bold text-slate-400 truncate">{user?.email ?? ''}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              title="Log out"
-              className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          {/* Soft persona prompt (shown when no personas set and modal is not open) */}
+          {((user as any)?.personas !== null && (user as any)?.personas?.length === 0) && !showPersonaModal && (
+            <PersonaSoftPrompt />
+          )}
+
+          {/* User menu at the bottom */}
+          <UserMenu user={user} getInitials={getInitials} />
         </aside>
 
         {/* Main */}
@@ -506,6 +546,31 @@ export default function DashboardPage() {
                 </form>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+
+        {/* Persona onboarding modal — shown on first login when personas === null */}
+        <AnimatePresence>
+          {showPersonaModal && (
+            <OnboardingPersonaModal
+              onComplete={handlePersonaComplete}
+              onSkip={handlePersonaSkip}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Skip toast */}
+        <AnimatePresence>
+          {showSkipToast && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              className="fixed bottom-6 right-6 z-50 bg-slate-800 text-white text-sm font-bold px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5"
+            >
+              <Rocket className="w-4 h-4 text-indigo-400 shrink-0" />
+              You can set your persona anytime — just tap Profile in the menu.
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
