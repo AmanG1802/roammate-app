@@ -322,13 +322,15 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-2">
               <NotificationBell ref={bellRef} />
-              <button
+              <motion.button
                 onClick={openCreateModal}
-                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
               >
                 <Plus className="w-4 h-4" />
                 New Trip
-              </button>
+              </motion.button>
             </div>
           </header>
 
@@ -611,6 +613,23 @@ function TripGrid({
     [router]
   );
 
+  // Warm both the route bundle and the trip API cache on hover/focus so by the
+  // time the user clicks, the Trip Hub has nothing to wait on. Tracked per-id
+  // in a ref so we don't refire on every mouseenter.
+  const warmedRef = useRef<Set<number>>(new Set());
+  const handlePrefetch = useCallback((tripId: number) => {
+    if (warmedRef.current.has(tripId)) return;
+    warmedRef.current.add(tripId);
+    try { router.prefetch(`/trips/${tripId}`); } catch { /* ignore */ }
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    const base = process.env.NEXT_PUBLIC_API_URL ?? '';
+    // Fire-and-forget; browser HTTP cache holds the response for the click.
+    fetch(`${base}/trips/${tripId}`, { headers }).catch(() => {});
+    fetch(`${base}/trips/${tripId}/members`, { headers }).catch(() => {});
+  }, [router]);
+
   const handleDeleteTrip = useCallback(async (tripId: number) => {
     setDeleteLoading(true);
     try {
@@ -667,13 +686,23 @@ function TripGrid({
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        initial="initial"
+        animate="animate"
+        variants={{ animate: { transition: { staggerChildren: 0.04 } } }}
+      >
         {trips.map((trip: any) => {
           const isAdmin = trip.my_role === 'admin';
 
           return (
             <motion.div
+              variants={{ initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 } }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               whileHover={{ y: -4 }}
+              whileTap={{ scale: 0.99 }}
+              onMouseEnter={() => handlePrefetch(trip.id)}
+              onFocus={() => handlePrefetch(trip.id)}
               key={trip.id}
               className="relative bg-white rounded-[2rem] border border-slate-100 p-7 shadow-sm hover:shadow-xl hover:shadow-indigo-50/60 hover:border-indigo-100 transition-all group"
             >
@@ -710,7 +739,10 @@ function TripGrid({
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 mb-1">
-                  <h3 className="text-xl font-black text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors truncate">
+                  <h3
+                    className="text-xl font-black text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors truncate"
+                    style={{ viewTransitionName: `trip-title-${trip.id}` } as React.CSSProperties}
+                  >
                     {trip.name}
                   </h3>
                   {isAdmin && (
@@ -835,7 +867,7 @@ function TripGrid({
             <p className="text-sm font-black text-slate-400 group-hover:text-slate-700 transition-colors">Add New Trip</p>
           </button>
         )}
-      </div>
+      </motion.div>
 
       {/* Delete Trip Confirmation Dialog */}
       {deleteConfirm && (

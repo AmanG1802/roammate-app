@@ -9,6 +9,7 @@ import {
   Users, Mail, Loader2, Check, X, UserPlus, ShieldCheck, Eye, Vote,
   Lightbulb,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import Timeline from '@/components/trip/Timeline';
 import IdeaBin from '@/components/trip/IdeaBin';
@@ -326,10 +327,12 @@ export default function TripPlannerPage() {
   }, [tripId, router]);
 
   const sidebarBtn = (m: Mode, icon: React.ReactNode, label: string) => (
-    <button
+    <motion.button
       onClick={() => switchMode(m)}
       title={label}
-      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all ${
+      whileTap={{ scale: 0.94 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-colors ${
         mode === m
           ? 'bg-white/15 text-white'
           : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
@@ -337,7 +340,7 @@ export default function TripPlannerPage() {
     >
       {icon}
       <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
-    </button>
+    </motion.button>
   );
 
   const safePlanIdx = Math.min(planDayIdx, Math.max(tripDays.length - 1, 0));
@@ -420,6 +423,16 @@ export default function TripPlannerPage() {
             <div />
           </header>
 
+          {/* ── Mode region (animated) ─────────────────────────────────────── */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={mode}
+              className="flex-1 flex flex-col min-h-0"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
           {/* ── Brainstorm Mode ───────────────────────────────────────────── */}
           {mode === 'brainstorm' && (
             <BrainstormSection tripId={tripId} />
@@ -776,6 +789,8 @@ export default function TripPlannerPage() {
               </div>
             </div>
           )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 

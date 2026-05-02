@@ -89,6 +89,18 @@ export interface TripDay {
   day_number: number;
 }
 
+export interface RouteLeg {
+  from_event_id: string;
+  to_event_id: string;
+  duration_s: number;
+  distance_m: number;
+}
+
+/** Build the legsByDay key — kept here so callers can't drift on the format. */
+export function legsKey(tripId: string, dayDate: string): string {
+  return `${tripId}::${dayDate}`;
+}
+
 interface TripState {
   activeTripId: string | null;
   ideas: Idea[];
@@ -135,6 +147,17 @@ interface TripState {
   loadTripDays: (tripId: string, token: string) => Promise<void>;
   addTripDay: (tripId: string, date: string, token: string) => Promise<TripDay | null>;
   deleteTripDay: (tripId: string, dayId: string, token: string, itemsAction?: 'bin' | 'delete') => Promise<void>;
+
+  /** Route legs — per (trip, day) bucket of consecutive driving legs. */
+  legsByDay: Record<string, RouteLeg[]>;
+  setRouteLegs: (tripId: string, dayDate: string, legs: RouteLeg[]) => void;
+  clearRouteLegsForDay: (tripId: string, dayDate: string) => void;
+
+  /** Map-Timeline bidirectional highlight. */
+  hoveredEventId: string | null;
+  selectedEventId: string | null;
+  setHoveredEventId: (id: string | null) => void;
+  setSelectedEventId: (id: string | null) => void;
 }
 
 function mapApiEvent(raw: Record<string, unknown>): Event {
@@ -175,6 +198,7 @@ export const useTripStore = create<TripState>((set, get) => ({
   ideas: [],
   events: [],
   tripDays: [],
+  legsByDay: {},
   collaborators: [
     { id: '1', name: 'You', color: '#4f46e5' },
     { id: '2', name: 'Sarah', color: '#ec4899' },
@@ -187,7 +211,13 @@ export const useTripStore = create<TripState>((set, get) => ({
   addIdea: (idea) => set((s) => ({ ideas: [idea, ...s.ideas] })),
   addEvent: (event) => set((s) => ({ events: sortEvents([...s.events, event]) })),
   removeIdea: (ideaId) => set((s) => ({ ideas: s.ideas.filter((i) => i.id !== ideaId) })),
-  removeEvent: (eventId) => set((s) => ({ events: s.events.filter((e) => e.id !== eventId) })),
+  removeEvent: (eventId) =>
+    set((s) => {
+      const ev = s.events.find((e) => e.id === eventId);
+      const nextLegs = { ...s.legsByDay };
+      if (ev?.trip_id && ev?.day_date) delete nextLegs[legsKey(ev.trip_id, ev.day_date)];
+      return { events: s.events.filter((e) => e.id !== eventId), legsByDay: nextLegs };
+    }),
 
   loadEvents: async (tripId, token) => {
     try {
@@ -276,8 +306,12 @@ export const useTripStore = create<TripState>((set, get) => ({
     const event = events.find((e) => e.id === eventId);
     if (!event) return;
 
-    // Optimistically remove from timeline
-    set((s) => ({ events: s.events.filter((e) => e.id !== eventId) }));
+    // Optimistically remove from timeline + invalidate the day's route legs
+    set((s) => {
+      const nextLegs = { ...s.legsByDay };
+      if (event.trip_id && event.day_date) delete nextLegs[legsKey(event.trip_id, event.day_date)];
+      return { events: s.events.filter((e) => e.id !== eventId), legsByDay: nextLegs };
+    });
 
     const restoredIdea: Idea = {
       id: `restored-${eventId}`,
@@ -420,11 +454,19 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   deleteTripDay: async (tripId, dayId, token, itemsAction = 'bin') => {
     try {
+      const dayDate = get().tripDays.find((d) => d.id === dayId)?.date;
       const res = await fetch(`${API}/trips/${tripId}/days/${dayId}?items_action=${itemsAction}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok || res.status === 204) {
+        if (dayDate) {
+          set((s) => {
+            const nextLegs = { ...s.legsByDay };
+            delete nextLegs[legsKey(tripId, dayDate)];
+            return { legsByDay: nextLegs };
+          });
+        }
         // Re-fetch days to get renumbered/re-dated state from backend
         const listRes = await fetch(`${API}/trips/${tripId}/days`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -446,4 +488,19 @@ export const useTripStore = create<TripState>((set, get) => ({
       // keep current state
     }
   },
+
+  setRouteLegs: (tripId, dayDate, legs) =>
+    set((s) => ({ legsByDay: { ...s.legsByDay, [legsKey(tripId, dayDate)]: legs } })),
+
+  clearRouteLegsForDay: (tripId, dayDate) =>
+    set((s) => {
+      const next = { ...s.legsByDay };
+      delete next[legsKey(tripId, dayDate)];
+      return { legsByDay: next };
+    }),
+
+  hoveredEventId: null,
+  selectedEventId: null,
+  setHoveredEventId: (id) => set({ hoveredEventId: id }),
+  setSelectedEventId: (id) => set({ selectedEventId: id }),
 }));
