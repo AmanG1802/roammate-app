@@ -351,12 +351,21 @@ describe('Timeline – TBD / time display', () => {
     expect(screen.getByText('TBD')).toBeTruthy();
   });
 
-  it('shows formatted time badge when start_time is set', () => {
+  it('shows formatted time badge with start and end time when both are set', () => {
     mockStore([makeEvent()]);
     render(<Timeline tripId={null} />);
-    expect(screen.getByTestId('time-badge-ev-1')).toBeTruthy();
-    // 10:00 AM
-    expect(screen.getByTestId('time-badge-ev-1').textContent).toContain('10:00 AM');
+    const badge = screen.getByTestId('time-badge-ev-1');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('10:00 AM');
+    expect(badge.textContent).toContain('12:00 PM');
+  });
+
+  it('shows only start time when end_time is null', () => {
+    mockStore([makeEvent({ end_time: null })]);
+    render(<Timeline tripId={null} />);
+    const badge = screen.getByTestId('time-badge-ev-1');
+    expect(badge.textContent).toContain('10:00 AM');
+    expect(badge.textContent).not.toContain('–');
   });
 });
 
@@ -754,5 +763,50 @@ describe('Timeline – travel time hint', () => {
     render(<Timeline tripId="1" filterDay={DAY} />);
 
     expect(screen.queryByTestId('travel-hint-ev-a')).toBeNull();
+  });
+
+  it('travel hint is center-aligned', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T18:00:00', '2026-05-01T19:00:00', 1);
+    mockStore(
+      [a, b],
+      [],
+      { '1::2026-05-01': [{ from_event_id: 'ev-a', to_event_id: 'ev-b', duration_s: 1500, distance_m: 12000 }] },
+    );
+    render(<Timeline tripId="1" filterDay={DAY} />);
+
+    const hint = screen.getByTestId('travel-hint-ev-a');
+    expect(hint.className).toContain('text-center');
+  });
+});
+
+describe('Timeline – card layout structure', () => {
+  it('time editor appears between the time row and category row in the DOM', () => {
+    mockStore([makeEvent({ category: 'SHOPPING' })]);
+    render(<Timeline tripId={null} />);
+
+    fireEvent.click(screen.getByTestId('time-badge-ev-1'));
+    const card = screen.getByTestId('event-card-ev-1');
+    const editor = screen.getByTestId('time-editor-ev-1');
+
+    const categoryBadge = screen.getByText('SHOPPING');
+    expect(categoryBadge).toBeTruthy();
+
+    const allElements = Array.from(card.querySelectorAll('*'));
+    const editorIdx = allElements.indexOf(editor);
+    const categoryIdx = allElements.indexOf(categoryBadge);
+    expect(editorIdx).toBeLessThan(categoryIdx);
+  });
+
+  it('voting buttons remain visible when details panel is open', () => {
+    mockStore([makeEvent({ description: 'A description for details', category: 'FOOD' })]);
+    render(<Timeline tripId={null} canVote />);
+
+    const detailsBtn = screen.getByTitle('Details');
+    fireEvent.click(detailsBtn);
+
+    expect(screen.getByText(/a description for details/i)).toBeTruthy();
+    expect(screen.getByLabelText('Upvote')).toBeTruthy();
+    expect(screen.getByLabelText('Downvote')).toBeTruthy();
   });
 });

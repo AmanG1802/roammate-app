@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTripStore, Event, Idea, legsKey, RouteLeg } from '@/lib/store';
 import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
@@ -128,9 +128,9 @@ function TimeDisplay({
       <button
         onClick={onEdit}
         data-testid={`tbd-badge-${event.id}`}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black text-amber-600 bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
+        className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
       >
-        <Clock className="w-3 h-3" />
+        <Clock className="w-2.5 h-2.5" />
         TBD
         <Pencil className="w-2.5 h-2.5 ml-0.5" />
       </button>
@@ -140,14 +140,20 @@ function TimeDisplay({
     <button
       onClick={onEdit}
       data-testid={`time-badge-${event.id}`}
-      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition-colors ${
+      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black transition-colors ${
         isConflict
           ? 'text-red-600 bg-red-50 border border-red-400 ring-1 ring-red-300'
           : 'text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100'
       }`}
     >
-      {isConflict && <AlertCircle className="w-3 h-3" data-testid="conflict-icon" />}
+      {isConflict && <AlertCircle className="w-2.5 h-2.5" data-testid="conflict-icon" />}
       {format(event.start_time, 'h:mm a')}
+      {event.end_time && (
+        <>
+          <span className="mx-0.5">–</span>
+          {format(event.end_time, 'h:mm a')}
+        </>
+      )}
       <Pencil className="w-2.5 h-2.5 ml-0.5" />
     </button>
   );
@@ -162,12 +168,14 @@ function TimeEditor({
   onConfirm: (start: Date | null, end: Date | null) => void;
   onCancel: () => void;
 }) {
-  const [startVal, setStartVal] = useState(
-    event.start_time ? format(event.start_time, 'HH:mm') : ''
-  );
-  const [endVal, setEndVal] = useState(
-    event.end_time ? format(event.end_time, 'HH:mm') : ''
-  );
+  const initialStart = event.start_time ? format(event.start_time, 'HH:mm') : '';
+  const initialEnd = event.end_time ? format(event.end_time, 'HH:mm') : '';
+
+  const [startVal, setStartVal] = useState(initialStart);
+  const [endVal, setEndVal] = useState(initialEnd);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isDirty = startVal !== initialStart || endVal !== initialEnd;
 
   const handleConfirm = () => {
     const startDate = startVal ? parseTimeString(startVal) : null;
@@ -178,37 +186,58 @@ function TimeEditor({
     onConfirm(startDate, endDate);
   };
 
+  const handleClickOutside = useCallback(
+    (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node) && !isDirty) {
+        onCancel();
+      }
+    },
+    [isDirty, onCancel],
+  );
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [handleClickOutside]);
+
   return (
-    <div data-testid={`time-editor-${event.id}`} className="mt-2 flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
+    <div ref={ref} data-testid={`time-editor-${event.id}`} className="mt-1.5 flex items-center gap-1 p-1 bg-slate-50 rounded-lg border border-slate-200">
       <input
         type="time"
         value={startVal}
         onChange={(e) => setStartVal(e.target.value)}
         aria-label="Start time"
-        className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-md px-1 py-0.5 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-indigo-400"
       />
-      <span className="text-xs text-slate-400">→</span>
+      <span className="text-[10px] text-slate-400 shrink-0">→</span>
       <input
         type="time"
         value={endVal}
         onChange={(e) => setEndVal(e.target.value)}
         aria-label="End time"
-        className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-md px-1 py-0.5 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-indigo-400"
       />
-      <button
-        onClick={handleConfirm}
-        aria-label="Confirm time"
-        className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-      >
-        <Check className="w-3 h-3" />
-      </button>
-      <button
-        onClick={onCancel}
-        aria-label="Cancel time edit"
-        className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
-      >
-        <X className="w-3 h-3" />
-      </button>
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button
+          onClick={handleConfirm}
+          disabled={!isDirty}
+          aria-label="Confirm time"
+          className={`p-1 rounded-md transition-colors ${
+            isDirty
+              ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+              : 'bg-indigo-300 text-indigo-100 cursor-not-allowed'
+          }`}
+        >
+          <Check className="w-3 h-3" />
+        </button>
+        <button
+          onClick={onCancel}
+          aria-label="Cancel time edit"
+          className="p-1 bg-slate-200 text-slate-500 rounded-md hover:bg-slate-300 hover:text-slate-700 transition-colors"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -356,7 +385,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
               const isDragTarget = dragOverId === event.id;
               const isTooltipOpen = tooltipId === event.id;
               const accent = categoryAccent(event.category);
-              const hasDetails = !!(event.description || (SHOW_PHOTOS && event.photo_url) || (SHOW_RATING && event.rating != null) || event.address || event.end_time);
+              const hasDetails = !!(event.description || (SHOW_PHOTOS && event.photo_url) || (SHOW_RATING && event.rating != null) || event.address || event.added_by);
 
               const nextEvent = index < visibleEvents.length - 1 ? visibleEvents[index + 1] : null;
               const legToNext = nextEvent ? legByPair.get(`${event.id}::${nextEvent.id}`) : undefined;
@@ -396,71 +425,52 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                   <div className={`p-4 bg-white border rounded-2xl shadow-sm hover:shadow-md transition-all ${
                     isConflict ? 'border-red-200' : 'border-slate-100 hover:border-indigo-100'
                   }`}>
-                    {/* Main row */}
-                    <div className="flex justify-between items-start gap-3">
-                      {/* Left: grip + title/meta */}
-                      <div className="flex items-start gap-2 flex-1 min-w-0">
-                        {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-black text-slate-900 leading-tight truncate">
-                            {event.title}
-                          </h4>
-                          {/* Category + Details button */}
-                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                            {event.category ? (
-                              <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${accent.badge}`}>
-                                {event.category}
+                    {/* Row 1: grip + title (full width) */}
+                    <div className="flex items-start gap-2">
+                      {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
+                      <h4 className="font-black text-slate-900 leading-tight flex-1 min-w-0">
+                        {event.title}
+                      </h4>
+                    </div>
+
+                    {/* Rows 2-4 + detail panel: indented to align with title start */}
+                    <div className={!readOnly ? 'ml-6' : undefined}>
+                      {/* Row 2: time range + move-to-bin */}
+                      <div className="flex items-center justify-between mt-1.5">
+                        <div className="flex items-center gap-2">
+                          {readOnly ? (
+                            event.start_time ? (
+                              <span
+                                data-testid={`time-badge-${event.id}`}
+                                className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                  isConflict
+                                    ? 'text-red-600 bg-red-50 border border-red-400 ring-1 ring-red-300'
+                                    : 'text-indigo-600 bg-indigo-50 border border-indigo-100'
+                                }`}
+                              >
+                                {isConflict && <AlertCircle className="w-2.5 h-2.5" />}
+                                {format(event.start_time, 'h:mm a')}
+                                {event.end_time && (
+                                  <>
+                                    <span className="mx-0.5">–</span>
+                                    {format(event.end_time, 'h:mm a')}
+                                  </>
+                                )}
                               </span>
                             ) : (
-                              <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                                <MapPin className="w-2.5 h-2.5" />
-                                <span>Activity</span>
-                              </div>
-                            )}
-                            {hasDetails && (
-                              <button
-                                onClick={() => setTooltipId(isTooltipOpen ? null : event.id)}
-                                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors ${
-                                  isTooltipOpen
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100'
-                                }`}
-                                title="Details"
-                              >
-                                <Info className="w-3 h-3" />
-                                {isTooltipOpen ? 'Hide' : 'Details'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right: time + move-to-bin */}
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {readOnly ? (
-                          event.start_time ? (
-                            <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black ${
-                              isConflict
-                                ? 'text-red-600 bg-red-50 border border-red-400 ring-1 ring-red-300'
-                                : 'text-indigo-600 bg-indigo-50 border border-indigo-100'
-                            }`}>
-                              {isConflict && <AlertCircle className="w-3 h-3" />}
-                              {format(event.start_time, 'h:mm a')}
-                            </span>
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-100">
+                                <Clock className="w-2.5 h-2.5" />
+                                TBD
+                              </span>
+                            )
                           ) : (
-                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black text-amber-600 bg-amber-50 border border-amber-100">
-                              <Clock className="w-3 h-3" />
-                              TBD
-                            </span>
-                          )
-                        ) : (
-                          <TimeDisplay
-                            event={event}
-                            isConflict={isConflict}
-                            onEdit={() => setEditingId(event.id)}
-                          />
-                        )}
-
+                            <TimeDisplay
+                              event={event}
+                              isConflict={isConflict}
+                              onEdit={() => setEditingId(event.id)}
+                            />
+                          )}
+                        </div>
                         {!readOnly && (
                           <button
                             title="Send back to Idea Bin"
@@ -469,85 +479,114 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                               const token = localStorage.getItem('token');
                               moveEventToIdea(event.id, tripId, token);
                             }}
-                            className="flex items-center gap-1 text-[9px] font-black text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
                           >
                             <Undo2 className="w-2.5 h-2.5" />
                             Move to bin
                           </button>
                         )}
                       </div>
-                    </div>
 
-                    {/* Inline detail panel */}
-                    <AnimatePresence>
-                      {isTooltipOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                            {SHOW_PHOTOS && event.photo_url && (
-                              <img
-                                src={event.photo_url}
-                                alt=""
-                                className="w-full h-28 object-cover rounded-lg border border-slate-100"
-                              />
-                            )}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {SHOW_RATING && event.rating != null && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
-                                  <Star className="w-2.5 h-2.5 text-amber-400" /> {event.rating}
-                                </span>
+                      {/* Time editor (inserted below time row, pushes rows 3-4 down) */}
+                      {!readOnly && editingId === event.id && (
+                        <TimeEditor
+                          event={event}
+                          onConfirm={(start, end) => {
+                            const token = localStorage.getItem('token');
+                            updateEventTime(event.id, start, end, token);
+                            setEditingId(null);
+                          }}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      )}
+
+                      {/* Row 3: category */}
+                      <div className="mt-1.5">
+                        {event.category ? (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${accent.badge}`}>
+                            {event.category}
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold">
+                            <MapPin className="w-2.5 h-2.5" />
+                            <span>Activity</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Row 4: details + votes */}
+                      <div className="flex items-center justify-between mt-1.5">
+                        <div>
+                          {hasDetails && (
+                            <button
+                              onClick={() => setTooltipId(isTooltipOpen ? null : event.id)}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-colors ${
+                              isTooltipOpen
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100'
+                            }`}
+                              title="Details"
+                            >
+                              <Info className="w-3 h-3" />
+                              {isTooltipOpen ? 'Hide' : 'Details'}
+                            </button>
+                          )}
+                        </div>
+                        <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                          <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" initial={event.up != null ? { up: event.up ?? 0, down: event.down ?? 0, my_vote: event.my_vote ?? 0 } : undefined} />
+                        </div>
+                      </div>
+
+                      {/* Inline detail panel */}
+                      <AnimatePresence>
+                        {isTooltipOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                              {SHOW_PHOTOS && event.photo_url && (
+                                <img
+                                  src={event.photo_url}
+                                  alt=""
+                                  className="w-full h-28 object-cover rounded-lg border border-slate-100"
+                                />
                               )}
-                              {event.start_time && event.end_time && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[10px] font-bold border border-indigo-100">
-                                  <Clock className="w-2.5 h-2.5" /> {format(event.start_time, 'h:mm a')} – {format(event.end_time, 'h:mm a')}
-                                </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {SHOW_RATING && event.rating != null && (
+                                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
+                                    <Star className="w-2.5 h-2.5 text-amber-400" /> {event.rating}
+                                  </span>
+                                )}
+                                {event.added_by && (
+                                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold">
+                                    <UserCircle className="w-2.5 h-2.5" /> {event.added_by}
+                                  </span>
+                                )}
+                              </div>
+                              {event.address && (
+                                <div className="flex items-start gap-1 text-[10px] font-medium text-slate-500">
+                                  <MapPin className="w-2.5 h-2.5 shrink-0 mt-0.5 text-slate-400" />
+                                  <span>{event.address}</span>
+                                </div>
                               )}
-                              {event.added_by && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold">
-                                  <UserCircle className="w-2.5 h-2.5" /> {event.added_by}
-                                </span>
+                              {event.description && (
+                                <p className="text-xs font-medium text-slate-500 leading-relaxed">{event.description}</p>
                               )}
                             </div>
-                            {event.address && (
-                              <div className="flex items-start gap-1 text-[10px] font-medium text-slate-500">
-                                <MapPin className="w-2.5 h-2.5 shrink-0 mt-0.5 text-slate-400" />
-                                <span>{event.address}</span>
-                              </div>
-                            )}
-                            {event.description && (
-                              <p className="text-xs font-medium text-slate-500 leading-relaxed">{event.description}</p>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {!readOnly && editingId === event.id && (
-                      <TimeEditor
-                        event={event}
-                        onConfirm={(start, end) => {
-                          const token = localStorage.getItem('token');
-                          updateEventTime(event.id, start, end, token);
-                          setEditingId(null);
-                        }}
-                        onCancel={() => setEditingId(null)}
-                      />
-                    )}
-
-                    <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                      <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" initial={event.up != null ? { up: event.up ?? 0, down: event.down ?? 0, my_vote: event.my_vote ?? 0 } : undefined} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
                   </div>
                   {travelLabel && travelModeLabel && (
                     <p
                       data-testid={`travel-hint-${event.id}`}
-                      className="mt-1.5 ml-1 text-[11px] italic text-slate-400 font-medium"
+                      className="mt-1.5 text-center text-[11px] italic text-slate-400 font-medium"
                     >
                       {travelLabel} {travelModeLabel} to next destination
                     </p>
