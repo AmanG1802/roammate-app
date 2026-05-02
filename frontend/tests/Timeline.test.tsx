@@ -27,6 +27,7 @@ import type { Event, Idea } from '../lib/store';
 
 vi.mock('../lib/store', () => ({
   useTripStore: vi.fn(),
+  legsKey: (tripId: string, dayDate: string) => `${tripId}::${dayDate}`,
 }));
 
 vi.mock('framer-motion', () => ({
@@ -80,10 +81,16 @@ function makeIdea(overrides: Partial<Idea> = {}): Idea {
   };
 }
 
-function mockStore(events: Event[] = [], ideas: Idea[] = []) {
+function mockStore(
+  events: Event[] = [],
+  ideas: Idea[] = [],
+  legsByDay: Record<string, { from_event_id: string; to_event_id: string; duration_s: number; distance_m: number }[]> = {},
+) {
   (useTripStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
     events,
     ideas,
+    tripDays:           [{ id: 'd-1', trip_id: '1', date: '2026-05-01', day_number: 1 }],
+    legsByDay,
     loadEvents:         mockLoadEvents,
     moveIdeaToTimeline: mockMoveIdea,
     moveEventToIdea:    mockMoveEventToIdea,
@@ -175,7 +182,7 @@ describe('Timeline – drag from Idea Bin', () => {
 
     expect(mockMoveIdea).toHaveBeenCalledOnce();
     // No idea in store → startTime must be null
-    expect(mockMoveIdea).toHaveBeenCalledWith('idea-99', '1', 'test-token', null);
+    expect(mockMoveIdea).toHaveBeenCalledWith('idea-99', '1', 'test-token', null, null);
   });
 
   it('[Bug 1] passes parsed time from time_hint as startTime when idea has time_hint', () => {
@@ -232,7 +239,7 @@ describe('Timeline – drag from Idea Bin', () => {
     fireEvent.drop(card, { dataTransfer: dt });
 
     expect(mockMoveIdea).toHaveBeenCalledOnce();
-    expect(mockMoveIdea).toHaveBeenCalledWith('idea-77', '1', 'test-token', null);
+    expect(mockMoveIdea).toHaveBeenCalledWith('idea-77', '1', 'test-token', null, null);
   });
 
   it('calls moveIdeaToTimeline with null token when no token in localStorage', () => {
@@ -244,7 +251,7 @@ describe('Timeline – drag from Idea Bin', () => {
     const container = screen.getByTestId('timeline-container');
     fireEvent.drop(container, { dataTransfer: dt });
 
-    expect(mockMoveIdea).toHaveBeenCalledWith('idea-1', '1', null, null);
+    expect(mockMoveIdea).toHaveBeenCalledWith('idea-1', '1', null, null, null);
   });
 
   it('does nothing when dropped data has no ideaId', () => {
@@ -475,5 +482,277 @@ describe('Timeline – conflict detection', () => {
     render(<Timeline tripId={null} />);
 
     expect(screen.getByTestId('conflict-icon')).toBeTruthy();
+  });
+
+  it('flags non-adjacent conflicts against the max prior end_time', () => {
+    // Order: A 10–13, B 20–21, C 14–15, D 18–19.
+    // C (start 14) < maxEnd (21) → conflict. D (start 18) < maxEnd (21) → conflict.
+    // Bug previously: only C flagged because it only compared to immediate previous (B).
+    const a = makeEvent({
+      id: 'ev-a', title: 'A',
+      start_time: new Date('2026-05-01T10:00:00'),
+      end_time:   new Date('2026-05-01T13:00:00'),
+      sort_order: 0,
+    });
+    const b = makeEvent({
+      id: 'ev-b', title: 'B',
+      start_time: new Date('2026-05-01T20:00:00'),
+      end_time:   new Date('2026-05-01T21:00:00'),
+      sort_order: 1,
+    });
+    const c = makeEvent({
+      id: 'ev-c', title: 'C',
+      start_time: new Date('2026-05-01T14:00:00'),
+      end_time:   new Date('2026-05-01T15:00:00'),
+      sort_order: 2,
+    });
+    const d = makeEvent({
+      id: 'ev-d', title: 'D',
+      start_time: new Date('2026-05-01T18:00:00'),
+      end_time:   new Date('2026-05-01T19:00:00'),
+      sort_order: 3,
+    });
+    mockStore([a, b, c, d]);
+    render(<Timeline tripId={null} />);
+
+    // A and B should not have conflict icons; C and D should.
+    expect(screen.getAllByTestId('conflict-icon').length).toBe(2);
+    // Verify by card: A's time badge has no conflict icon as a child.
+    const aBadge = screen.getByTestId('time-badge-ev-a');
+    expect(aBadge.querySelector('[data-testid="conflict-icon"]')).toBeNull();
+    const bBadge = screen.getByTestId('time-badge-ev-b');
+    expect(bBadge.querySelector('[data-testid="conflict-icon"]')).toBeNull();
+    const cBadge = screen.getByTestId('time-badge-ev-c');
+    expect(cBadge.querySelector('[data-testid="conflict-icon"]')).not.toBeNull();
+    const dBadge = screen.getByTestId('time-badge-ev-d');
+    expect(dBadge.querySelector('[data-testid="conflict-icon"]')).not.toBeNull();
+  });
+});
+
+describe('Timeline – gap dots', () => {
+  it('renders floor(gap_hours) dots between two timed events when gap >= 1h', () => {
+    // 1pm–2pm then 6pm–7pm → 4 hour gap → 4 dots
+    const ev1 = makeEvent({
+      id: 'ev-1', title: 'Lunch',
+      start_time: new Date('2026-05-01T13:00:00'),
+      end_time:   new Date('2026-05-01T14:00:00'),
+      sort_order: 0,
+    });
+    const ev2 = makeEvent({
+      id: 'ev-2', title: 'Dinner',
+      start_time: new Date('2026-05-01T18:00:00'),
+      end_time:   new Date('2026-05-01T19:00:00'),
+      sort_order: 1,
+    });
+    mockStore([ev1, ev2]);
+    render(<Timeline tripId={null} />);
+
+    expect(screen.getByTestId('gap-dots-4')).toBeTruthy();
+  });
+
+  it('floors fractional gaps (1.5h → 1 dot)', () => {
+    const ev1 = makeEvent({
+      id: 'ev-1',
+      start_time: new Date('2026-05-01T10:00:00'),
+      end_time:   new Date('2026-05-01T11:00:00'),
+      sort_order: 0,
+    });
+    const ev2 = makeEvent({
+      id: 'ev-2',
+      start_time: new Date('2026-05-01T12:30:00'),
+      end_time:   new Date('2026-05-01T13:00:00'),
+      sort_order: 1,
+    });
+    mockStore([ev1, ev2]);
+    render(<Timeline tripId={null} />);
+
+    expect(screen.getByTestId('gap-dots-1')).toBeTruthy();
+  });
+
+  it('renders no dots when gap is less than 1 hour', () => {
+    const ev1 = makeEvent({
+      id: 'ev-1',
+      start_time: new Date('2026-05-01T13:00:00'),
+      end_time:   new Date('2026-05-01T14:00:00'),
+      sort_order: 0,
+    });
+    const ev2 = makeEvent({
+      id: 'ev-2',
+      start_time: new Date('2026-05-01T14:30:00'),
+      end_time:   new Date('2026-05-01T15:00:00'),
+      sort_order: 1,
+    });
+    mockStore([ev1, ev2]);
+    render(<Timeline tripId={null} />);
+
+    // No gap-dots-* element of any count
+    const dots = screen.queryAllByTestId(/^gap-dots-\d+$/);
+    expect(dots.length).toBe(0);
+  });
+
+  it('renders no dots before the first card or after the last', () => {
+    const ev1 = makeEvent({
+      id: 'ev-1',
+      start_time: new Date('2026-05-01T10:00:00'),
+      end_time:   new Date('2026-05-01T11:00:00'),
+      sort_order: 0,
+    });
+    const ev2 = makeEvent({
+      id: 'ev-2',
+      start_time: new Date('2026-05-01T15:00:00'),
+      end_time:   new Date('2026-05-01T16:00:00'),
+      sort_order: 1,
+    });
+    mockStore([ev1, ev2]);
+    const { container } = render(<Timeline tripId={null} />);
+
+    // Exactly one gap-dots element between the two cards
+    const dots = container.querySelectorAll('[data-testid^="gap-dots-"]');
+    expect(dots.length).toBe(1);
+  });
+
+  it('renders no dots adjacent to a TBD event', () => {
+    const ev1 = makeEvent({
+      id: 'ev-1',
+      start_time: new Date('2026-05-01T10:00:00'),
+      end_time:   new Date('2026-05-01T11:00:00'),
+      sort_order: 0,
+    });
+    const tbd = makeEvent({ id: 'ev-2', start_time: null, end_time: null, sort_order: 1 });
+    mockStore([ev1, tbd]);
+    render(<Timeline tripId={null} />);
+
+    const dots = screen.queryAllByTestId(/^gap-dots-\d+$/);
+    expect(dots.length).toBe(0);
+  });
+
+  it('renders no dots on an empty day', () => {
+    mockStore([]);
+    render(<Timeline tripId={null} />);
+
+    const dots = screen.queryAllByTestId(/^gap-dots-\d+$/);
+    expect(dots.length).toBe(0);
+  });
+});
+
+describe('Timeline – travel time hint', () => {
+  const DAY = new Date('2026-05-01T00:00:00');
+
+  function timedDayEvent(id: string, startISO: string, endISO: string, sort = 0): Event {
+    return makeEvent({
+      id,
+      day_date: '2026-05-01',
+      start_time: new Date(startISO),
+      end_time:   new Date(endISO),
+      sort_order: sort,
+    });
+  }
+
+  it('renders italic hint with "X min drive to next destination" below the source card', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T18:00:00', '2026-05-01T19:00:00', 1);
+    mockStore(
+      [a, b],
+      [],
+      { '1::2026-05-01': [{ from_event_id: 'ev-a', to_event_id: 'ev-b', duration_s: 1500, distance_m: 12000 }] },
+    );
+    render(<Timeline tripId="1" filterDay={DAY} />);
+
+    const hint = screen.getByTestId('travel-hint-ev-a');
+    expect(hint.textContent).toBe('25 min drive to next destination');
+    // Hint is only on the source card, not the last (destination) card
+    expect(screen.queryByTestId('travel-hint-ev-b')).toBeNull();
+  });
+
+  it('formats legs >= 60 min as "Hh Mm"', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T18:00:00', '2026-05-01T19:00:00', 1);
+    mockStore(
+      [a, b],
+      [],
+      { '1::2026-05-01': [{ from_event_id: 'ev-a', to_event_id: 'ev-b', duration_s: 3900, distance_m: 50000 }] },
+    );
+    render(<Timeline tripId="1" filterDay={DAY} />);
+
+    expect(screen.getByTestId('travel-hint-ev-a').textContent).toContain('1h 5m');
+  });
+
+  it('formats exactly one hour as "1h"', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T18:00:00', '2026-05-01T19:00:00', 1);
+    mockStore(
+      [a, b],
+      [],
+      { '1::2026-05-01': [{ from_event_id: 'ev-a', to_event_id: 'ev-b', duration_s: 3600, distance_m: 50000 }] },
+    );
+    render(<Timeline tripId="1" filterDay={DAY} />);
+
+    expect(screen.getByTestId('travel-hint-ev-a').textContent).toBe('1h drive to next destination');
+  });
+
+  it('uses "walk" mode when average speed is below the driving threshold', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T14:30:00', '2026-05-01T15:00:00', 1);
+    mockStore(
+      [a, b],
+      [],
+      // 600s / 800m → ~1.3 m/s (walking pace)
+      { '1::2026-05-01': [{ from_event_id: 'ev-a', to_event_id: 'ev-b', duration_s: 600, distance_m: 800 }] },
+    );
+    render(<Timeline tripId="1" filterDay={DAY} />);
+
+    expect(screen.getByTestId('travel-hint-ev-a').textContent).toBe('10 min walk to next destination');
+  });
+
+  it('hides the hint when no leg data exists for the pair', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T18:00:00', '2026-05-01T19:00:00', 1);
+    mockStore([a, b], [], {}); // no legs fetched yet
+    render(<Timeline tripId="1" filterDay={DAY} />);
+
+    expect(screen.queryByTestId('travel-hint-ev-a')).toBeNull();
+    // gap dots should still render based on the 4-hour gap
+    expect(screen.getByTestId('gap-dots-4')).toBeTruthy();
+  });
+
+  it('renders only the hint (no dots row) when gap < 1h and a leg exists', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    // 30-minute gap → 0 dots
+    const b = timedDayEvent('ev-b', '2026-05-01T14:30:00', '2026-05-01T15:00:00', 1);
+    mockStore(
+      [a, b],
+      [],
+      { '1::2026-05-01': [{ from_event_id: 'ev-a', to_event_id: 'ev-b', duration_s: 600, distance_m: 4000 }] },
+    );
+    const { container } = render(<Timeline tripId="1" filterDay={DAY} />);
+
+    expect(screen.getByTestId('travel-hint-ev-a').textContent).toContain('10 min');
+    expect(container.querySelector('[data-testid^="gap-dots-"]')).toBeNull();
+    expect(container.querySelector('[data-testid^="gap-row-"]')).toBeNull();
+  });
+
+  it('renders nothing between cards when gap < 1h and no leg exists', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T14:30:00', '2026-05-01T15:00:00', 1);
+    mockStore([a, b], [], {});
+    const { container } = render(<Timeline tripId="1" filterDay={DAY} />);
+
+    expect(screen.queryByTestId('travel-hint-ev-a')).toBeNull();
+    expect(container.querySelector('[data-testid^="gap-dots-"]')).toBeNull();
+    expect(container.querySelector('[data-testid^="gap-row-"]')).toBeNull();
+  });
+
+  it('does not match a leg in the wrong direction', () => {
+    const a = timedDayEvent('ev-a', '2026-05-01T13:00:00', '2026-05-01T14:00:00', 0);
+    const b = timedDayEvent('ev-b', '2026-05-01T18:00:00', '2026-05-01T19:00:00', 1);
+    mockStore(
+      [a, b],
+      [],
+      // Leg recorded as (b → a), but rendered pair is (a → b) — must not match
+      { '1::2026-05-01': [{ from_event_id: 'ev-b', to_event_id: 'ev-a', duration_s: 1500, distance_m: 12000 }] },
+    );
+    render(<Timeline tripId="1" filterDay={DAY} />);
+
+    expect(screen.queryByTestId('travel-hint-ev-a')).toBeNull();
   });
 });

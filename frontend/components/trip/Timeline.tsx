@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useTripStore, Event, Idea } from '@/lib/store';
+import { useTripStore, Event, Idea, legsKey, RouteLeg } from '@/lib/store';
 import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,10 +23,73 @@ interface TimelineProps {
   canVote?: boolean;
 }
 
-/** Returns true if event A's end_time overlaps event B's start_time. */
-function hasConflict(a: Event, b: Event): boolean {
-  if (!a.end_time || !b.start_time) return false;
-  return a.end_time > b.start_time;
+/**
+ * Returns the set of event IDs that conflict with any prior event in the list.
+ * An event conflicts if its start_time falls before the maximum end_time of any
+ * earlier event in the rendered order. Only the later item(s) in an overlap are
+ * flagged. TBD events (no start_time / end_time) are skipped.
+ */
+function computeConflicts(events: Event[]): Set<string> {
+  const conflicts = new Set<string>();
+  let maxEndSoFar: Date | null = null;
+  for (const ev of events) {
+    if (ev.start_time && maxEndSoFar && ev.start_time < maxEndSoFar) {
+      conflicts.add(ev.id);
+    }
+    if (ev.end_time && (!maxEndSoFar || ev.end_time > maxEndSoFar)) {
+      maxEndSoFar = ev.end_time;
+    }
+  }
+  return conflicts;
+}
+
+/** Number of dots to render between two adjacent cards (floor of hour gap, 0 if <1h or TBD). */
+function gapDotCount(prev: Event, next: Event): number {
+  if (!prev.end_time || !next.start_time) return 0;
+  const ms = next.start_time.getTime() - prev.end_time.getTime();
+  if (ms < 60 * 60 * 1000) return 0;
+  return Math.floor(ms / (60 * 60 * 1000));
+}
+
+/** Format leg duration: "<60min" → "X min"; "≥60min" → "Hh" or "Hh Mm". */
+function formatTravelTime(seconds: number): string {
+  const mins = Math.max(1, Math.round(seconds / 60));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function GapDots({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <div
+      data-testid={`gap-dots-${count}`}
+      aria-label={`${count} hour gap`}
+      className="relative py-2"
+      style={{ paddingLeft: '40px' }}
+    >
+      <div className="absolute left-[17px] top-0 bottom-0 w-0.5 bg-indigo-100/60" />
+      <div
+        className="absolute flex flex-col gap-1.5"
+        style={{ left: '15px', top: '8px' }}
+      >
+        {Array.from({ length: count }).map((_, i) => (
+          <span
+            key={i}
+            className="w-1.5 h-1.5 rounded-full relative z-10 bg-indigo-400/70"
+          />
+        ))}
+      </div>
+      <div style={{ height: `${count * 12 + 4}px` }} />
+    </div>
+  );
+}
+
+/** Heuristic until backend exposes travel mode: < ~10 km/h average → walk, else drive. */
+function travelMode(leg: { duration_s: number; distance_m: number }): 'walk' | 'drive' {
+  const speed = leg.duration_s > 0 ? leg.distance_m / leg.duration_s : 0;
+  return speed < 2.8 ? 'walk' : 'drive';
 }
 
 /** Parse a time string like "2pm", "14:00", "2:30 PM" into a Date for today. */
@@ -151,7 +214,7 @@ function TimeEditor({
 }
 
 export default function Timeline({ tripId, filterDay, readOnly = false, canVote = false }: TimelineProps) {
-  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays } =
+  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays, legsByDay } =
     useTripStore();
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -173,6 +236,13 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   const visibleEvents = filterDayStr
     ? events.filter((e) => e.day_date === filterDayStr)
     : events;
+
+  const conflictSet = computeConflicts(visibleEvents);
+
+  const dayLegs: RouteLeg[] | null =
+    tripId && filterDayStr ? legsByDay[legsKey(tripId, filterDayStr)] ?? null : null;
+  const legByPair = new Map<string, RouteLeg>();
+  if (dayLegs) for (const l of dayLegs) legByPair.set(`${l.from_event_id}::${l.to_event_id}`, l);
 
   const noDaysExist = tripDays.length === 0;
 
@@ -280,14 +350,26 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
           <AnimatePresence initial={false}>
             {visibleEvents.map((event, index) => {
               const prevEvent = index > 0 ? visibleEvents[index - 1] : null;
-              const isConflict = prevEvent ? hasConflict(prevEvent, event) : false;
+              const dots = prevEvent ? gapDotCount(prevEvent, event) : 0;
+              const isConflict = conflictSet.has(event.id);
               const isDragging = draggingId === event.id;
               const isDragTarget = dragOverId === event.id;
               const isTooltipOpen = tooltipId === event.id;
               const accent = categoryAccent(event.category);
               const hasDetails = !!(event.description || (SHOW_PHOTOS && event.photo_url) || (SHOW_RATING && event.rating != null) || event.address || event.end_time);
 
-              return (
+              const nextEvent = index < visibleEvents.length - 1 ? visibleEvents[index + 1] : null;
+              const legToNext = nextEvent ? legByPair.get(`${event.id}::${nextEvent.id}`) : undefined;
+              const travelLabel = legToNext ? formatTravelTime(legToNext.duration_s) : null;
+              const travelModeLabel = legToNext ? travelMode(legToNext) : null;
+
+              const cardEls: JSX.Element[] = [];
+              if (dots > 0) {
+                cardEls.push(
+                  <GapDots key={`gap-${event.id}`} count={dots} />
+                );
+              }
+              cardEls.push(
                 <motion.div
                   key={event.id}
                   layout
@@ -461,14 +543,18 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                       <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" initial={event.up != null ? { up: event.up ?? 0, down: event.down ?? 0, my_vote: event.my_vote ?? 0 } : undefined} />
                     </div>
 
-                    {index < visibleEvents.length - 1 && !filterDay && (
-                      <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl text-[10px] text-slate-500 font-bold">
-                        <span>~15 min transit</span>
-                      </div>
-                    )}
                   </div>
+                  {travelLabel && travelModeLabel && (
+                    <p
+                      data-testid={`travel-hint-${event.id}`}
+                      className="mt-1.5 ml-1 text-[11px] italic text-slate-400 font-medium"
+                    >
+                      {travelLabel} {travelModeLabel} to next destination
+                    </p>
+                  )}
                 </motion.div>
               );
+              return cardEls;
             })}
           </AnimatePresence>
         </div>

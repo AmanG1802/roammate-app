@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Loader } from '@googlemaps/js-api-loader';
 import { RefreshCw, AlertTriangle, Map as MapIcon } from 'lucide-react';
 import { useTripStore, Event } from '@/lib/store';
+import type { RouteLeg } from '@/lib/store';
 
 const MOCK_MODE =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MOCK ?? 'false').toLowerCase() === 'true';
@@ -19,7 +20,7 @@ interface GoogleMapProps {
 
 interface RouteResponse {
   encoded_polyline: string | null;
-  legs: { from_event_id: string; to_event_id: string; distance_m: number; duration_s: number }[];
+  legs: RouteLeg[];
   total_duration_s: number;
   total_distance_m: number;
   ordered_event_ids: string[];
@@ -370,6 +371,10 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
       }
 
       const data: RouteResponse = await res.json();
+
+      if (tripId && currentDayKey) {
+        useTripStore.getState().setRouteLegs(tripId, currentDayKey, data.legs);
+      }
 
       if (data.reason === 'need_two_points') {
         setToast({

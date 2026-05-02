@@ -1,8 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Loader2, Rocket, X } from 'lucide-react';
+import { Sparkles, Loader2, Rocket, X, Compass } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Witty messages shown while the AI is planning. Cycled every ~1.8s so the
+// user has something to read instead of a static spinner.
+const PLANNING_MESSAGES = [
+  'Consulting our travel guides…',
+  'Sketching the perfect itinerary…',
+  'Asking locals where to eat…',
+  'Mapping out the route…',
+  'Negotiating with the weather…',
+  'Hunting for hidden gems…',
+  'Booking imaginary llamas…',
+  'Pinning the must-sees…',
+];
 
 type Preview = {
   trip_name: string;
@@ -23,6 +37,17 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
   const [planning, setPlanning] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [witIdx, setWitIdx] = useState(0);
+
+  // Rotate witty messages while planning is in flight.
+  useEffect(() => {
+    if (!planning) return;
+    setWitIdx(Math.floor(Math.random() * PLANNING_MESSAGES.length));
+    const t = setInterval(() => {
+      setWitIdx((i) => (i + 1) % PLANNING_MESSAGES.length);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [planning]);
 
   const plan = async () => {
     const p = prompt.trim();
@@ -75,7 +100,19 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
   };
 
   return (
-    <div className="mb-8 bg-white border border-slate-100 rounded-[2rem] shadow-sm p-7">
+    <div className="relative mb-8 bg-white border border-slate-100 rounded-[2rem] shadow-sm p-7 overflow-hidden">
+      {/* Inner content — blurs/dims while planning so the overlay reads as
+          a clear "system is working" state. */}
+      <motion.div
+        animate={{
+          filter: planning ? 'blur(6px)' : 'blur(0px)',
+          opacity: planning ? 0.45 : 1,
+        }}
+        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        // Block clicks on the underlying form while planning so users can't
+        // re-trigger or edit mid-request.
+        style={{ pointerEvents: planning ? 'none' : 'auto' }}
+      >
       <div className="flex items-center gap-3 mb-5">
         <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
           <Sparkles className="w-5 h-5 text-indigo-600" />
@@ -88,7 +125,9 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
         </div>
       </div>
 
-      <div className="flex items-end gap-2">
+      {/* items-stretch + self-stretch on the button so it matches the
+          textarea's natural height (which scales with rows). */}
+      <div className="flex items-stretch gap-2">
         <textarea
           rows={2}
           value={prompt}
@@ -96,14 +135,16 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
           placeholder='e.g. "5-day Thailand itinerary with street food and temples"'
           className="flex-1 px-4 py-3 text-sm font-medium bg-slate-50 border border-slate-100 rounded-xl resize-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
         />
-        <button
+        <motion.button
           onClick={plan}
           disabled={planning || !prompt.trim()}
-          className="h-[52px] px-5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 disabled:opacity-40 transition-all whitespace-nowrap flex items-center gap-2 shadow-lg shadow-indigo-100"
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+          className="self-stretch px-6 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 disabled:opacity-40 transition-colors whitespace-nowrap flex items-center gap-2 shadow-lg shadow-indigo-100"
         >
           {planning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           Plan
-        </button>
+        </motion.button>
       </div>
 
       {error && <p className="text-rose-500 text-sm font-bold mt-3">{error}</p>}
@@ -144,6 +185,55 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
           </div>
         </div>
       )}
+      </motion.div>
+
+      {/* Planning overlay — blurred backdrop, animated icon, witty rotating
+          message. Sits absolutely over the inner content; AnimatePresence
+          fades it in/out without remounting the form. */}
+      <AnimatePresence>
+        {planning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/55 backdrop-blur-md rounded-[2rem]"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: 'linear' }}
+              className="relative mb-5"
+            >
+              <motion.div
+                animate={{ scale: [1, 1.06, 1] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-200"
+              >
+                <Compass className="w-7 h-7 text-white" />
+              </motion.div>
+              <div className="absolute inset-0 rounded-2xl bg-indigo-500/30 blur-xl -z-10" />
+            </motion.div>
+
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 mb-2">
+              Planning your trip
+            </p>
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={witIdx}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                className="text-sm font-bold text-slate-700 max-w-xs text-center"
+              >
+                {PLANNING_MESSAGES[witIdx]}
+              </motion.p>
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
