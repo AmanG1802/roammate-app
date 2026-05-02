@@ -62,3 +62,23 @@ export function categoryAccent(cat?: string | null): CategoryAccent {
 
   return { bar: 'bg-indigo-400', badge: 'bg-indigo-50 text-indigo-600 border border-indigo-200', dot: 'bg-indigo-500' };
 }
+
+/** Return a hex color for Google Maps PinElement based on event category. */
+export function categoryPinColor(cat?: string | null): string {
+  if (!cat) return '#4f46e5';
+  const l = cat.toLowerCase();
+  if (/food|restaurant|caf[eé]|dining|eat|pub|bistro|bakery|cuisine|brunch|breakfast|lunch|dinner|snack|dessert|ice.?cream|pizza|sushi|ramen|noodle|street.?food|seafood|buffet/i.test(l)) return '#f59e0b';
+  if (/museum|art|cultur|history|gallery|theater|theatre|monument|exhibit|heritage|archeolog|archaeolog|palace|castle|ruin/i.test(l)) return '#8b5cf6';
+  if (/nature|park|beach|outdoor|garden|hiking|trail|waterfall|lake|forest|mountain|island|canyon|reserve|wildlife|jungle|cliff|valley/i.test(l)) return '#10b981';
+  if (/shop|mall|market|boutique|store|souvenir|retail|bazaar|flea|duty.?free/i.test(l)) return '#f43f5e';
+  if (/hotel|hostel|resort|airbnb|stay|accommodation|lodg|inn|motel|villa|apartment|rental/i.test(l)) return '#3b82f6';
+  if (/airport|train|bus|transport|transit|ferry|port|station|subway|metro|taxi|transfer|flight|commute/i.test(l)) return '#64748b';
+  if (/entertainment|theme.?park|amusement|cinema|movie|concert|show|perform|festival|fair|carnival|circus|zoo|aquarium/i.test(l)) return '#d946ef';
+  if (/sport|adventure|surf|dive|scuba|snorkel|ski|climb|kayak|cycle|bike|swim|water.?sport|skydiv|bungee|trek|rafting/i.test(l)) return '#14b8a6';
+  if (/spa|wellness|massage|yoga|meditat|gym|fitness|sauna|thermal|hot.?spring|retreat/i.test(l)) return '#ec4899';
+  if (/church|cathedral|temple|mosque|shrine|monastery|chapel|religious|spiritual|sacred|pagoda|stupa/i.test(l)) return '#78716c';
+  if (/nightlife|club|nightclub|lounge|rooftop|cocktail|bar.?crawl|party|disco/i.test(l)) return '#7c3aed';
+  if (/landmark|viewpoint|view|lookout|panorama|observation|tower|bridge|square|plaza|sight/i.test(l)) return '#eab308';
+  if (/activity|experience|tour|class|workshop|lesson|cooking|craft/i.test(l)) return '#f97316';
+  return '#4f46e5';
+}

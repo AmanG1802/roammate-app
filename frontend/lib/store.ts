@@ -152,6 +152,12 @@ interface TripState {
   legsByDay: Record<string, RouteLeg[]>;
   setRouteLegs: (tripId: string, dayDate: string, legs: RouteLeg[]) => void;
   clearRouteLegsForDay: (tripId: string, dayDate: string) => void;
+
+  /** Map-Timeline bidirectional highlight. */
+  hoveredEventId: string | null;
+  selectedEventId: string | null;
+  setHoveredEventId: (id: string | null) => void;
+  setSelectedEventId: (id: string | null) => void;
 }
 
 function mapApiEvent(raw: Record<string, unknown>): Event {
@@ -492,4 +498,9 @@ export const useTripStore = create<TripState>((set, get) => ({
       delete next[legsKey(tripId, dayDate)];
       return { legsByDay: next };
     }),
+
+  hoveredEventId: null,
+  selectedEventId: null,
+  setHoveredEventId: (id) => set({ hoveredEventId: id }),
+  setSelectedEventId: (id) => set({ selectedEventId: id }),
 }));

@@ -243,7 +243,8 @@ function TimeEditor({
 }
 
 export default function Timeline({ tripId, filterDay, readOnly = false, canVote = false }: TimelineProps) {
-  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays, legsByDay } =
+  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays, legsByDay,
+    selectedEventId, setHoveredEventId, setSelectedEventId } =
     useTripStore();
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -251,12 +252,25 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [tooltipId, setTooltipId] = useState<string | null>(null);
 
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
   useEffect(() => {
     if (!tripId) return;
     const token = localStorage.getItem('token');
     if (!token) return;
     loadEvents(tripId, token);
   }, [tripId, loadEvents]);
+
+  // Scroll the matching card into view when a marker is clicked on the map
+  useEffect(() => {
+    if (!selectedEventId) return;
+    const el = cardRefs.current.get(selectedEventId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const timeout = setTimeout(() => setSelectedEventId(null), 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [selectedEventId, setSelectedEventId]);
 
   const filterDayStr = filterDay
     ? `${filterDay.getFullYear()}-${String(filterDay.getMonth() + 1).padStart(2, '0')}-${String(filterDay.getDate()).padStart(2, '0')}`
@@ -398,10 +412,12 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                   <GapDots key={`gap-${event.id}`} count={dots} />
                 );
               }
+              const isMapSelected = selectedEventId === event.id;
               cardEls.push(
                 <motion.div
                   key={event.id}
                   layout
+                  ref={(el: HTMLDivElement | null) => { if (el) cardRefs.current.set(event.id, el); else cardRefs.current.delete(event.id); }}
                   initial={{ opacity: 0, x: -16 }}
                   animate={{ opacity: isDragging ? 0.4 : 1, x: 0 }}
                   exit={{ opacity: 0, x: -16 }}
@@ -410,8 +426,10 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                   onDragOver={(e) => { if (!readOnly) handleEventDragOver(e, event.id); }}
                   onDrop={(e) => { if (!readOnly) handleEventDrop(e, event.id); }}
                   onDragEndCapture={() => { if (!readOnly) handleEventDragEnd(); }}
+                  onMouseEnter={() => setHoveredEventId(event.id)}
+                  onMouseLeave={() => setHoveredEventId(null)}
                   data-testid={`event-card-${event.id}`}
-                  className={`relative pl-10 group transition-all ${isDragTarget ? 'scale-[1.02]' : ''}`}
+                  className={`relative pl-10 group transition-all ${isDragTarget ? 'scale-[1.02]' : ''} ${isMapSelected ? 'ring-2 ring-indigo-400 ring-offset-2 rounded-2xl' : ''}`}
                 >
                   {isDragTarget && (
                     <div className="absolute top-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full -translate-y-2" />
