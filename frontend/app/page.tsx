@@ -21,6 +21,20 @@ export default function Home() {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Respect prefers-reduced-motion: snap every animated element to its
+    // final state and skip the cinematic timeline + scroll triggers entirely.
+    // Initial states like `opacity-0` are baked into JSX, so we have to
+    // explicitly reveal them when motion is suppressed.
+    if (typeof window !== 'undefined' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      gsap.set([
+        '.hero-title span', '.hero-subtitle', '.hero-cta',
+        '.concierge-badge', '.feature-card',
+        '.showcase-content', '.showcase-image', '.float-icon',
+      ], { opacity: 1, x: 0, y: 0, scale: 1, rotateX: 0, rotateY: 0, clearProps: 'transform' });
+      return;
+    }
+
     const ctx = gsap.context(() => {
       // 1. HERO REVEAL (Perspective Scale-In)
       const tlHero = gsap.timeline();

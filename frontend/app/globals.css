@@ -21,27 +21,18 @@ body {
 }
 
 /* ── Page View Transitions (Dashboard → Trip Hub → Planner) ────────────────── */
-@keyframes vt-exit-scale {
-  to {
-    opacity: 0;
-    transform: scale(1.04) translateY(-6px);
-    filter: blur(5px);
-  }
-}
-
-@keyframes vt-enter-scale {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(18px);
-  }
-}
+/* Pure crossfade: old + new pages overlap during the transition, so the user
+   never sees a flash of empty body bg between them. Scale/blur was causing
+   visible flashes when combined with our Framer entry, so we keep this lean. */
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
 
 @media (prefers-reduced-motion: no-preference) {
   ::view-transition-old(root) {
-    animation: 280ms ease-in both vt-exit-scale;
+    animation: 220ms ease-out both vt-fade-out;
   }
   ::view-transition-new(root) {
-    animation: 480ms cubic-bezier(0, 0, 0.2, 1) both vt-enter-scale;
+    animation: 260ms ease-in both vt-fade-in;
   }
 }
 
@@ -49,5 +40,30 @@ body {
   ::view-transition-old(root),
   ::view-transition-new(root) {
     animation: none !important;
+  }
+}
+
+/* ── Shared element morph for trip card title → Trip Hub h1 ────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 360ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* ── Reduced-motion safety net ──────────────────────────────────────────────
+   Applies to any animation/transition we may have missed (CSS keyframes,
+   Tailwind transition classes, third-party libs). Framer Motion and GSAP are
+   handled per-call site; this catches the rest.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

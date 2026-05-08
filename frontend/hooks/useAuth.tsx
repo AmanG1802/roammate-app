@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 
 function clearSession() {
   localStorage.removeItem('token');
@@ -59,15 +58,19 @@ export default function useAuth(requireAuth: boolean = true) {
 }
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isLoading } = useAuth(true);
+  const router = useRouter();
+  // Pure redirect guard — always render children so SSR markup matches the
+  // first client render (no hydration mismatch). If there's no token, kick
+  // the user to /login on mount; if the token is rejected by the API later,
+  // useAuth's background validator handles the redirect.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!localStorage.getItem('token')) {
+      router.push('/login');
+    }
+  }, [router]);
 
-  if (isLoading) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-white">
-        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-      </div>
-    );
-  }
+  useAuth(true);
 
   return <>{children}</>;
 }

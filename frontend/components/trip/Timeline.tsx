@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useTripStore, Event, Idea } from '@/lib/store';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTripStore, Event, Idea, legsKey, RouteLeg } from '@/lib/store';
 import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,10 +23,73 @@ interface TimelineProps {
   canVote?: boolean;
 }
 
-/** Returns true if event A's end_time overlaps event B's start_time. */
-function hasConflict(a: Event, b: Event): boolean {
-  if (!a.end_time || !b.start_time) return false;
-  return a.end_time > b.start_time;
+/**
+ * Returns the set of event IDs that conflict with any prior event in the list.
+ * An event conflicts if its start_time falls before the maximum end_time of any
+ * earlier event in the rendered order. Only the later item(s) in an overlap are
+ * flagged. TBD events (no start_time / end_time) are skipped.
+ */
+function computeConflicts(events: Event[]): Set<string> {
+  const conflicts = new Set<string>();
+  let maxEndSoFar: Date | null = null;
+  for (const ev of events) {
+    if (ev.start_time && maxEndSoFar && ev.start_time < maxEndSoFar) {
+      conflicts.add(ev.id);
+    }
+    if (ev.end_time && (!maxEndSoFar || ev.end_time > maxEndSoFar)) {
+      maxEndSoFar = ev.end_time;
+    }
+  }
+  return conflicts;
+}
+
+/** Number of dots to render between two adjacent cards (floor of hour gap, 0 if <1h or TBD). */
+function gapDotCount(prev: Event, next: Event): number {
+  if (!prev.end_time || !next.start_time) return 0;
+  const ms = next.start_time.getTime() - prev.end_time.getTime();
+  if (ms < 60 * 60 * 1000) return 0;
+  return Math.floor(ms / (60 * 60 * 1000));
+}
+
+/** Format leg duration: "<60min" → "X min"; "≥60min" → "Hh" or "Hh Mm". */
+function formatTravelTime(seconds: number): string {
+  const mins = Math.max(1, Math.round(seconds / 60));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function GapDots({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <div
+      data-testid={`gap-dots-${count}`}
+      aria-label={`${count} hour gap`}
+      className="relative py-2"
+      style={{ paddingLeft: '40px' }}
+    >
+      <div className="absolute left-[17px] top-0 bottom-0 w-0.5 bg-indigo-100/60" />
+      <div
+        className="absolute flex flex-col gap-1.5"
+        style={{ left: '15px', top: '8px' }}
+      >
+        {Array.from({ length: count }).map((_, i) => (
+          <span
+            key={i}
+            className="w-1.5 h-1.5 rounded-full relative z-10 bg-indigo-400/70"
+          />
+        ))}
+      </div>
+      <div style={{ height: `${count * 12 + 4}px` }} />
+    </div>
+  );
+}
+
+/** Heuristic until backend exposes travel mode: < ~10 km/h average → walk, else drive. */
+function travelMode(leg: { duration_s: number; distance_m: number }): 'walk' | 'drive' {
+  const speed = leg.duration_s > 0 ? leg.distance_m / leg.duration_s : 0;
+  return speed < 2.8 ? 'walk' : 'drive';
 }
 
 /** Parse a time string like "2pm", "14:00", "2:30 PM" into a Date for today. */
@@ -65,9 +128,9 @@ function TimeDisplay({
       <button
         onClick={onEdit}
         data-testid={`tbd-badge-${event.id}`}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black text-amber-600 bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
+        className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
       >
-        <Clock className="w-3 h-3" />
+        <Clock className="w-2.5 h-2.5" />
         TBD
         <Pencil className="w-2.5 h-2.5 ml-0.5" />
       </button>
@@ -77,14 +140,20 @@ function TimeDisplay({
     <button
       onClick={onEdit}
       data-testid={`time-badge-${event.id}`}
-      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition-colors ${
+      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black transition-colors ${
         isConflict
           ? 'text-red-600 bg-red-50 border border-red-400 ring-1 ring-red-300'
           : 'text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100'
       }`}
     >
-      {isConflict && <AlertCircle className="w-3 h-3" data-testid="conflict-icon" />}
+      {isConflict && <AlertCircle className="w-2.5 h-2.5" data-testid="conflict-icon" />}
       {format(event.start_time, 'h:mm a')}
+      {event.end_time && (
+        <>
+          <span className="mx-0.5">–</span>
+          {format(event.end_time, 'h:mm a')}
+        </>
+      )}
       <Pencil className="w-2.5 h-2.5 ml-0.5" />
     </button>
   );
@@ -99,12 +168,14 @@ function TimeEditor({
   onConfirm: (start: Date | null, end: Date | null) => void;
   onCancel: () => void;
 }) {
-  const [startVal, setStartVal] = useState(
-    event.start_time ? format(event.start_time, 'HH:mm') : ''
-  );
-  const [endVal, setEndVal] = useState(
-    event.end_time ? format(event.end_time, 'HH:mm') : ''
-  );
+  const initialStart = event.start_time ? format(event.start_time, 'HH:mm') : '';
+  const initialEnd = event.end_time ? format(event.end_time, 'HH:mm') : '';
+
+  const [startVal, setStartVal] = useState(initialStart);
+  const [endVal, setEndVal] = useState(initialEnd);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isDirty = startVal !== initialStart || endVal !== initialEnd;
 
   const handleConfirm = () => {
     const startDate = startVal ? parseTimeString(startVal) : null;
@@ -115,49 +186,73 @@ function TimeEditor({
     onConfirm(startDate, endDate);
   };
 
+  const handleClickOutside = useCallback(
+    (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node) && !isDirty) {
+        onCancel();
+      }
+    },
+    [isDirty, onCancel],
+  );
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [handleClickOutside]);
+
   return (
-    <div data-testid={`time-editor-${event.id}`} className="mt-2 flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
+    <div ref={ref} data-testid={`time-editor-${event.id}`} className="mt-1.5 flex items-center gap-1 p-1 bg-slate-50 rounded-lg border border-slate-200">
       <input
         type="time"
         value={startVal}
         onChange={(e) => setStartVal(e.target.value)}
         aria-label="Start time"
-        className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-md px-1 py-0.5 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-indigo-400"
       />
-      <span className="text-xs text-slate-400">→</span>
+      <span className="text-[10px] text-slate-400 shrink-0">→</span>
       <input
         type="time"
         value={endVal}
         onChange={(e) => setEndVal(e.target.value)}
         aria-label="End time"
-        className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-md px-1 py-0.5 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-indigo-400"
       />
-      <button
-        onClick={handleConfirm}
-        aria-label="Confirm time"
-        className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-      >
-        <Check className="w-3 h-3" />
-      </button>
-      <button
-        onClick={onCancel}
-        aria-label="Cancel time edit"
-        className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
-      >
-        <X className="w-3 h-3" />
-      </button>
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button
+          onClick={handleConfirm}
+          disabled={!isDirty}
+          aria-label="Confirm time"
+          className={`p-1 rounded-md transition-colors ${
+            isDirty
+              ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+              : 'bg-indigo-300 text-indigo-100 cursor-not-allowed'
+          }`}
+        >
+          <Check className="w-3 h-3" />
+        </button>
+        <button
+          onClick={onCancel}
+          aria-label="Cancel time edit"
+          className="p-1 bg-slate-200 text-slate-500 rounded-md hover:bg-slate-300 hover:text-slate-700 transition-colors"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function Timeline({ tripId, filterDay, readOnly = false, canVote = false }: TimelineProps) {
-  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays } =
+  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays, legsByDay,
+    selectedEventId, setHoveredEventId, setSelectedEventId } =
     useTripStore();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [tooltipId, setTooltipId] = useState<string | null>(null);
+
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
     if (!tripId) return;
@@ -166,6 +261,17 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     loadEvents(tripId, token);
   }, [tripId, loadEvents]);
 
+  // Scroll the matching card into view when a marker is clicked on the map
+  useEffect(() => {
+    if (!selectedEventId) return;
+    const el = cardRefs.current.get(selectedEventId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const timeout = setTimeout(() => setSelectedEventId(null), 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [selectedEventId, setSelectedEventId]);
+
   const filterDayStr = filterDay
     ? `${filterDay.getFullYear()}-${String(filterDay.getMonth() + 1).padStart(2, '0')}-${String(filterDay.getDate()).padStart(2, '0')}`
     : null;
@@ -173,6 +279,13 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   const visibleEvents = filterDayStr
     ? events.filter((e) => e.day_date === filterDayStr)
     : events;
+
+  const conflictSet = computeConflicts(visibleEvents);
+
+  const dayLegs: RouteLeg[] | null =
+    tripId && filterDayStr ? legsByDay[legsKey(tripId, filterDayStr)] ?? null : null;
+  const legByPair = new Map<string, RouteLeg>();
+  if (dayLegs) for (const l of dayLegs) legByPair.set(`${l.from_event_id}::${l.to_event_id}`, l);
 
   const noDaysExist = tripDays.length === 0;
 
@@ -280,17 +393,31 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
           <AnimatePresence initial={false}>
             {visibleEvents.map((event, index) => {
               const prevEvent = index > 0 ? visibleEvents[index - 1] : null;
-              const isConflict = prevEvent ? hasConflict(prevEvent, event) : false;
+              const dots = prevEvent ? gapDotCount(prevEvent, event) : 0;
+              const isConflict = conflictSet.has(event.id);
               const isDragging = draggingId === event.id;
               const isDragTarget = dragOverId === event.id;
               const isTooltipOpen = tooltipId === event.id;
               const accent = categoryAccent(event.category);
-              const hasDetails = !!(event.description || (SHOW_PHOTOS && event.photo_url) || (SHOW_RATING && event.rating != null) || event.address || event.end_time);
+              const hasDetails = !!(event.description || (SHOW_PHOTOS && event.photo_url) || (SHOW_RATING && event.rating != null) || event.address || event.added_by);
 
-              return (
+              const nextEvent = index < visibleEvents.length - 1 ? visibleEvents[index + 1] : null;
+              const legToNext = nextEvent ? legByPair.get(`${event.id}::${nextEvent.id}`) : undefined;
+              const travelLabel = legToNext ? formatTravelTime(legToNext.duration_s) : null;
+              const travelModeLabel = legToNext ? travelMode(legToNext) : null;
+
+              const cardEls: JSX.Element[] = [];
+              if (dots > 0) {
+                cardEls.push(
+                  <GapDots key={`gap-${event.id}`} count={dots} />
+                );
+              }
+              const isMapSelected = selectedEventId === event.id;
+              cardEls.push(
                 <motion.div
                   key={event.id}
                   layout
+                  ref={(el: HTMLDivElement | null) => { if (el) cardRefs.current.set(event.id, el); else cardRefs.current.delete(event.id); }}
                   initial={{ opacity: 0, x: -16 }}
                   animate={{ opacity: isDragging ? 0.4 : 1, x: 0 }}
                   exit={{ opacity: 0, x: -16 }}
@@ -299,8 +426,10 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                   onDragOver={(e) => { if (!readOnly) handleEventDragOver(e, event.id); }}
                   onDrop={(e) => { if (!readOnly) handleEventDrop(e, event.id); }}
                   onDragEndCapture={() => { if (!readOnly) handleEventDragEnd(); }}
+                  onMouseEnter={() => setHoveredEventId(event.id)}
+                  onMouseLeave={() => setHoveredEventId(null)}
                   data-testid={`event-card-${event.id}`}
-                  className={`relative pl-10 group transition-all ${isDragTarget ? 'scale-[1.02]' : ''}`}
+                  className={`relative pl-10 group transition-all ${isDragTarget ? 'scale-[1.02]' : ''} ${isMapSelected ? 'ring-2 ring-indigo-400 ring-offset-2 rounded-2xl' : ''}`}
                 >
                   {isDragTarget && (
                     <div className="absolute top-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full -translate-y-2" />
@@ -314,71 +443,52 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                   <div className={`p-4 bg-white border rounded-2xl shadow-sm hover:shadow-md transition-all ${
                     isConflict ? 'border-red-200' : 'border-slate-100 hover:border-indigo-100'
                   }`}>
-                    {/* Main row */}
-                    <div className="flex justify-between items-start gap-3">
-                      {/* Left: grip + title/meta */}
-                      <div className="flex items-start gap-2 flex-1 min-w-0">
-                        {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-black text-slate-900 leading-tight truncate">
-                            {event.title}
-                          </h4>
-                          {/* Category + Details button */}
-                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                            {event.category ? (
-                              <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${accent.badge}`}>
-                                {event.category}
+                    {/* Row 1: grip + title (full width) */}
+                    <div className="flex items-start gap-2">
+                      {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
+                      <h4 className="font-black text-slate-900 leading-tight flex-1 min-w-0">
+                        {event.title}
+                      </h4>
+                    </div>
+
+                    {/* Rows 2-4 + detail panel: indented to align with title start */}
+                    <div className={!readOnly ? 'ml-6' : undefined}>
+                      {/* Row 2: time range + move-to-bin */}
+                      <div className="flex items-center justify-between mt-1.5">
+                        <div className="flex items-center gap-2">
+                          {readOnly ? (
+                            event.start_time ? (
+                              <span
+                                data-testid={`time-badge-${event.id}`}
+                                className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                  isConflict
+                                    ? 'text-red-600 bg-red-50 border border-red-400 ring-1 ring-red-300'
+                                    : 'text-indigo-600 bg-indigo-50 border border-indigo-100'
+                                }`}
+                              >
+                                {isConflict && <AlertCircle className="w-2.5 h-2.5" />}
+                                {format(event.start_time, 'h:mm a')}
+                                {event.end_time && (
+                                  <>
+                                    <span className="mx-0.5">–</span>
+                                    {format(event.end_time, 'h:mm a')}
+                                  </>
+                                )}
                               </span>
                             ) : (
-                              <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                                <MapPin className="w-2.5 h-2.5" />
-                                <span>Activity</span>
-                              </div>
-                            )}
-                            {hasDetails && (
-                              <button
-                                onClick={() => setTooltipId(isTooltipOpen ? null : event.id)}
-                                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors ${
-                                  isTooltipOpen
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100'
-                                }`}
-                                title="Details"
-                              >
-                                <Info className="w-3 h-3" />
-                                {isTooltipOpen ? 'Hide' : 'Details'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right: time + move-to-bin */}
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {readOnly ? (
-                          event.start_time ? (
-                            <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black ${
-                              isConflict
-                                ? 'text-red-600 bg-red-50 border border-red-400 ring-1 ring-red-300'
-                                : 'text-indigo-600 bg-indigo-50 border border-indigo-100'
-                            }`}>
-                              {isConflict && <AlertCircle className="w-3 h-3" />}
-                              {format(event.start_time, 'h:mm a')}
-                            </span>
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-100">
+                                <Clock className="w-2.5 h-2.5" />
+                                TBD
+                              </span>
+                            )
                           ) : (
-                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black text-amber-600 bg-amber-50 border border-amber-100">
-                              <Clock className="w-3 h-3" />
-                              TBD
-                            </span>
-                          )
-                        ) : (
-                          <TimeDisplay
-                            event={event}
-                            isConflict={isConflict}
-                            onEdit={() => setEditingId(event.id)}
-                          />
-                        )}
-
+                            <TimeDisplay
+                              event={event}
+                              isConflict={isConflict}
+                              onEdit={() => setEditingId(event.id)}
+                            />
+                          )}
+                        </div>
                         {!readOnly && (
                           <button
                             title="Send back to Idea Bin"
@@ -387,88 +497,121 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                               const token = localStorage.getItem('token');
                               moveEventToIdea(event.id, tripId, token);
                             }}
-                            className="flex items-center gap-1 text-[9px] font-black text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
                           >
                             <Undo2 className="w-2.5 h-2.5" />
                             Move to bin
                           </button>
                         )}
                       </div>
-                    </div>
 
-                    {/* Inline detail panel */}
-                    <AnimatePresence>
-                      {isTooltipOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                            {SHOW_PHOTOS && event.photo_url && (
-                              <img
-                                src={event.photo_url}
-                                alt=""
-                                className="w-full h-28 object-cover rounded-lg border border-slate-100"
-                              />
-                            )}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {SHOW_RATING && event.rating != null && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
-                                  <Star className="w-2.5 h-2.5 text-amber-400" /> {event.rating}
-                                </span>
+                      {/* Time editor (inserted below time row, pushes rows 3-4 down) */}
+                      {!readOnly && editingId === event.id && (
+                        <TimeEditor
+                          event={event}
+                          onConfirm={(start, end) => {
+                            const token = localStorage.getItem('token');
+                            updateEventTime(event.id, start, end, token);
+                            setEditingId(null);
+                          }}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      )}
+
+                      {/* Row 3: category */}
+                      <div className="mt-1.5">
+                        {event.category ? (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${accent.badge}`}>
+                            {event.category}
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1 text-slate-400 text-[10px] font-bold">
+                            <MapPin className="w-2.5 h-2.5" />
+                            <span>Activity</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Row 4: details + votes */}
+                      <div className="flex items-center justify-between mt-1.5">
+                        <div>
+                          {hasDetails && (
+                            <button
+                              onClick={() => setTooltipId(isTooltipOpen ? null : event.id)}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-colors ${
+                              isTooltipOpen
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100'
+                            }`}
+                              title="Details"
+                            >
+                              <Info className="w-3 h-3" />
+                              {isTooltipOpen ? 'Hide' : 'Details'}
+                            </button>
+                          )}
+                        </div>
+                        <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                          <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" initial={event.up != null ? { up: event.up ?? 0, down: event.down ?? 0, my_vote: event.my_vote ?? 0 } : undefined} />
+                        </div>
+                      </div>
+
+                      {/* Inline detail panel */}
+                      <AnimatePresence>
+                        {isTooltipOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                              {SHOW_PHOTOS && event.photo_url && (
+                                <img
+                                  src={event.photo_url}
+                                  alt=""
+                                  className="w-full h-28 object-cover rounded-lg border border-slate-100"
+                                />
                               )}
-                              {event.start_time && event.end_time && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[10px] font-bold border border-indigo-100">
-                                  <Clock className="w-2.5 h-2.5" /> {format(event.start_time, 'h:mm a')} – {format(event.end_time, 'h:mm a')}
-                                </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {SHOW_RATING && event.rating != null && (
+                                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
+                                    <Star className="w-2.5 h-2.5 text-amber-400" /> {event.rating}
+                                  </span>
+                                )}
+                                {event.added_by && (
+                                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold">
+                                    <UserCircle className="w-2.5 h-2.5" /> {event.added_by}
+                                  </span>
+                                )}
+                              </div>
+                              {event.address && (
+                                <div className="flex items-start gap-1 text-[10px] font-medium text-slate-500">
+                                  <MapPin className="w-2.5 h-2.5 shrink-0 mt-0.5 text-slate-400" />
+                                  <span>{event.address}</span>
+                                </div>
                               )}
-                              {event.added_by && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold">
-                                  <UserCircle className="w-2.5 h-2.5" /> {event.added_by}
-                                </span>
+                              {event.description && (
+                                <p className="text-xs font-medium text-slate-500 leading-relaxed">{event.description}</p>
                               )}
                             </div>
-                            {event.address && (
-                              <div className="flex items-start gap-1 text-[10px] font-medium text-slate-500">
-                                <MapPin className="w-2.5 h-2.5 shrink-0 mt-0.5 text-slate-400" />
-                                <span>{event.address}</span>
-                              </div>
-                            )}
-                            {event.description && (
-                              <p className="text-xs font-medium text-slate-500 leading-relaxed">{event.description}</p>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {!readOnly && editingId === event.id && (
-                      <TimeEditor
-                        event={event}
-                        onConfirm={(start, end) => {
-                          const token = localStorage.getItem('token');
-                          updateEventTime(event.id, start, end, token);
-                          setEditingId(null);
-                        }}
-                        onCancel={() => setEditingId(null)}
-                      />
-                    )}
-
-                    <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                      <VoteControl kind="event" id={event.id} canVote={canVote} size="sm" initial={event.up != null ? { up: event.up ?? 0, down: event.down ?? 0, my_vote: event.my_vote ?? 0 } : undefined} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
-                    {index < visibleEvents.length - 1 && !filterDay && (
-                      <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl text-[10px] text-slate-500 font-bold">
-                        <span>~15 min transit</span>
-                      </div>
-                    )}
                   </div>
+                  {travelLabel && travelModeLabel && (
+                    <p
+                      data-testid={`travel-hint-${event.id}`}
+                      className="mt-1.5 text-center text-[11px] italic text-slate-400 font-medium"
+                    >
+                      {travelLabel} {travelModeLabel} to next destination
+                    </p>
+                  )}
                 </motion.div>
               );
+              return cardEls;
             })}
           </AnimatePresence>
         </div>
