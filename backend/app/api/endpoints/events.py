@@ -9,7 +9,7 @@ from app.models.all_models import (
 )
 from app.schemas.event import Event, EventCreate, EventUpdate, RippleRequest
 from app.schemas.trip import IdeaBinItem
-from app.services.ripple_engine import ripple_engine
+from app.services.smart_ripple import smart_ripple_engine
 from app.services import notification_service
 from app.services.roles import require_trip_admin
 from app.schemas.notification import NotificationType
@@ -34,7 +34,7 @@ def _event_to_schema(event: EventModel, up: int, down: int, mine: int) -> Event:
         address=event.address, photo_url=event.photo_url, rating=event.rating,
         price_level=event.price_level, types=event.types,
         opening_hours=event.opening_hours, phone=event.phone, website=event.website,
-        time_category=event.time_category,
+        time_category=event.time_category, is_skipped=event.is_skipped,
         up=up, down=down, my_vote=mine,
     )
 
@@ -175,6 +175,8 @@ async def update_event(
         event.sort_order = update.sort_order
     if update.time_category is not None:
         event.time_category = update.time_category
+    if update.is_skipped is not None:
+        event.is_skipped = update.is_skipped
 
     await db.commit()
     await db.refresh(event)
@@ -387,7 +389,7 @@ async def get_events(
             address=e.address, photo_url=e.photo_url, rating=e.rating,
             price_level=e.price_level, types=e.types,
             opening_hours=e.opening_hours, phone=e.phone, website=e.website,
-            time_category=e.time_category,
+            time_category=e.time_category, is_skipped=e.is_skipped,
             up=up_map.get(e.id, 0), down=down_map.get(e.id, 0),
             my_vote=my_map.get(e.id, 0),
         )
@@ -410,11 +412,12 @@ async def trigger_ripple_engine(
     await require_trip_admin(db, trip_id, current_user.id)
 
     try:
-        updated_events = await ripple_engine.shift_itinerary(
+        updated_events = await smart_ripple_engine.shift_itinerary(
             db=db,
             trip_id=trip_id,
             delta_minutes=request.delta_minutes,
             start_from_time=request.start_from_time,
+            user_id=current_user.id,
         )
         if updated_events:
             recipients = await notification_service.trip_member_ids(

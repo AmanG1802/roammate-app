@@ -5,7 +5,9 @@ Mirrors the design of ``app.services.llm.token_tracker``: one flat
 Loki, CloudWatch Insights) can slice without parsing nested JSON.
 
 Events tracked:
-  - find_place / place_details / photo_url / directions / enrich_batch
+  - place_details_v1 (V1 find_place + place_details)
+  - place_details_v2 (V2 text search + place details)
+  - nearby_or_text_search / directions / routes / photo_url / enrich_batch
   - cache hits and misses
   - circuit-breaker state transitions
   - mock fallback usage

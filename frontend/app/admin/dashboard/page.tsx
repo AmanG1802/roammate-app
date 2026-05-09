@@ -431,10 +431,12 @@ function TokenUsageSection({ token }: { token: string }) {
 // ── Maps Usage Section ───────────────────────────────────────────────────────
 
 const API_CATEGORIES: { key: string; label: string; ops: string[] }[] = [
-  { key: 'places', label: 'Places', ops: ['find_place', 'place_details'] },
-  { key: 'places_new', label: 'Places New', ops: ['photo_url'] },
+  { key: 'places_legacy', label: 'Places Legacy', ops: ['place_details_v1'] },
+  { key: 'places_new', label: 'Places New', ops: ['place_details_v2'] },
+  { key: 'nearby', label: 'Nearby / Text Search', ops: ['nearby_or_text_search'] },
+  { key: 'photos', label: 'Photos', ops: ['photo_url'] },
   { key: 'directions', label: 'Directions', ops: ['directions'] },
-  { key: 'routes', label: 'Routes', ops: ['enrich_batch'] },
+  { key: 'routes', label: 'Routes', ops: ['routes'] },
 ];
 
 function MapsUsageSection({ token }: { token: string }) {

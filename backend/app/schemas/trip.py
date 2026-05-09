@@ -2,6 +2,8 @@ from typing import List, Optional
 from pydantic import BaseModel, EmailStr, model_validator
 from datetime import datetime, date
 
+from app.schemas.place import PlaceFields
+
 
 # ── User embedded in trip member ──────────────────────────────────────────────
 class UserInTrip(BaseModel):
@@ -60,25 +62,12 @@ class InvitationOut(BaseModel):
 
 
 # ── Idea Bin ───────────────────────────────────────────────────────────────────
-class IdeaBinItemBase(BaseModel):
-    title: str
-    description: Optional[str] = None
-    category: Optional[str] = None
-    place_id: Optional[str] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
-    address: Optional[str] = None
-    photo_url: Optional[str] = None
-    rating: Optional[float] = None
-    price_level: Optional[int] = None
-    types: Optional[List[str]] = None
+class IdeaBinItemBase(PlaceFields):
     opening_hours: Optional[dict] = None
     phone: Optional[str] = None
     website: Optional[str] = None
     url_source: Optional[str] = None
     time_hint: Optional[str] = None
-    time_category: Optional[str] = None
-    added_by: Optional[str] = None
 
 class IdeaBinItemCreate(IdeaBinItemBase):
     pass
@@ -100,6 +89,7 @@ class TripBase(BaseModel):
     name: str
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    timezone: str = "UTC"
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -114,6 +104,7 @@ class TripUpdate(BaseModel):
     name: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    timezone: Optional[str] = None
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -135,6 +126,7 @@ class TripWithRole(BaseModel):
     name: str
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    timezone: str = "UTC"
     created_at: datetime
     created_by_id: int
     my_role: str

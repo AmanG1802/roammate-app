@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_API_VERSION: str = "v1"   # "v1" (legacy) | "v2" (new)
     GOOGLE_MAPS_FETCH_PHOTOS: bool = True
     GOOGLE_MAPS_FETCH_RATING: bool = True
+    GOOGLE_MAPS_USE_NEARBY_API: bool = False  # True = Nearby Search API, False = Text Search with locationBias
 
     LLM_ENABLED: bool = False
     LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"

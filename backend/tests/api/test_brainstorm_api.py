@@ -167,6 +167,41 @@ async def test_bulk_insert_seeds_bin(client: AsyncClient, auth_headers):
     assert len(listed.json()) == 1
 
 
+async def test_bulk_insert_preserves_all_enriched_fields(
+    client: AsyncClient, auth_headers
+):
+    """Bulk insert must persist all PlaceFields and set added_by=AI."""
+    trip = await create_trip(client, auth_headers)
+    resp = await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/bulk",
+        json={"items": [_SAMPLE_ITEM]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    item = resp.json()[0]
+
+    assert item["title"] == _SAMPLE_ITEM["title"]
+    assert item["description"] == _SAMPLE_ITEM["description"]
+    assert item["category"] == _SAMPLE_ITEM["category"]
+    assert item["place_id"] == _SAMPLE_ITEM["place_id"]
+    assert item["lat"] == _SAMPLE_ITEM["lat"]
+    assert item["lng"] == _SAMPLE_ITEM["lng"]
+    assert item["address"] == _SAMPLE_ITEM["address"]
+    assert item["photo_url"] == _SAMPLE_ITEM["photo_url"]
+    assert item["rating"] == _SAMPLE_ITEM["rating"]
+    assert item["price_level"] == _SAMPLE_ITEM["price_level"]
+    assert item["types"] == _SAMPLE_ITEM["types"]
+    assert item["time_category"] == _SAMPLE_ITEM["time_category"]
+    assert item["added_by"] == "AI"
+
+    listed = (await client.get(
+        f"/api/trips/{trip['id']}/brainstorm/items", headers=auth_headers
+    )).json()
+    assert listed[0]["place_id"] == _SAMPLE_ITEM["place_id"]
+    assert listed[0]["added_by"] == "AI"
+    assert listed[0]["types"] == _SAMPLE_ITEM["types"]
+
+
 async def test_bulk_insert_non_member_403(
     client: AsyncClient, auth_headers, second_auth_headers
 ):

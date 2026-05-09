@@ -2,21 +2,6 @@ import { create } from 'zustand';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
-/**
- * Format a Date as a naive ISO-like string using *local* time values,
- * e.g. "2026-04-16T14:00:00".  Unlike Date.toISOString() (which converts to
- * UTC), this preserves the wall-clock time the user intended.  The backend
- * stores TIMESTAMP WITHOUT TIME ZONE, so sending local values avoids the
- * UTC-shift that was turning "2pm IST" into "8:30am".
- */
-function toLocalISOString(d: Date): string {
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
-}
-
 /** Create a temporary local event (used when API is unavailable). */
 function makeLocalEvent(
   idea: Idea,
@@ -68,6 +53,7 @@ export interface Event {
   photo_url?: string | null;
   rating?: number | null;
   address?: string | null;
+  is_skipped?: boolean;
 }
 
 export interface Idea {
@@ -158,6 +144,12 @@ interface TripState {
   selectedEventId: string | null;
   setHoveredEventId: (id: string | null) => void;
   setSelectedEventId: (id: string | null) => void;
+
+  /** Concierge drawer state. */
+  conciergeOpen: boolean;
+  conciergePreAction: { type: string; payload?: any } | null;
+  openConcierge: (preAction?: { type: string; payload?: any } | null) => void;
+  closeConcierge: () => void;
 }
 
 function mapApiEvent(raw: Record<string, unknown>): Event {
@@ -180,6 +172,7 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
     photo_url: (raw.photo_url as string) ?? null,
     rating: (raw.rating as number) ?? null,
     address: (raw.address as string) ?? null,
+    is_skipped: (raw.is_skipped as boolean) ?? false,
   };
 }
 
@@ -270,8 +263,8 @@ export const useTripStore = create<TripState>((set, get) => ({
           lat: idea.lat,
           lng: idea.lng,
           day_date: dayDate ?? null,
-          start_time: startTime ? toLocalISOString(startTime) : null,
-          end_time: startTime ? toLocalISOString(new Date(startTime.getTime() + 3600_000)) : null,
+          start_time: startTime ? startTime.toISOString() : null,
+          end_time: startTime ? new Date(startTime.getTime() + 3600_000).toISOString() : null,
           sort_order: maxOrder + 1,
           added_by: idea.added_by ?? null,
           source_idea_id: !isNaN(numId) ? numId : null,
@@ -367,8 +360,8 @@ export const useTripStore = create<TripState>((set, get) => ({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            start_time: startTime ? toLocalISOString(startTime) : null,
-            end_time: endTime ? toLocalISOString(endTime) : null,
+            start_time: startTime ? startTime.toISOString() : null,
+            end_time: endTime ? endTime.toISOString() : null,
           }),
         });
       } catch {
@@ -503,4 +496,9 @@ export const useTripStore = create<TripState>((set, get) => ({
   selectedEventId: null,
   setHoveredEventId: (id) => set({ hoveredEventId: id }),
   setSelectedEventId: (id) => set({ selectedEventId: id }),
+
+  conciergeOpen: false,
+  conciergePreAction: null,
+  openConcierge: (preAction = null) => set({ conciergeOpen: true, conciergePreAction: preAction }),
+  closeConcierge: () => set({ conciergeOpen: false, conciergePreAction: null }),
 }));

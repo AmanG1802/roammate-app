@@ -3,7 +3,7 @@
 Covers state classification (pre/in/post), caps + ordering, default-index
 selection, event enrichment on the active page, and per-user isolation.
 """
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import pytest
 from httpx import AsyncClient
 
@@ -38,8 +38,19 @@ def _default_page(resp_json: dict) -> dict | None:
     return pages[resp_json.get("default_index", 0)]
 
 
+def _utc_today() -> date:
+    """Today's date in UTC."""
+    return datetime.now(timezone.utc).date()
+
+
+def _utc_now() -> datetime:
+    """Current UTC-aware datetime."""
+    return datetime.now(timezone.utc)
+
+
 def _dt(days_from_today: int) -> datetime:
-    return datetime.combine(date.today() + timedelta(days=days_from_today), datetime.min.time())
+    """Create a UTC-midnight datetime relative to today's UTC date."""
+    return datetime.combine(_utc_today() + timedelta(days=days_from_today), datetime.min.time(), tzinfo=timezone.utc)
 
 
 # ── auth + empty ─────────────────────────────────────────────────────────────
@@ -144,9 +155,9 @@ async def _post_event(client, headers, trip_id, **extra):
 @pytest.mark.asyncio
 async def test_today_events_filtered_to_today_only(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(-1), _dt(2))
-    await _post_event(client, auth_headers, trip["id"], title="Today", day_date=date.today().isoformat())
+    await _post_event(client, auth_headers, trip["id"], title="Today", day_date=_utc_today().isoformat())
     await _post_event(client, auth_headers, trip["id"], title="Tomorrow",
-                      day_date=(date.today() + timedelta(days=1)).isoformat())
+                      day_date=(_utc_today() + timedelta(days=1)).isoformat())
 
     page = _default_page((await client.get("/api/dashboard/today", headers=auth_headers)).json())
     titles = [e["title"] for e in page["today_events"]]
@@ -156,8 +167,8 @@ async def test_today_events_filtered_to_today_only(client, auth_headers):
 @pytest.mark.asyncio
 async def test_today_events_ordered_by_start_time_nulls_last(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    today_dt = datetime.combine(date.today(), datetime.min.time())
+    today_iso = _utc_today().isoformat()
+    today_dt = datetime.combine(_utc_today(), datetime.min.time(), tzinfo=timezone.utc)
     await _post_event(client, auth_headers, trip["id"], title="No time", day_date=today_iso)
     await _post_event(client, auth_headers, trip["id"], title="Noon",
                       day_date=today_iso,
@@ -174,18 +185,16 @@ async def test_today_events_ordered_by_start_time_nulls_last(client, auth_header
 @pytest.mark.asyncio
 async def test_today_next_flag_set_on_first_future_event_only(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    far_future = datetime.now() + timedelta(hours=6)
-    farther = datetime.now() + timedelta(hours=9)
+    today_iso = _utc_today().isoformat()
+    far_future = _utc_now() + timedelta(hours=6)
+    farther = _utc_now() + timedelta(hours=9)
     await _post_event(client, auth_headers, trip["id"], title="Next",
                       day_date=today_iso, start_time=far_future.isoformat())
     await _post_event(client, auth_headers, trip["id"], title="Later",
                       day_date=today_iso, start_time=farther.isoformat())
 
-    # Use client_now to fix "now" before Next's start_time
-    client_now = (far_future - timedelta(hours=1)).isoformat()
     page = _default_page(
-        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+        (await client.get("/api/dashboard/today", headers=auth_headers)).json()
     )
     flags = [(e["title"], e["is_next"]) for e in page["today_events"]]
     assert flags == [("Next", True), ("Later", False)]
@@ -194,9 +203,9 @@ async def test_today_next_flag_set_on_first_future_event_only(client, auth_heade
 @pytest.mark.asyncio
 async def test_today_ongoing_flag_set_when_now_between_start_end(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    start = datetime.now() - timedelta(hours=1)
-    end = datetime.now() + timedelta(hours=1)
+    today_iso = _utc_today().isoformat()
+    start = _utc_now() - timedelta(hours=1)
+    end = _utc_now() + timedelta(hours=1)
     await _post_event(client, auth_headers, trip["id"], title="Ongoing",
                       day_date=today_iso,
                       start_time=start.isoformat(), end_time=end.isoformat())
@@ -214,31 +223,11 @@ async def test_today_day_number_from_trip_days(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_today_client_now_iso_overrides_server_time(client, auth_headers):
-    """Forcing client_now far in the past turns an 'active' trip into 'pre_trip'."""
-    await make_trip(client, auth_headers, "Upcoming to me", _dt(2), _dt(5))
-    long_past = (datetime.now() - timedelta(days=365)).isoformat()
-    page = _default_page(
-        (await client.get(f"/api/dashboard/today?client_now={long_past}", headers=auth_headers)).json()
-    )
-    # From last year's POV, the trip is far in the future
-    assert page["state"] == "pre_trip"
-
-
-@pytest.mark.asyncio
-async def test_today_client_now_with_Z_suffix_accepted(client, auth_headers):
+async def test_today_endpoint_no_client_now_needed(client, auth_headers):
+    """After the timezone fix, dashboard uses user/trip timezone instead of client_now."""
     await make_trip(client, auth_headers, "Active", _dt(-1), _dt(2))
-    now_z = datetime.now().replace(microsecond=0).isoformat() + "Z"
-    r = await client.get(f"/api/dashboard/today?client_now={now_z}", headers=auth_headers)
+    r = await client.get("/api/dashboard/today", headers=auth_headers)
     assert r.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_today_client_now_invalid_falls_back(client, auth_headers):
-    await make_trip(client, auth_headers, "Active", _dt(-1), _dt(2))
-    r = await client.get("/api/dashboard/today?client_now=not-a-date", headers=auth_headers)
-    assert r.status_code == 200
-    # Should still classify something
     page = _default_page(r.json())
     assert page["state"] == "in_trip"
 
@@ -348,7 +337,7 @@ async def test_today_only_one_active_trip_shown(client, auth_headers):
 @pytest.mark.asyncio
 async def test_today_total_days_updates_after_adding_day(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    tomorrow = (_utc_today() + timedelta(days=1)).isoformat()
     await client.post(
         f"/api/trips/{trip['id']}/days", json={"date": tomorrow}, headers=auth_headers
     )
@@ -359,8 +348,8 @@ async def test_today_total_days_updates_after_adding_day(client, auth_headers):
 @pytest.mark.asyncio
 async def test_today_total_days_updates_after_deleting_day(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(3))
-    d1 = (date.today() + timedelta(days=1)).isoformat()
-    d2 = (date.today() + timedelta(days=2)).isoformat()
+    d1 = (_utc_today() + timedelta(days=1)).isoformat()
+    d2 = (_utc_today() + timedelta(days=2)).isoformat()
     await client.post(f"/api/trips/{trip['id']}/days", json={"date": d1}, headers=auth_headers)
     await client.post(f"/api/trips/{trip['id']}/days", json={"date": d2}, headers=auth_headers)
     days = (await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)).json()
@@ -378,7 +367,7 @@ async def test_today_editing_start_date_earlier_keeps_trip_active(client, auth_h
     trip = await make_trip(client, auth_headers, "TodayStart", _dt(0), _dt(2))
     # Add a second day so that after changing start_date to yesterday,
     # end_date = yesterday + 1 = today, keeping the trip active.
-    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    tomorrow = (_utc_today() + timedelta(days=1)).isoformat()
     await client.post(
         f"/api/trips/{trip['id']}/days", json={"date": tomorrow}, headers=auth_headers
     )
@@ -397,8 +386,8 @@ async def test_today_editing_start_date_earlier_keeps_trip_active(client, auth_h
 @pytest.mark.asyncio
 async def test_today_ongoing_and_next_coexist(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    now = datetime.now()
+    today_iso = _utc_today().isoformat()
+    now = _utc_now()
     ongoing_start = now - timedelta(minutes=30)
     ongoing_end = now + timedelta(minutes=30)
     future_start = now + timedelta(hours=2)
@@ -418,15 +407,14 @@ async def test_today_ongoing_and_next_coexist(client, auth_headers):
 @pytest.mark.asyncio
 async def test_today_past_event_neither_ongoing_nor_next(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    past_start = datetime.now() - timedelta(hours=4)
-    past_end = datetime.now() - timedelta(hours=3)
-    client_now = datetime.now().isoformat()
+    today_iso = _utc_today().isoformat()
+    past_start = _utc_now() - timedelta(hours=4)
+    past_end = _utc_now() - timedelta(hours=3)
     await _post_event(client, auth_headers, trip["id"], title="Done",
                       day_date=today_iso,
                       start_time=past_start.isoformat(), end_time=past_end.isoformat())
     page = _default_page(
-        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+        (await client.get("/api/dashboard/today", headers=auth_headers)).json()
     )
     assert page["today_events"][0]["is_ongoing"] is False
     assert page["today_events"][0]["is_next"] is False
@@ -435,20 +423,21 @@ async def test_today_past_event_neither_ongoing_nor_next(client, auth_headers):
 @pytest.mark.asyncio
 async def test_today_gap_between_events_only_up_next(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    today_dt = datetime.combine(date.today(), datetime.min.time())
+    today_iso = _utc_today().isoformat()
+    now = _utc_now()
+    past_start = now - timedelta(hours=3)
+    future_start = now + timedelta(hours=4)
     await _post_event(client, auth_headers, trip["id"], title="Early",
                       day_date=today_iso,
-                      start_time=(today_dt + timedelta(hours=2)).isoformat(),
-                      end_time=(today_dt + timedelta(hours=2, minutes=15)).isoformat())
+                      start_time=past_start.isoformat(),
+                      end_time=(past_start + timedelta(minutes=15)).isoformat())
     await _post_event(client, auth_headers, trip["id"], title="Afternoon",
                       day_date=today_iso,
-                      start_time=(today_dt + timedelta(hours=15)).isoformat(),
-                      end_time=(today_dt + timedelta(hours=15, minutes=15)).isoformat())
+                      start_time=future_start.isoformat(),
+                      end_time=(future_start + timedelta(minutes=15)).isoformat())
 
-    client_now = (today_dt + timedelta(hours=10)).isoformat()
     page = _default_page(
-        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+        (await client.get("/api/dashboard/today", headers=auth_headers)).json()
     )
     ongoing = [e for e in page["today_events"] if e["is_ongoing"]]
     assert ongoing == []
@@ -459,8 +448,8 @@ async def test_today_gap_between_events_only_up_next(client, auth_headers):
 @pytest.mark.asyncio
 async def test_today_all_past_no_flags(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    today_dt = datetime.combine(date.today(), datetime.min.time())
+    today_iso = _utc_today().isoformat()
+    today_dt = datetime.combine(_utc_today(), datetime.min.time(), tzinfo=timezone.utc)
     await _post_event(client, auth_headers, trip["id"], title="E1",
                       day_date=today_iso,
                       start_time=(today_dt + timedelta(hours=1)).isoformat(),
@@ -470,9 +459,8 @@ async def test_today_all_past_no_flags(client, auth_headers):
                       start_time=(today_dt + timedelta(hours=3)).isoformat(),
                       end_time=(today_dt + timedelta(hours=4)).isoformat())
 
-    client_now = (today_dt + timedelta(hours=23)).isoformat()
     page = _default_page(
-        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+        (await client.get("/api/dashboard/today", headers=auth_headers)).json()
     )
     for e in page["today_events"]:
         assert e["is_ongoing"] is False and e["is_next"] is False
@@ -481,8 +469,8 @@ async def test_today_all_past_no_flags(client, auth_headers):
 @pytest.mark.asyncio
 async def test_today_event_without_end_time_not_ongoing(client, auth_headers):
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    start = datetime.now() - timedelta(hours=1)
+    today_iso = _utc_today().isoformat()
+    start = _utc_now() - timedelta(hours=1)
     await _post_event(client, auth_headers, trip["id"], title="NoEnd",
                       day_date=today_iso, start_time=start.isoformat())
     page = _default_page((await client.get("/api/dashboard/today", headers=auth_headers)).json())
@@ -490,23 +478,18 @@ async def test_today_event_without_end_time_not_ongoing(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_today_client_now_6am_skips_2am_picks_2pm(client, auth_headers):
-    """Regression: 2AM event must not show as up-next when client_now is 6AM."""
+async def test_today_future_event_is_next(client, auth_headers):
+    """Future event (far enough ahead) should be flagged as up-next."""
     trip = await make_trip(client, auth_headers, "Active", _dt(0), _dt(1))
-    today_iso = date.today().isoformat()
-    today_dt = datetime.combine(date.today(), datetime.min.time())
-    await _post_event(client, auth_headers, trip["id"], title="Tea",
+    today_iso = _utc_today().isoformat()
+    future = _utc_now() + timedelta(hours=3)
+    await _post_event(client, auth_headers, trip["id"], title="FutureEvent",
                       day_date=today_iso,
-                      start_time=(today_dt + timedelta(hours=2)).isoformat(),
-                      end_time=(today_dt + timedelta(hours=2, minutes=15)).isoformat())
-    await _post_event(client, auth_headers, trip["id"], title="Coffee",
-                      day_date=today_iso,
-                      start_time=(today_dt + timedelta(hours=14)).isoformat(),
-                      end_time=(today_dt + timedelta(hours=14, minutes=15)).isoformat())
+                      start_time=future.isoformat(),
+                      end_time=(future + timedelta(minutes=15)).isoformat())
 
-    client_now = (today_dt + timedelta(hours=6)).isoformat()
     page = _default_page(
-        (await client.get(f"/api/dashboard/today?client_now={client_now}", headers=auth_headers)).json()
+        (await client.get("/api/dashboard/today", headers=auth_headers)).json()
     )
     nexts = [e for e in page["today_events"] if e["is_next"]]
-    assert len(nexts) == 1 and nexts[0]["title"] == "Coffee"
+    assert len(nexts) == 1 and nexts[0]["title"] == "FutureEvent"

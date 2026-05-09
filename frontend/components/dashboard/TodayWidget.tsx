@@ -63,10 +63,7 @@ const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
 
     const load = useCallback(async () => {
       try {
-        const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const localISO = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-        const res = await fetch(`${API}/dashboard/today?client_now=${encodeURIComponent(localISO)}`, { headers: authHeaders() });
+        const res = await fetch(`${API}/dashboard/today`, { headers: authHeaders() });
         if (res.ok) {
           const d: WidgetData = await res.json();
           setData(d);

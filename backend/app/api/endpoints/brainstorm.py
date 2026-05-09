@@ -224,11 +224,12 @@ async def bulk_insert(
 
     created: list[BrainstormBinItem] = []
     for item in body.items:
+        data = item.model_dump(exclude={"added_by"})
         row = BrainstormBinItem(
             trip_id=trip_id,
             user_id=current_user.id,
             added_by="AI",
-            **item.model_dump(),
+            **data,
         )
         db.add(row)
         created.append(row)

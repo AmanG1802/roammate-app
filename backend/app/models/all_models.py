@@ -1,5 +1,4 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index, Numeric
-from datetime import datetime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
@@ -15,14 +14,15 @@ class User(Base):
     timezone = Column(String, nullable=True)
     currency = Column(String(8), nullable=True)
     travel_blurb = Column(String, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     trips = relationship("TripMember", back_populates="user")
 
 class Trip(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    start_date = Column(DateTime)
-    end_date = Column(DateTime)
+    start_date = Column(DateTime(timezone=True))
+    end_date = Column(DateTime(timezone=True))
+    timezone = Column(String, default="UTC", server_default="UTC")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     created_by_id = Column(Integer, ForeignKey("user.id"))
     group_id = Column(Integer, ForeignKey("group.id"), nullable=True, index=True)
@@ -34,6 +34,7 @@ class Trip(Base):
     group = relationship("Group", back_populates="trips")
     brainstorm_bin_items = relationship("BrainstormBinItem", back_populates="trip", cascade="all, delete-orphan")
     brainstorm_messages = relationship("BrainstormMessage", back_populates="trip", cascade="all, delete-orphan")
+    concierge_messages = relationship("ConciergeMessage", back_populates="trip", cascade="all, delete-orphan")
 
 
 class Group(Base):
@@ -134,7 +135,7 @@ class BrainstormBinItem(Base):
     time_category = Column(String, nullable=True)
     url_source = Column(String, nullable=True)
     added_by = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     trip = relationship("Trip", back_populates="brainstorm_bin_items")
     user = relationship("User")
@@ -147,9 +148,24 @@ class BrainstormMessage(Base):
     user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), index=True, nullable=False)
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     trip = relationship("Trip", back_populates="brainstorm_messages")
+    user = relationship("User")
+
+
+class ConciergeMessage(Base):
+    __tablename__ = "concierge_message"
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("trip.id", ondelete="CASCADE"), index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), index=True, nullable=False)
+    role = Column(String, nullable=False)          # "user" | "assistant" | "system"
+    content = Column(Text, nullable=False)
+    message_type = Column(String, default="text")  # "text" | "action_card" | "place_card" | "error"
+    metadata_ = Column("metadata", JSON, nullable=True, default=None)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    trip = relationship("Trip", back_populates="concierge_messages")
     user = relationship("User")
 
 
@@ -211,8 +227,8 @@ class Event(Base):
     lat = Column(Float)
     lng = Column(Float)
     day_date = Column(Date, nullable=True, index=True)
-    start_time = Column(DateTime, nullable=True)
-    end_time = Column(DateTime, nullable=True)
+    start_time = Column(DateTime(timezone=True), nullable=True)
+    end_time = Column(DateTime(timezone=True), nullable=True)
     is_locked = Column(Boolean, default=False)
     event_type = Column(String)
     sort_order = Column(Integer, default=0)
@@ -228,6 +244,7 @@ class Event(Base):
     phone = Column(String, nullable=True)
     website = Column(String, nullable=True)
     time_category = Column(String, nullable=True)
+    is_skipped = Column(Boolean, default=False, server_default="false", nullable=False)
 
     trip = relationship("Trip", back_populates="events")
 

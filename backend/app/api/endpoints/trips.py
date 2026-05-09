@@ -75,6 +75,7 @@ async def create_trip(
         name=trip_in.name,
         start_date=trip_in.start_date,
         end_date=trip_in.end_date,
+        timezone=trip_in.timezone,
         created_by_id=current_user.id
     )
     db.add(trip)
@@ -308,6 +309,8 @@ async def update_trip(
 
     if update.end_date is not None:
         trip.end_date = update.end_date
+    if update.timezone is not None:
+        trip.timezone = update.timezone
 
     all_members = await notification_service.all_trip_member_ids(db, trip_id)
     others = [uid for uid in all_members if uid != current_user.id]
@@ -487,7 +490,8 @@ async def get_idea_bin(
             address=i.address, photo_url=i.photo_url, rating=i.rating,
             price_level=i.price_level, types=i.types, opening_hours=i.opening_hours,
             phone=i.phone, website=i.website,
-            url_source=i.url_source, time_hint=i.time_hint, added_by=i.added_by,
+            url_source=i.url_source, time_hint=i.time_hint,
+            time_category=i.time_category, added_by=i.added_by,
             up=up_map.get(i.id, 0), down=down_map.get(i.id, 0),
             my_vote=my_map.get(i.id, 0),
         )
@@ -923,7 +927,18 @@ async def delete_trip_day(
                 lat=evt.lat,
                 lng=evt.lng,
                 time_hint=hint,
+                time_category=evt.time_category,
                 added_by=evt.added_by,
+                description=evt.description,
+                category=evt.category,
+                address=evt.address,
+                photo_url=evt.photo_url,
+                rating=evt.rating,
+                price_level=evt.price_level,
+                types=evt.types,
+                opening_hours=evt.opening_hours,
+                phone=evt.phone,
+                website=evt.website,
             )
             db.add(idea)
             await db.flush()

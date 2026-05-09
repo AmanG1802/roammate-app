@@ -138,6 +138,8 @@ class BaseMapService(abc.ABC):
     handled here once.
     """
 
+    _directions_op: str
+
     def __init__(self, api_key: Optional[str], *, _mock: bool = False) -> None:
         self.api_key = api_key
         self._is_mock = _mock
@@ -263,6 +265,25 @@ class BaseMapService(abc.ABC):
         """
         ...
 
+    @abc.abstractmethod
+    async def nearby_search(
+        self,
+        query: str,
+        lat: float,
+        lng: float,
+        radius_m: int = 1500,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Search for places near a location.
+
+        Implementation switches between Nearby Search API and Text Search API
+        based on settings.GOOGLE_MAPS_USE_NEARBY_API.
+
+        Returns normalized place card dicts with keys:
+        place_id, title, address, lat, lng, rating, price_level, photo_url, types
+        """
+        ...
+
     # ── Enrichment (shared) ──────────────────────────────────────────────
 
     async def enrich_item(
@@ -355,10 +376,11 @@ class BaseMapService(abc.ABC):
 
         idents = [w.identifier() for w in waypoints]
         _CACHE_MODE = "driving"
+        op = self._directions_op
         cached, state = await gmap_cache.get_directions(idents, _CACHE_MODE)
         if cached is not gmap_cache.MISS:
             track_call(
-                op="directions",
+                op=op,
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
                 cache_state=state,
@@ -370,7 +392,7 @@ class BaseMapService(abc.ABC):
 
         if not await breaker.allow():
             track_call(
-                op="directions",
+                op=op,
                 status="circuit_open",
                 breaker_state="open",
                 waypoint_count=len(waypoints),
@@ -385,7 +407,7 @@ class BaseMapService(abc.ABC):
         except Exception as exc:
             await breaker.record_failure()
             track_call(
-                op="directions",
+                op=op,
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
                 error_class=exc.__class__.__name__,
@@ -400,7 +422,7 @@ class BaseMapService(abc.ABC):
         await gmap_cache.set_directions(idents, _CACHE_MODE, data)
         latency_ms = int((time.monotonic() - t0) * 1000)
         track_call(
-            op="directions",
+            op=op,
             status="ok",
             latency_ms=latency_ms,
             waypoint_count=len(waypoints),

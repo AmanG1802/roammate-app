@@ -49,3 +49,13 @@ class BaseLLMService(ABC):
     ) -> dict[str, Any]:
         """Generate a trip plan from a free-form prompt."""
         ...
+
+    @abstractmethod
+    async def concierge_dispatch(
+        self,
+        history: list[dict[str, str]],
+        user_message: str,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Classify user intent and return structured ConciergeResponse."""
+        ...

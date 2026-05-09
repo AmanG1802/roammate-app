@@ -2,24 +2,14 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.place import PlaceFields
 
-class BrainstormItemBase(BaseModel):
-    title: str
-    description: Optional[str] = None
-    category: Optional[str] = None
-    place_id: Optional[str] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
-    address: Optional[str] = None
-    photo_url: Optional[str] = None
-    rating: Optional[float] = None
-    price_level: Optional[int] = None
-    types: Optional[List[str]] = None
+
+class BrainstormItemBase(PlaceFields):
     opening_hours: Optional[dict] = None
     phone: Optional[str] = None
     website: Optional[str] = None
     time_hint: Optional[str] = None
-    time_category: Optional[str] = None
     url_source: Optional[str] = None
 
 

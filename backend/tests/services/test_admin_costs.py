@@ -48,7 +48,11 @@ def test_unknown_model_returns_zero_cost():
 
 
 def test_MAPS_PRICING_each_op_has_entry():
-    expected_ops = {"find_place", "place_details", "photo_url", "directions", "enrich_batch"}
+    expected_ops = {
+        "place_details_v1", "place_details_v2",
+        "nearby_or_text_search", "directions", "routes",
+        "photo_url", "enrich_batch",
+    }
     assert set(MAPS_PRICING.keys()) == expected_ops
 
 
@@ -57,25 +61,27 @@ def test_enrich_batch_pricing_is_zero():
 
 
 def test_compute_maps_cost_cache_hit_is_zero():
-    cost = compute_maps_cost("find_place", "hit")
+    cost = compute_maps_cost("place_details_v1", "hit")
     assert cost == 0.0
 
 
 def test_compute_maps_cost_negative_cache_is_zero():
-    cost = compute_maps_cost("find_place", "negative")
+    cost = compute_maps_cost("place_details_v1", "negative")
     assert cost == 0.0
 
 
-def test_compute_maps_cost_miss_uses_pricing():
-    cost = compute_maps_cost("find_place", "miss")
-    # $17.00/1000 = $0.017
-    assert cost == 0.017
-
-
-def test_compute_maps_cost_directions():
-    cost = compute_maps_cost("directions", None)
-    # $10.00/1000 = $0.01
-    assert cost == 0.01
+@pytest.mark.parametrize("op,expected", [
+    ("place_details_v1",      0.005100),  # $5.10 CPM
+    ("place_details_v2",      0.005100),  # $5.10 CPM
+    ("nearby_or_text_search", 0.009600),  # $9.60 CPM
+    ("directions",            0.001500),  # $1.50 CPM
+    ("routes",                0.001500),  # $1.50 CPM
+    ("photo_url",             0.002100),  # $2.10 CPM
+    ("enrich_batch",          0.000000),  # composite — $0
+])
+def test_compute_maps_cost_per_op(op, expected):
+    cost = compute_maps_cost(op, None)
+    assert cost == pytest.approx(expected, abs=1e-6)
 
 
 def test_decimal_precision_to_six_places():

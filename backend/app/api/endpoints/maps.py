@@ -69,6 +69,7 @@ async def compute_route(
     stmt = select(EventModel).where(
         EventModel.trip_id == trip_id,
         EventModel.day_date == body.day_date,
+        EventModel.is_skipped == False,
     )
     events: list[EventModel] = list((await db.execute(stmt)).scalars().all())
 
