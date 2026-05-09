@@ -69,10 +69,10 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ prompt: p }),
       });
-      if (!res.ok) throw new Error('Planner unavailable — try again.');
+      if (!res.ok) throw new Error('AI planner hit a snag — your prompt is saved, just hit Plan again.');
       setPreview(await res.json());
     } catch (e: any) {
-      setError(e?.message ?? 'Something went wrong.');
+      setError(e?.message ?? 'Something went wrong — your prompt is saved, just hit Plan again.');
     } finally {
       setPlanning(false);
     }

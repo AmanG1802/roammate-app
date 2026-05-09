@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Send, Sparkles, MessageSquare } from 'lucide-react';
+import { AlertTriangle, Loader2, RotateCcw, Send, Sparkles, MessageSquare } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string; created_at: string };
 
@@ -21,6 +22,7 @@ export default function BrainstormChat({
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [failedMessage, setFailedMessage] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,13 +37,22 @@ export default function BrainstormChat({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, sending]);
+  }, [messages, sending, failedMessage]);
 
-  const send = async () => {
-    const msg = input.trim();
+  const send = async (retryMsg?: string) => {
+    const msg = retryMsg ?? input.trim();
     if (!msg || sending) return;
     setSending(true);
-    setInput('');
+    setFailedMessage(null);
+
+    if (!retryMsg) {
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now(), role: 'user', content: msg, created_at: new Date().toISOString() },
+      ]);
+      setInput('');
+    }
+
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/chat`, {
         method: 'POST',
@@ -51,10 +62,18 @@ export default function BrainstormChat({
       if (res.ok) {
         const data = await res.json();
         setMessages(data.history);
+      } else {
+        setFailedMessage(msg);
       }
+    } catch {
+      setFailedMessage(msg);
     } finally {
       setSending(false);
     }
+  };
+
+  const retry = () => {
+    if (failedMessage) send(failedMessage);
   };
 
   const extract = async () => {
@@ -122,7 +141,20 @@ export default function BrainstormChat({
                   : 'bg-white text-slate-700 border border-slate-100 shadow-sm rounded-bl-sm'
               }`}
             >
-              {m.content}
+              {m.role === 'assistant' ? (
+                <div
+                  className="prose prose-sm prose-slate max-w-none
+                    [&>p]:my-1 [&>ul]:my-1.5 [&>ol]:my-1.5 [&>li]:my-0.5
+                    [&>p:first-child]:mt-0 [&>p:last-child]:mb-0
+                    [&_strong]:font-bold [&_strong]:text-slate-800
+                    [&_ul]:pl-4 [&_ol]:pl-4
+                    [&_li]:marker:text-indigo-400"
+                >
+                  <ReactMarkdown>{m.content}</ReactMarkdown>
+                </div>
+              ) : (
+                m.content
+              )}
             </div>
           </div>
         ))}
@@ -139,6 +171,24 @@ export default function BrainstormChat({
                 <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:150ms]" />
                 <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:300ms]" />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error bubble when AI response fails */}
+        {failedMessage && !sending && (
+          <div className="flex items-end gap-2">
+            <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center shrink-0 mb-0.5">
+              <AlertTriangle className="w-3 h-3 text-rose-500" />
+            </div>
+            <div className="max-w-[82%] bg-rose-50 border border-rose-200 rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm">
+              <p className="text-sm font-medium text-rose-700">Couldn&apos;t get a response.</p>
+              <button
+                onClick={retry}
+                className="mt-1 text-xs font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" /> Retry
+              </button>
             </div>
           </div>
         )}
@@ -171,7 +221,7 @@ export default function BrainstormChat({
             className="flex-1 px-3.5 py-2.5 text-sm font-medium border border-slate-200 bg-slate-50 rounded-2xl resize-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 outline-none transition-all leading-relaxed"
           />
           <button
-            onClick={send}
+            onClick={() => send()}
             disabled={sending || !input.trim()}
             className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
           >

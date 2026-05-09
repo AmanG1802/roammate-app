@@ -1,10 +1,14 @@
 """Standalone LLM endpoints that don't live under a specific trip."""
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
 from app.api.deps import get_current_user
 from app.models.all_models import User
 from app.schemas.brainstorm import PlanTripRequest, PlanTripResponse, BrainstormItemBase
 from app.services.google_maps import get_google_maps_service
 from app.services.llm.registry import get_dashboard_client
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -23,7 +27,15 @@ async def plan_trip(
     cleanly if the circuit breaker is open.
     """
     client = get_dashboard_client()
-    result = await client.plan_trip(body.prompt, user_id=current_user.id)
+    try:
+        result = await client.plan_trip(body.prompt, user_id=current_user.id)
+    except Exception as exc:
+        log.exception("plan_trip LLM call failed")
+        raise HTTPException(
+            status_code=502,
+            detail="AI planner is temporarily unavailable. Please try again.",
+        ) from exc
+
     maps_svc = get_google_maps_service()
     enriched_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
         result["items"], user_id=current_user.id,

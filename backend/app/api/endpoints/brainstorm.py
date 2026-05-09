@@ -9,11 +9,14 @@ table, which then becomes visible to all trip members.
 """
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
+log = logging.getLogger(__name__)
 
 from app.db.session import get_db
 from app.api.deps import get_current_user
@@ -107,6 +110,18 @@ async def chat(
     history_rows = (await db.execute(stmt)).scalars().all()
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
+    client = get_brainstorm_client()
+    try:
+        assistant_content = await client.chat(
+            history, body.message, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas
+        )
+    except Exception as exc:
+        log.exception("brainstorm chat LLM call failed")
+        raise HTTPException(
+            status_code=502,
+            detail="AI is temporarily unavailable. Please try again.",
+        ) from exc
+
     user_msg = BrainstormMessage(
         trip_id=trip_id,
         user_id=current_user.id,
@@ -115,10 +130,6 @@ async def chat(
     )
     db.add(user_msg)
 
-    client = get_brainstorm_client()
-    assistant_content = await client.chat(
-        history, body.message, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas
-    )
     assistant_msg = BrainstormMessage(
         trip_id=trip_id,
         user_id=current_user.id,
@@ -158,7 +169,15 @@ async def extract(
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
     client = get_brainstorm_client()
-    raw_items = await client.extract_items(history, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas)
+    try:
+        raw_items = await client.extract_items(history, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas)
+    except Exception as exc:
+        log.exception("brainstorm extract LLM call failed")
+        raise HTTPException(
+            status_code=502,
+            detail="AI extraction is temporarily unavailable. Please try again.",
+        ) from exc
+
     maps_svc = get_google_maps_service()
     raw_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
         raw_items, user_id=current_user.id, trip_id=trip_id,
