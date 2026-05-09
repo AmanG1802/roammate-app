@@ -123,6 +123,9 @@ interface TripState {
   /** Persist a time update for a single event. */
   updateEventTime: (eventId: string, startTime: Date | null, endTime: Date | null, token: string | null) => Promise<void>;
 
+  /** Toggle is_skipped for an event. */
+  toggleEventSkip: (eventId: string, token: string | null) => Promise<void>;
+
   /** Persist sort_order after manual drag-to-reorder. */
   reorderEvent: (eventId: string, newSortOrder: number, token: string | null) => Promise<void>;
 
@@ -138,6 +141,11 @@ interface TripState {
   legsByDay: Record<string, RouteLeg[]>;
   setRouteLegs: (tripId: string, dayDate: string, legs: RouteLeg[]) => void;
   clearRouteLegsForDay: (tripId: string, dayDate: string) => void;
+
+  /** Route persistence metadata — staleness tracking from backend. */
+  routeMetaByDay: Record<string, { fingerprint: string; computedAt: string; isStale: boolean }>;
+  setRouteMeta: (tripId: string, dayDate: string, meta: { fingerprint: string; computedAt: string; isStale: boolean }) => void;
+  clearRouteMetaForDay: (tripId: string, dayDate: string) => void;
 
   /** Map-Timeline bidirectional highlight. */
   hoveredEventId: string | null;
@@ -192,6 +200,7 @@ export const useTripStore = create<TripState>((set, get) => ({
   events: [],
   tripDays: [],
   legsByDay: {},
+  routeMetaByDay: {},
   collaborators: [
     { id: '1', name: 'You', color: '#4f46e5' },
     { id: '2', name: 'Sarah', color: '#ec4899' },
@@ -370,6 +379,36 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
 
+  toggleEventSkip: async (eventId, token) => {
+    const { events } = get();
+    const event = events.find((e) => e.id === eventId);
+    if (!event) return;
+    const newSkipped = !event.is_skipped;
+
+    set((s) => ({
+      events: s.events.map((e) =>
+        e.id === eventId ? { ...e, is_skipped: newSkipped } : e
+      ),
+    }));
+
+    if (token) {
+      try {
+        await fetch(`${API}/events/${eventId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ is_skipped: newSkipped }),
+        });
+      } catch {
+        // Revert on failure
+        set((s) => ({
+          events: s.events.map((e) =>
+            e.id === eventId ? { ...e, is_skipped: !newSkipped } : e
+          ),
+        }));
+      }
+    }
+  },
+
   reorderEvent: async (eventId, newSortOrder, token) => {
     // Update sort_order without re-sorting — manual drag order must be preserved.
     set((s) => ({
@@ -490,6 +529,16 @@ export const useTripStore = create<TripState>((set, get) => ({
       const next = { ...s.legsByDay };
       delete next[legsKey(tripId, dayDate)];
       return { legsByDay: next };
+    }),
+
+  setRouteMeta: (tripId, dayDate, meta) =>
+    set((s) => ({ routeMetaByDay: { ...s.routeMetaByDay, [legsKey(tripId, dayDate)]: meta } })),
+
+  clearRouteMetaForDay: (tripId, dayDate) =>
+    set((s) => {
+      const next = { ...s.routeMetaByDay };
+      delete next[legsKey(tripId, dayDate)];
+      return { routeMetaByDay: next };
     }),
 
   hoveredEventId: null,

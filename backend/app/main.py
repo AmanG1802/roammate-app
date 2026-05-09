@@ -10,7 +10,7 @@ from app.models.all_models import (  # noqa: F401 – ensure all models register
     User, Trip, TripMember, Event, IdeaBinItem, TripDay, Notification,
     Group, GroupMember, IdeaVote, EventVote, IdeaTag,
     BrainstormBinItem, BrainstormMessage, ConciergeMessage,
-    TokenUsage, GoogleMapsApiUsage,
+    TokenUsage, GoogleMapsApiUsage, DayRoute,
 )
 
 logger = logging.getLogger(__name__)

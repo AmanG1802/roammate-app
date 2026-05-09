@@ -23,22 +23,48 @@ the matching toast.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.all_models import Event as EventModel, User
+from app.models.all_models import DayRoute, Event as EventModel, User
 from app.schemas.route import RouteLeg, RouteResponse, UnroutableEvent
 from app.services.google_maps import RoutePoint, get_google_maps_service
 from app.services.roles import require_trip_member
 
 router = APIRouter()
+
+
+def compute_waypoint_fingerprint(events: list[EventModel]) -> str:
+    """Deterministic hash of the routable waypoint sequence.
+
+    Only includes waypoint-affecting fields: event id, location, and times.
+    Changes to title/description/category do NOT alter the fingerprint.
+    """
+    ordered = sorted(
+        events,
+        key=lambda e: (e.start_time or datetime.min, e.sort_order or 0),
+    )
+    parts = []
+    for e in ordered:
+        if e.place_id or (e.lat is not None and e.lng is not None):
+            parts.append((
+                str(e.id),
+                e.place_id or "",
+                f"{e.lat:.5f}" if e.lat else "",
+                f"{e.lng:.5f}" if e.lng else "",
+                e.start_time.isoformat() if e.start_time else "",
+                e.end_time.isoformat() if e.end_time else "",
+            ))
+    return hashlib.sha256(json.dumps(parts, sort_keys=False).encode()).hexdigest()[:16]
 
 
 class RouteRequest(BaseModel):
@@ -93,8 +119,6 @@ async def compute_route(
     # conflict we 422 on corresponds to a red time icon the user can
     # see; we never block on a pair the UI hasn't already flagged. ──
     def _timeline_order_key(e: EventModel) -> tuple[int, datetime, int]:
-        # Bucket 0: timed events sorted by start_time
-        # Bucket 1: TBD events sorted by sort_order
         if e.start_time is not None:
             return (0, e.start_time, e.sort_order or 0)
         return (1, datetime.max, e.sort_order or 0)
@@ -105,12 +129,9 @@ async def compute_route(
         prev = by_timeline[i - 1]
         curr = by_timeline[i]
         if _has_conflict(prev, curr):
-            # Both sides of every conflicting pair go in the response so
-            # the UI can highlight them all.
             conflict_ids.append(str(prev.id))
             conflict_ids.append(str(curr.id))
     if conflict_ids:
-        # De-duplicate while preserving first-seen order.
         seen = set()
         deduped: list[str] = []
         for cid in conflict_ids:
@@ -181,12 +202,100 @@ async def compute_route(
         for leg in route.legs
     ]
 
+    # Persist to DB (upsert by trip_id + day_date)
+    fingerprint = compute_waypoint_fingerprint(events)
+    now = datetime.utcnow()
+    ordered_ids = [str(e.id) for e in routable]
+    unroutable_dicts = [u.model_dump() for u in unroutable_no_loc]
+    legs_dicts = [l.model_dump() for l in legs]
+
+    existing_route = (await db.execute(
+        select(DayRoute).where(
+            DayRoute.trip_id == trip_id,
+            DayRoute.day_date == body.day_date,
+        )
+    )).scalar_one_or_none()
+
+    if existing_route:
+        existing_route.encoded_polyline = route.encoded_polyline or None
+        existing_route.legs = legs_dicts
+        existing_route.total_duration_s = route.total_duration_s
+        existing_route.total_distance_m = route.total_distance_m
+        existing_route.ordered_event_ids = ordered_ids
+        existing_route.unroutable = unroutable_dicts
+        existing_route.waypoint_fingerprint = fingerprint
+        existing_route.computed_at = now
+    else:
+        db.add(DayRoute(
+            trip_id=trip_id,
+            day_date=body.day_date,
+            encoded_polyline=route.encoded_polyline or None,
+            legs=legs_dicts,
+            total_duration_s=route.total_duration_s,
+            total_distance_m=route.total_distance_m,
+            ordered_event_ids=ordered_ids,
+            unroutable=unroutable_dicts,
+            waypoint_fingerprint=fingerprint,
+            computed_at=now,
+        ))
+    await db.commit()
+
     return RouteResponse(
         encoded_polyline=route.encoded_polyline or None,
         legs=legs,
         total_duration_s=route.total_duration_s,
         total_distance_m=route.total_distance_m,
-        ordered_event_ids=[str(e.id) for e in routable],
+        ordered_event_ids=ordered_ids,
         unroutable=unroutable_no_loc,
         reason=None,
+        waypoint_fingerprint=fingerprint,
+        computed_at=now,
+        is_stale=False,
+    )
+
+
+@router.get("/{trip_id}/route", response_model=Optional[RouteResponse])
+async def get_stored_route(
+    trip_id: int,
+    day_date: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Optional[RouteResponse]:
+    """Return the persisted route for a trip-day, with staleness flag."""
+    await require_trip_member(db, trip_id, current_user.id)
+
+    stored = (await db.execute(
+        select(DayRoute).where(
+            DayRoute.trip_id == trip_id,
+            DayRoute.day_date == day_date,
+        )
+    )).scalar_one_or_none()
+
+    if not stored:
+        return None
+
+    # Load current events to compute live fingerprint
+    stmt = select(EventModel).where(
+        EventModel.trip_id == trip_id,
+        EventModel.day_date == day_date,
+        EventModel.is_skipped == False,
+    )
+    events: list[EventModel] = list((await db.execute(stmt)).scalars().all())
+    current_fp = compute_waypoint_fingerprint(events)
+    is_stale = current_fp != stored.waypoint_fingerprint
+
+    legs = [RouteLeg(**leg) for leg in (stored.legs or [])]
+    unroutable = [UnroutableEvent(**u) for u in (stored.unroutable or [])]
+
+    return RouteResponse(
+        encoded_polyline=stored.encoded_polyline,
+        legs=legs,
+        total_duration_s=stored.total_duration_s or 0,
+        total_distance_m=stored.total_distance_m or 0,
+        ordered_event_ids=stored.ordered_event_ids or [],
+        unroutable=unroutable,
+        reason=None,
+        waypoint_fingerprint=stored.waypoint_fingerprint,
+        computed_at=stored.computed_at,
+        is_stale=is_stale,
     )

@@ -65,7 +65,7 @@ export default function ConciergeActionBar() {
   const handleSkipNext = () => {
     const now = new Date();
     const nextEvent = events.find(
-      (e) => e.start_time && e.start_time > now && !e.is_skipped
+      (e) => e.start_time && !e.is_skipped && (e.start_time > now || (e.end_time && e.end_time > now))
     );
     if (!nextEvent) return;
 
@@ -127,7 +127,7 @@ export default function ConciergeActionBar() {
         <button
           title="Skip Next"
           onClick={handleSkipNext}
-          disabled={!events.some((e) => e.start_time && e.start_time > new Date() && !e.is_skipped)}
+          disabled={!events.some((e) => e.start_time && !e.is_skipped && (e.start_time > new Date() || (e.end_time && e.end_time > new Date())))}
           className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30"
         >
           <SkipForward className="w-4 h-4" />

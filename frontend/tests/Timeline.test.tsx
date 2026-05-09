@@ -536,6 +536,40 @@ describe('Timeline – conflict detection', () => {
     const dBadge = screen.getByTestId('time-badge-ev-d');
     expect(dBadge.querySelector('[data-testid="conflict-icon"]')).not.toBeNull();
   });
+
+  it('does NOT flag conflicts against a skipped event', () => {
+    const ev1 = makeEvent({
+      id: 'ev-1', title: 'Skipped Tour',
+      start_time: new Date('2026-05-01T10:00:00'),
+      end_time:   new Date('2026-05-01T13:00:00'),
+      sort_order: 0,
+      is_skipped: true,
+    });
+    const ev2 = makeEvent({
+      id: 'ev-2', title: 'Lunch',
+      start_time: new Date('2026-05-01T12:00:00'),
+      end_time:   new Date('2026-05-01T14:00:00'),
+      sort_order: 1,
+    });
+    mockStore([ev1, ev2]);
+    render(<Timeline tripId={null} />);
+
+    expect(screen.queryByTestId('conflict-icon')).toBeNull();
+  });
+
+  it('renders skipped event with visual indicators', () => {
+    const ev = makeEvent({
+      id: 'ev-1', title: 'Skipped Place',
+      is_skipped: true,
+      sort_order: 0,
+    });
+    mockStore([ev]);
+    render(<Timeline tripId={null} />);
+
+    const card = screen.getByTestId('event-card-ev-1');
+    expect(card.querySelector('.line-through')).not.toBeNull();
+    expect(screen.getByText('Skipped')).toBeTruthy();
+  });
 });
 
 describe('Timeline – gap dots', () => {

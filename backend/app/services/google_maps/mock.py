@@ -47,6 +47,7 @@ class MockMapService(BaseMapService):
     return deterministic data without HTTP traffic.
     """
 
+    _directions_op: str = "directions_mock"
     _ANCHOR_LAT = 13.7563
     _ANCHOR_LNG = 100.5018
 

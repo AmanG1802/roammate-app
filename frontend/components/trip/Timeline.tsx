@@ -26,13 +26,14 @@ interface TimelineProps {
 /**
  * Returns the set of event IDs that conflict with any prior event in the list.
  * An event conflicts if its start_time falls before the maximum end_time of any
- * earlier event in the rendered order. Only the later item(s) in an overlap are
- * flagged. TBD events (no start_time / end_time) are skipped.
+ * earlier event in the rendered order. TBD events (no start_time / end_time) and
+ * skipped events are excluded from conflict detection entirely.
  */
 function computeConflicts(events: Event[]): Set<string> {
   const conflicts = new Set<string>();
   let maxEndSoFar: Date | null = null;
   for (const ev of events) {
+    if (ev.is_skipped) continue;
     if (ev.start_time && maxEndSoFar && ev.start_time < maxEndSoFar) {
       conflicts.add(ev.id);
     }
@@ -243,7 +244,7 @@ function TimeEditor({
 }
 
 export default function Timeline({ tripId, filterDay, readOnly = false, canVote = false }: TimelineProps) {
-  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays, legsByDay,
+  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, toggleEventSkip, reorderEvent, setEventsRaw, tripDays, legsByDay,
     selectedEventId, setHoveredEventId, setSelectedEventId } =
     useTripStore();
 
@@ -413,16 +414,17 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                 );
               }
               const isMapSelected = selectedEventId === event.id;
+              const isSkipped = !!event.is_skipped;
               cardEls.push(
                 <motion.div
                   key={event.id}
                   layout
                   ref={(el: HTMLDivElement | null) => { if (el) cardRefs.current.set(event.id, el); else cardRefs.current.delete(event.id); }}
                   initial={{ opacity: 0, x: -16 }}
-                  animate={{ opacity: isDragging ? 0.4 : 1, x: 0 }}
+                  animate={{ opacity: isDragging ? 0.4 : isSkipped ? 0.5 : 1, x: 0 }}
                   exit={{ opacity: 0, x: -16 }}
-                  draggable={!readOnly}
-                  onDragStartCapture={(e) => { if (!readOnly) handleEventDragStart(e, event.id); }}
+                  draggable={!readOnly && !isSkipped}
+                  onDragStartCapture={(e) => { if (!readOnly && !isSkipped) handleEventDragStart(e, event.id); }}
                   onDragOver={(e) => { if (!readOnly) handleEventDragOver(e, event.id); }}
                   onDrop={(e) => { if (!readOnly) handleEventDrop(e, event.id); }}
                   onDragEndCapture={() => { if (!readOnly) handleEventDragEnd(); }}
@@ -435,20 +437,29 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                     <div className="absolute top-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full -translate-y-2" />
                   )}
 
-                  {/* Timeline dot — colored by category */}
+                  {/* Timeline dot — grey if skipped, colored by category otherwise */}
                   <div className="absolute left-0 top-5 w-9 h-9 flex items-center justify-center">
-                    <div className={`w-3.5 h-3.5 ${accent.dot} rounded-full border-[3px] border-white shadow-sm group-hover:scale-110 transition-transform z-10`} />
+                    <div className={`w-3.5 h-3.5 ${isSkipped ? 'bg-slate-300' : accent.dot} rounded-full border-[3px] border-white shadow-sm group-hover:scale-110 transition-transform z-10`} />
                   </div>
 
-                  <div className={`p-4 bg-white border rounded-2xl shadow-sm hover:shadow-md transition-all ${
-                    isConflict ? 'border-red-200' : 'border-slate-100 hover:border-indigo-100'
+                  <div className={`p-4 border rounded-2xl shadow-sm transition-all ${
+                    isSkipped
+                      ? 'bg-slate-50 border-slate-200 border-dashed'
+                      : isConflict
+                        ? 'bg-white border-red-200 hover:shadow-md'
+                        : 'bg-white border-slate-100 hover:border-indigo-100 hover:shadow-md'
                   }`}>
                     {/* Row 1: grip + title (full width) */}
                     <div className="flex items-start gap-2">
-                      {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
-                      <h4 className="font-black text-slate-900 leading-tight flex-1 min-w-0">
+                      {!readOnly && !isSkipped && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
+                      <h4 className={`font-black leading-tight flex-1 min-w-0 ${isSkipped ? 'line-through text-slate-400' : 'text-slate-900'}`}>
                         {event.title}
                       </h4>
+                      {isSkipped && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-slate-100 border border-slate-200">
+                          Skipped
+                        </span>
+                      )}
                     </div>
 
                     {/* Rows 2-4 + detail panel: indented to align with title start */}
@@ -490,18 +501,33 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                           )}
                         </div>
                         {!readOnly && (
-                          <button
-                            title="Send back to Idea Bin"
-                            data-testid={`move-to-bin-${event.id}`}
-                            onClick={() => {
-                              const token = localStorage.getItem('token');
-                              moveEventToIdea(event.id, tripId, token);
-                            }}
-                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
-                          >
-                            <Undo2 className="w-2.5 h-2.5" />
-                            Move to bin
-                          </button>
+                          isSkipped ? (
+                            <button
+                              title="Restore this event"
+                              data-testid={`unskip-${event.id}`}
+                              onClick={() => {
+                                const token = localStorage.getItem('token');
+                                toggleEventSkip(event.id, token);
+                              }}
+                              className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 uppercase tracking-tighter transition-colors"
+                            >
+                              <Check className="w-2.5 h-2.5" />
+                              Restore
+                            </button>
+                          ) : (
+                            <button
+                              title="Send back to Idea Bin"
+                              data-testid={`move-to-bin-${event.id}`}
+                              onClick={() => {
+                                const token = localStorage.getItem('token');
+                                moveEventToIdea(event.id, tripId, token);
+                              }}
+                              className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Undo2 className="w-2.5 h-2.5" />
+                              Move to bin
+                            </button>
+                          )
                         )}
                       </div>
 

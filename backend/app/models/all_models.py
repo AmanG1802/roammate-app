@@ -284,3 +284,20 @@ class GoogleMapsApiUsage(Base):
     enriched_count = Column(Integer, nullable=True)
     cost_usd = Column(Numeric(10, 6), default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class DayRoute(Base):
+    __tablename__ = "day_route"
+    __table_args__ = (UniqueConstraint("trip_id", "day_date", name="uq_day_route"),)
+
+    id = Column(Integer, primary_key=True)
+    trip_id = Column(Integer, ForeignKey("trip.id", ondelete="CASCADE"), nullable=False, index=True)
+    day_date = Column(Date, nullable=False)
+    encoded_polyline = Column(Text, nullable=True)
+    legs = Column(JSON, nullable=False, default=list)
+    total_duration_s = Column(Integer, default=0)
+    total_distance_m = Column(Integer, default=0)
+    ordered_event_ids = Column(JSON, nullable=False, default=list)
+    unroutable = Column(JSON, nullable=False, default=list)
+    waypoint_fingerprint = Column(String, nullable=False)
+    computed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
