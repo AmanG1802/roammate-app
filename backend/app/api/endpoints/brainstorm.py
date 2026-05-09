@@ -261,22 +261,6 @@ async def promote(
     if not sources:
         return []
 
-    unenriched = [
-        {k: getattr(src, k) for k in PLACE_FIELDS}
-        for src in sources
-        if not getattr(src, "place_id", None)
-    ]
-    if unenriched:
-        enriched_dicts = await get_google_maps_service().enrich_items(unenriched)
-        _enriched_by_title = {d["title"]: d for d in enriched_dicts}
-        for src in sources:
-            if not getattr(src, "place_id", None) and src.title in _enriched_by_title:
-                enriched = _enriched_by_title[src.title]
-                for fld in PLACE_FIELDS:
-                    val = enriched.get(fld)
-                    if val is not None:
-                        setattr(src, fld, val)
-
     promoter = _first_name(current_user) or None
     created: list[IdeaBinItem] = []
     for src in sources:
@@ -317,10 +301,12 @@ async def promote(
     for idea in created:
         await db.refresh(idea)
 
-    return [
-        IdeaBinItemSchema.model_validate(i, from_attributes=True, update={"up": 0, "down": 0, "my_vote": 0})
-        for i in created
-    ]
+    results = []
+    for i in created:
+        data = IdeaBinItemSchema.model_validate(i, from_attributes=True).model_dump()
+        data.update(up=0, down=0, my_vote=0)
+        results.append(IdeaBinItemSchema.model_validate(data))
+    return results
 
 
 @router.delete("/{trip_id}/brainstorm/items", status_code=204)

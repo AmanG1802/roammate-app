@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useTripStore } from '@/lib/store';
-import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star, AlertTriangle } from 'lucide-react';
+import { useTripStore, reEnrichItem } from '@/lib/store';
+import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 import { categoryAccent } from '@/lib/categoryColors';
+import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
 /** Format a Date to a compact display string, e.g. "3pm" or "3:30pm". */
 function formatTime(d: Date | null | undefined): string {
@@ -38,6 +39,26 @@ const SHOW_PHOTOS =
 const SHOW_RATING =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_RATING ?? 'true').toLowerCase() === 'true';
 
+const TIME_CATEGORY_HOURS: Record<string, number> = {
+  'early morning': 7,
+  'morning': 10,
+  'midday': 12,
+  'afternoon': 14,
+  'late afternoon': 16,
+  'evening': 18,
+  'night': 20,
+  'late night': 22,
+};
+
+function timeCategoryToDate(cat: string | null | undefined): Date | null {
+  if (!cat) return null;
+  const hour = TIME_CATEGORY_HOURS[cat.toLowerCase()];
+  if (hour == null) return null;
+  const d = new Date();
+  d.setHours(hour, 0, 0, 0);
+  return d;
+}
+
 export default function IdeaBin({ tripId, readOnly = false, canVote = false }: { tripId: string | null; readOnly?: boolean; canVote?: boolean }) {
   const [inputText, setInputText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
@@ -48,6 +69,27 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   const [popoverTop, setPopoverTop] = useState<number>(0);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { ideas, addIdea, setIdeas, removeIdea } = useTripStore();
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+
+  const handleRetry = useCallback(async (ideaId: string) => {
+    setRetryingIds((prev) => new Set(prev).add(ideaId));
+    try {
+      const enriched = await reEnrichItem('idea', Number(ideaId));
+      setIdeas(ideas.map((it) => {
+        if (it.id !== ideaId) return it;
+        return {
+          ...it,
+          place_id: enriched.place_id ?? it.place_id,
+          lat: enriched.lat ?? it.lat,
+          lng: enriched.lng ?? it.lng,
+        };
+      }));
+    } catch {
+      // Badge stays visible so user can retry again
+    } finally {
+      setRetryingIds((prev) => { const next = new Set(prev); next.delete(ideaId); return next; });
+    }
+  }, [ideas, setIdeas]);
 
   const loadIdeas = useCallback(() => {
     if (!tripId) return;
@@ -61,19 +103,27 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
       .then((res) => (res.ok ? res.json() : []))
       .then((data: any[]) => {
         setIdeas(
-          data.map((item) => ({
-            id: item.id.toString(),
-            title: item.title,
-            lat: item.lat ?? 0,
-            lng: item.lng ?? 0,
-            place_id: item.place_id ?? null,
-            start_time: item.start_time ? new Date(item.start_time) : null,
-            end_time: item.end_time ? new Date(item.end_time) : null,
-            added_by: item.added_by ?? null,
-            up: item.up ?? 0,
-            down: item.down ?? 0,
-            my_vote: item.my_vote ?? 0,
-          }))
+          data.map((item) => {
+            const start = item.start_time
+              ? new Date(item.start_time)
+              : timeCategoryToDate(item.time_category);
+            const end = item.end_time
+              ? new Date(item.end_time)
+              : start ? new Date(start.getTime() + 60 * 60 * 1000) : null;
+            return {
+              id: item.id.toString(),
+              title: item.title,
+              lat: item.lat ?? 0,
+              lng: item.lng ?? 0,
+              place_id: item.place_id ?? null,
+              start_time: start,
+              end_time: end,
+              added_by: item.added_by ?? null,
+              up: item.up ?? 0,
+              down: item.down ?? 0,
+              my_vote: item.my_vote ?? 0,
+            };
+          })
         );
         const extraMap: Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null; address?: string | null; category?: string | null }> = {};
         for (const item of data) {
@@ -261,12 +311,6 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                 {/* Left accent bar */}
                 <div className={`absolute left-0 top-0 w-1 h-full ${accent.bar} rounded-l-2xl transition-all group-hover:w-1.5`} />
 
-                {!idea.place_id && (
-                  <div className="absolute top-1.5 right-1.5 z-10" title="Map data unavailable">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                  </div>
-                )}
-
                 {/* Row 1: [MapPin slot] Title | Trash */}
                 <div className="flex items-start gap-1.5 min-w-0">
                   <div className="w-3.5 flex justify-center shrink-0 pt-0.5">
@@ -286,7 +330,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                   )}
                 </div>
 
-                {/* Row 2: [Info slot] Rating | Time | Pencil */}
+                {/* Row 2: [Info slot] Warning | Rating | Time | Pencil */}
                 <div className="flex items-center gap-1.5 min-w-0">
                   <div className="w-3.5 flex justify-center shrink-0">
                     <button
@@ -305,6 +349,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                       <Info className="w-3 h-3" />
                     </button>
                   </div>
+                  {!idea.place_id && <EnrichmentBadge size={3.5} onRetry={() => handleRetry(idea.id)} retrying={retryingIds.has(idea.id)} />}
                   {SHOW_RATING && extras[idea.id]?.rating != null && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
                       <Star className="w-2.5 h-2.5 text-amber-400" /> {extras[idea.id]!.rating}

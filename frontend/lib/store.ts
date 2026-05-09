@@ -42,6 +42,7 @@ export interface Event {
   photo_url?: string | null;
   rating?: number | null;
   address?: string | null;
+  place_id?: string | null;
   is_skipped?: boolean;
 }
 
@@ -171,6 +172,7 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
     photo_url: (raw.photo_url as string) ?? null,
     rating: (raw.rating as number) ?? null,
     address: (raw.address as string) ?? null,
+    place_id: (raw.place_id as string) ?? null,
     is_skipped: (raw.is_skipped as boolean) ?? false,
   };
 }
@@ -549,3 +551,34 @@ export const useTripStore = create<TripState>((set, get) => ({
   openConcierge: (preAction = null) => set({ conciergeOpen: true, conciergePreAction: preAction }),
   closeConcierge: () => set({ conciergeOpen: false, conciergePreAction: null }),
 }));
+
+
+export type ReEnrichKind = 'brainstorm' | 'idea' | 'event';
+
+export interface ReEnrichResult {
+  place_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  address?: string | null;
+  photo_url?: string | null;
+  rating?: number | null;
+  description?: string | null;
+  category?: string | null;
+}
+
+export async function reEnrichItem(kind: ReEnrichKind, itemId: number): Promise<ReEnrichResult> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const res = await fetch(`${API}/trips/enrich`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ kind, item_id: itemId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? 'Enrichment failed');
+  }
+  return res.json();
+}

@@ -18,7 +18,9 @@ from app.api.deps import get_current_user
 
 
 def _event_to_schema(event: EventModel, up: int, down: int, mine: int) -> Event:
-    return Event.model_validate(event, from_attributes=True, update={"up": up, "down": down, "my_vote": mine})
+    data = Event.model_validate(event, from_attributes=True).model_dump()
+    data.update(up=up, down=down, my_vote=mine)
+    return Event.model_validate(data)
 
 
 async def _event_with_votes(db, event: EventModel, user_id: int) -> Event:
@@ -267,7 +269,9 @@ async def move_event_to_bin(
     mine = (await db.execute(
         select(IdeaVote.value).where(IdeaVote.idea_id == idea.id, IdeaVote.user_id == current_user.id)
     )).scalars().first() or 0
-    return IdeaBinItem.model_validate(idea, from_attributes=True, update={"up": up, "down": down, "my_vote": mine})
+    data = IdeaBinItem.model_validate(idea, from_attributes=True).model_dump()
+    data.update(up=up, down=down, my_vote=mine)
+    return IdeaBinItem.model_validate(data)
 
 
 @router.get("/", response_model=List[Event])

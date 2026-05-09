@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useTripStore, Event, Idea, legsKey, RouteLeg } from '@/lib/store';
+import { useTripStore, Event, Idea, legsKey, RouteLeg, reEnrichItem } from '@/lib/store';
 import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 import { categoryAccent } from '@/lib/categoryColors';
+import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
 const SHOW_PHOTOS =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_PHOTOS ?? 'true').toLowerCase() === 'true';
@@ -239,6 +240,32 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [tooltipId, setTooltipId] = useState<string | null>(null);
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+
+  const handleRetry = useCallback(async (eventId: string) => {
+    setRetryingIds((prev) => new Set(prev).add(eventId));
+    try {
+      const enriched = await reEnrichItem('event', Number(eventId));
+      setEventsRaw(events.map((ev) => {
+        if (ev.id !== eventId) return ev;
+        return {
+          ...ev,
+          place_id: enriched.place_id ?? ev.place_id,
+          lat: enriched.lat ?? ev.lat,
+          lng: enriched.lng ?? ev.lng,
+          address: enriched.address ?? ev.address,
+          photo_url: enriched.photo_url ?? ev.photo_url,
+          rating: enriched.rating ?? ev.rating,
+          description: enriched.description ?? ev.description,
+          category: enriched.category ?? ev.category,
+        };
+      }));
+    } catch {
+      // Badge stays visible so user can retry again
+    } finally {
+      setRetryingIds((prev) => { const next = new Set(prev); next.delete(eventId); return next; });
+    }
+  }, [events, setEventsRaw]);
 
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -451,9 +478,10 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
 
                     {/* Rows 2-4 + detail panel: indented to align with title start */}
                     <div className={!readOnly ? 'ml-6' : undefined}>
-                      {/* Row 2: time range + move-to-bin */}
+                      {/* Row 2: time range + enrichment warning + move-to-bin */}
                       <div className="flex items-center justify-between mt-1.5">
                         <div className="flex items-center gap-2">
+                          {!event.place_id && <EnrichmentBadge size={3.5} onRetry={() => handleRetry(event.id)} retrying={retryingIds.has(event.id)} />}
                           {readOnly ? (
                             event.start_time ? (
                               <span

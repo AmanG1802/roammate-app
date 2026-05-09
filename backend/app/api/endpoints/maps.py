@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -35,10 +36,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.all_models import DayRoute, TimelineItem as EventModel, User
+from app.models.all_models import (
+    BrainstormBinItem,
+    DayRoute,
+    IdeaBinItem,
+    PLACE_FIELDS,
+    TimelineItem as EventModel,
+    User,
+)
+from app.schemas.place import PlaceFields
 from app.schemas.route import RouteLeg, RouteResponse, UnroutableEvent
 from app.services.google_maps import RoutePoint, get_google_maps_service
 from app.services.roles import require_trip_member
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -299,3 +310,70 @@ async def get_stored_route(
         computed_at=stored.computed_at,
         is_stale=is_stale,
     )
+
+
+# ── Single-item re-enrichment ─────────────────────────────────────────────
+
+_KIND_MODEL = {
+    "brainstorm": BrainstormBinItem,
+    "idea": IdeaBinItem,
+    "event": EventModel,
+}
+
+_ENRICHABLE_FIELDS = (
+    "place_id", "lat", "lng", "address", "photo_url",
+    "rating", "price_level", "types", "description", "category",
+)
+
+
+class ReEnrichRequest(BaseModel):
+    kind: Literal["brainstorm", "idea", "event"]
+    item_id: int
+
+
+class ReEnrichResponse(PlaceFields):
+    id: int
+    model_config = {"from_attributes": True}
+
+
+@router.post("/enrich", response_model=ReEnrichResponse)
+async def re_enrich_item(
+    body: ReEnrichRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReEnrichResponse:
+    """Re-attempt Google Maps enrichment for a single item."""
+    model_cls = _KIND_MODEL[body.kind]
+    row = (await db.execute(
+        select(model_cls).where(model_cls.id == body.item_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    await require_trip_member(db, row.trip_id, current_user.id)
+
+    item_dict = {f: getattr(row, f) for f in PLACE_FIELDS}
+
+    # Clear cached place_id so enrich_item actually re-fetches
+    item_dict["place_id"] = None
+
+    svc = get_google_maps_service()
+    enriched = await svc.enrich_item(item_dict)
+
+    if not enriched.get("place_id"):
+        raise HTTPException(
+            status_code=422,
+            detail="Enrichment failed — Maps API could not resolve this item.",
+        )
+
+    for field in _ENRICHABLE_FIELDS:
+        val = enriched.get(field)
+        if val is not None:
+            setattr(row, field, val)
+
+    await db.commit()
+    await db.refresh(row)
+
+    data = {f: getattr(row, f) for f in PLACE_FIELDS}
+    data["id"] = row.id
+    return ReEnrichResponse.model_validate(data)

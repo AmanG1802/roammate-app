@@ -53,11 +53,13 @@ function hasConflict(a: Event, b: Event): boolean {
 function computeGateFailures(events: Event[]): {
   hasMissingTimes: boolean;
   hasConflicts: boolean;
+  hasMissingPlaceIds: boolean;
 } {
   if (events.length === 0) {
-    return { hasMissingTimes: false, hasConflicts: false };
+    return { hasMissingTimes: false, hasConflicts: false, hasMissingPlaceIds: false };
   }
   const hasMissingTimes = events.some((e) => !e.start_time);
+  const hasMissingPlaceIds = events.some((e) => !e.place_id);
   const sorted = [...events].sort((a, b) => {
     if (a.start_time && b.start_time) {
       return a.start_time.getTime() - b.start_time.getTime();
@@ -73,13 +75,17 @@ function computeGateFailures(events: Event[]): {
       break;
     }
   }
-  return { hasMissingTimes, hasConflicts };
+  return { hasMissingTimes, hasConflicts, hasMissingPlaceIds };
 }
 
 function gateFailureMessage(gate: {
   hasMissingTimes: boolean;
   hasConflicts: boolean;
+  hasMissingPlaceIds: boolean;
 }): string | null {
+  if (gate.hasMissingPlaceIds) {
+    return 'Map data could not be fetched for some items. Retry enrichment before generating the route.';
+  }
   if (gate.hasMissingTimes && gate.hasConflicts) {
     return 'Add missing start times and resolve conflicts before generating the route.';
   }

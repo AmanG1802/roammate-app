@@ -482,14 +482,16 @@ async def get_idea_bin(
     )
     my_map = dict((await db.execute(my_stmt)).all())
 
-    return [
-        IdeaBinItem.model_validate(i, from_attributes=True, update={
-            "up": up_map.get(i.id, 0),
-            "down": down_map.get(i.id, 0),
-            "my_vote": my_map.get(i.id, 0),
-        })
-        for i in ideas
-    ]
+    results = []
+    for i in ideas:
+        data = IdeaBinItem.model_validate(i, from_attributes=True).model_dump()
+        data.update(
+            up=up_map.get(i.id, 0),
+            down=down_map.get(i.id, 0),
+            my_vote=my_map.get(i.id, 0),
+        )
+        results.append(IdeaBinItem.model_validate(data))
+    return results
 
 
 @router.get("/{trip_id}/members", response_model=List[TripMemberOut])

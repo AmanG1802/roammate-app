@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useTripStore } from '@/lib/store';
 import clsx from 'clsx';
+import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -135,9 +136,7 @@ function PlaceCardItem({
       <div className="p-3 space-y-1.5">
         <div className="flex items-center gap-1.5">
           <h4 className="font-semibold text-sm text-slate-900 line-clamp-1 flex-1">{place.title}</h4>
-          {!place.place_id && (
-            <span title="Map data unavailable" className="shrink-0"><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /></span>
-          )}
+          {!place.place_id && <EnrichmentBadge size={3.5} />}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {place.rating != null && (
