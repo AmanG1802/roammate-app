@@ -257,6 +257,23 @@ async def test_execute_find_nearby_preserves_all_place_fields(
     assert new_event["added_by"] == "Alice Smith"
 
 
+async def test_find_nearby_includes_enrichment_status(
+    client: AsyncClient, auth_headers
+):
+    """find-nearby response includes enrichment field (null when all have place_ids)."""
+    trip = await create_trip(client, auth_headers)
+    resp = await client.post(
+        f"/api/concierge/{trip['id']}/find-nearby",
+        json={"query": "coffee", "lat": 13.75, "lng": 100.50},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "places" in data
+    # Mock nearby_search returns places with place_ids → enrichment should be null
+    assert data.get("enrichment") is None
+
+
 async def test_execute_unknown_intent(client: AsyncClient, auth_headers):
     trip = await create_trip(client, auth_headers)
     resp = await client.post(

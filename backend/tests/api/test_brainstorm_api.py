@@ -4,7 +4,6 @@ from httpx import AsyncClient
 
 from tests.conftest import create_trip, invite_and_accept
 from app.services.llm_client import _BANGKOK_FALLBACK_ITEMS
-from app.core.time_categories import TIME_CATEGORY_DEFAULTS
 
 
 _SAMPLE_ITEM = {
@@ -19,12 +18,7 @@ _SAMPLE_ITEM = {
     "rating": 4.7,
     "price_level": 2,
     "types": ["landmark", "tourist_attraction"],
-    "opening_hours": {"mon_sun": "8:30–15:30"},
-    "phone": "+66 2 623 5500",
-    "website": "https://www.royalgrandpalace.th/",
-    "time_hint": None,
     "time_category": "late afternoon",
-    "url_source": None,
 }
 
 
@@ -119,6 +113,8 @@ async def test_extract_creates_brainstorm_items(client: AsyncClient, auth_header
     assert first["description"] is not None
     assert first["lat"] is not None
     assert first["rating"] is not None
+    # Mock enrichment is always full → enrichment field is null
+    assert resp.json().get("enrichment") is None
 
 
 async def test_extract_items_have_added_by_ai(client: AsyncClient, auth_headers):
@@ -440,7 +436,7 @@ async def test_promote_full_field_copy(client: AsyncClient, auth_headers):
     for field in (
         "title", "description", "category", "place_id", "lat", "lng",
         "address", "photo_url", "rating", "price_level", "types",
-        "opening_hours", "phone", "website", "time_category", "url_source",
+        "time_category",
     ):
         assert idea[field] == _SAMPLE_ITEM[field], f"Field mismatch: {field}"
 
@@ -512,16 +508,15 @@ async def test_promote_non_member_403(
     assert resp.status_code == 403
 
 
-async def test_promote_time_category_populates_time_hint(
+async def test_promote_preserves_time_category(
     client: AsyncClient, auth_headers
 ):
     trip = await create_trip(client, auth_headers)
-    item_no_hint = {
+    item_with_cat = {
         **_SAMPLE_ITEM,
-        "time_hint": None,
         "time_category": "morning",
     }
-    await _seed_brainstorm(client, auth_headers, trip["id"], items=[item_no_hint])
+    await _seed_brainstorm(client, auth_headers, trip["id"], items=[item_with_cat])
 
     resp = await client.post(
         f"/api/trips/{trip['id']}/brainstorm/promote",
@@ -529,7 +524,7 @@ async def test_promote_time_category_populates_time_hint(
         headers=auth_headers,
     )
     idea = resp.json()[0]
-    assert idea["time_hint"] == TIME_CATEGORY_DEFAULTS["morning"]
+    assert idea["time_category"] == "morning"
 
 
 # ── Role gating ───────────────────────────────────────────────────────────────

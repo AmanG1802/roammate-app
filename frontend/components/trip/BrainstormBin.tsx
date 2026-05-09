@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
-import { Lightbulb, Trash2, Loader2, MapPin, Info, Star, Clock, X, PackagePlus } from 'lucide-react';
+import { Lightbulb, Trash2, Loader2, MapPin, Info, Star, Clock, X, PackagePlus, AlertTriangle } from 'lucide-react';
 import { categoryAccent } from '@/lib/categoryColors';
 
 export type BrainstormItem = {
@@ -9,9 +9,9 @@ export type BrainstormItem = {
   title: string;
   description?: string | null;
   category?: string | null;
+  place_id?: string | null;
   photo_url?: string | null;
   rating?: number | null;
-  time_hint?: string | null;
   time_category?: string | null;
   address?: string | null;
 };
@@ -195,6 +195,12 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                   {/* Left accent bar */}
                   <div className={`absolute left-0 top-0 w-1 h-full ${accent.bar} rounded-l-2xl transition-all group-hover:w-1.5`} />
 
+                  {!item.place_id && (
+                    <div className="absolute top-1.5 right-1.5 z-10" title="Map data unavailable">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                    </div>
+                  )}
+
                   {/* Row 1: [MapPin slot] Title + Trash */}
                   <div className="flex items-start gap-1.5 min-w-0">
                     <div className="w-3.5 flex justify-center shrink-0 pt-0.5">
@@ -234,10 +240,10 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                         <Star className="w-2.5 h-2.5 text-amber-400" /> {item.rating}
                       </span>
                     )}
-                    {(item.time_category ?? item.time_hint) && (
+                    {item.time_category && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400 truncate min-w-0">
                         <Clock className="w-2.5 h-2.5 text-slate-300 shrink-0" />
-                        <span className="truncate">{item.time_category ?? item.time_hint}</span>
+                        <span className="truncate">{item.time_category}</span>
                       </span>
                     )}
                   </div>
@@ -329,7 +335,14 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
         <div className="flex items-start gap-2 min-w-0">
           <div className={`w-1 self-stretch rounded-full shrink-0 ${accent.bar}`} />
           <div className="min-w-0">
-            <p className="text-sm font-black text-slate-900 leading-tight truncate">{item.title}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-black text-slate-900 leading-tight truncate">{item.title}</p>
+              {!item.place_id && (
+                <span title="Map data unavailable" className="shrink-0">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                </span>
+              )}
+            </div>
             {item.address && (
               <p className="text-[11px] font-medium text-slate-500 truncate mt-0.5">{item.address}</p>
             )}
@@ -362,9 +375,9 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
               <Star className="w-3 h-3 text-amber-400" /> {item.rating}
             </span>
           )}
-          {item.time_hint && (
+          {item.time_category && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-100">
-              <Clock className="w-3 h-3 text-slate-400" /> {item.time_hint}
+              <Clock className="w-3 h-3 text-slate-400" /> {item.time_category}
             </span>
           )}
           {item.category && (

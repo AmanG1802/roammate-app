@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Loader2, Rocket, X, Compass } from 'lucide-react';
+import { Sparkles, Loader2, Rocket, X, Compass, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Witty messages shown while the AI is planning. Cycled every ~1.8s so the
@@ -18,11 +18,20 @@ const PLANNING_MESSAGES = [
   'Pinning the must-sees…',
 ];
 
+type EnrichmentStatus = {
+  status: 'full' | 'partial' | 'none';
+  total: number;
+  enriched: number;
+  skipped: number;
+  reason?: string | null;
+};
+
 type Preview = {
   trip_name: string;
   start_date: string | null;
   duration_days: number;
   items: Array<Record<string, any>>;
+  enrichment?: EnrichmentStatus | null;
 };
 
 function authHeaders(): HeadersInit {
@@ -167,6 +176,12 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
               <X className="w-4 h-4" />
             </button>
           </div>
+          {preview.enrichment && preview.enrichment.status !== 'full' && (
+            <p className="flex items-center gap-1.5 text-xs font-bold text-amber-600 mb-3">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {preview.enrichment.skipped} of {preview.enrichment.total} places couldn&apos;t be loaded.
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               onClick={createTrip}

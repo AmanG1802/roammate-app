@@ -22,7 +22,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.all_models import (
     ConciergeMessage,
-    Event as EventModel,
+    TimelineItem as EventModel,
     Trip as TripModel,
     User,
 )
@@ -327,7 +327,19 @@ async def find_nearby(
             distance_m=distance_m,
         ))
 
-    return FindNearbyResponse(places=places)
+    total = len(raw_places)
+    enriched_count = sum(1 for p in places if p.place_id)
+    skipped_count = total - enriched_count
+    from app.schemas.enrichment import EnrichmentStatus
+    enr = None
+    if skipped_count > 0:
+        enr = EnrichmentStatus(
+            status="partial" if enriched_count > 0 else "none",
+            total=total,
+            enriched=enriched_count,
+            skipped=skipped_count,
+        )
+    return FindNearbyResponse(places=places, enrichment=enr)
 
 
 # ── 4. POST /{trip_id}/skip-event — soft skip (no LLM) ──────────────────────

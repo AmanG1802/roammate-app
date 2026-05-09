@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from app.schemas.enrichment import EnrichmentStatus
 from app.schemas.place import PlaceFields
 
 
@@ -86,6 +87,7 @@ class ConciergeChatResponse(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     requires_confirmation: bool = True
     message_type: str = "text"  # "text" | "action_card" | "place_card" | "error"
+    enrichment: Optional[EnrichmentStatus] = None
 
 
 class PlaceCard(PlaceFields):
@@ -105,6 +107,7 @@ class FindNearbyRequest(BaseModel):
 
 class FindNearbyResponse(BaseModel):
     places: list[PlaceCard]
+    enrichment: Optional[EnrichmentStatus] = None
 
 
 class SkipEventRequest(BaseModel):

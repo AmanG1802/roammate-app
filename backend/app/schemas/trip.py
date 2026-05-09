@@ -63,11 +63,8 @@ class InvitationOut(BaseModel):
 
 # ── Idea Bin ───────────────────────────────────────────────────────────────────
 class IdeaBinItemBase(PlaceFields):
-    opening_hours: Optional[dict] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
-    url_source: Optional[str] = None
-    time_hint: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
 
 class IdeaBinItemCreate(IdeaBinItemBase):
     pass

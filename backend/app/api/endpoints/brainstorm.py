@@ -23,6 +23,7 @@ from app.models.all_models import (
     BrainstormBinItem,
     BrainstormMessage,
     IdeaBinItem,
+    PLACE_FIELDS,
 )
 from app.schemas.brainstorm import (
     BrainstormItemOut,
@@ -40,31 +41,8 @@ from app.services.llm.registry import get_brainstorm_client
 from app.services.google_maps import get_google_maps_service
 from app.services.llm.dedup import deduplicate
 from app.schemas.notification import NotificationType
-from app.core.time_categories import TIME_CATEGORY_DEFAULTS
 
 router = APIRouter()
-
-
-# ── Google-Maps-parity fields copied verbatim on promotion ────────────────
-_COPY_FIELDS = (
-    "title",
-    "description",
-    "category",
-    "place_id",
-    "lat",
-    "lng",
-    "address",
-    "photo_url",
-    "rating",
-    "price_level",
-    "types",
-    "opening_hours",
-    "phone",
-    "website",
-    "time_hint",
-    "time_category",
-    "url_source",
-)
 
 
 def _first_name(user: User) -> str:
@@ -181,7 +159,10 @@ async def extract(
 
     client = get_brainstorm_client()
     raw_items = await client.extract_items(history, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas)
-    raw_items = await get_google_maps_service().enrich_items(raw_items, user_id=current_user.id, trip_id=trip_id)
+    maps_svc = get_google_maps_service()
+    raw_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
+        raw_items, user_id=current_user.id, trip_id=trip_id,
+    )
 
     existing_stmt = select(BrainstormBinItem).where(
         BrainstormBinItem.trip_id == trip_id,
@@ -196,7 +177,7 @@ async def extract(
             trip_id=trip_id,
             user_id=current_user.id,
             added_by="AI",
-            **{k: item.get(k) for k in _COPY_FIELDS},
+            **{k: item.get(k) for k in PLACE_FIELDS if k != "added_by"},
         )
         db.add(row)
         created.append(row)
@@ -205,7 +186,15 @@ async def extract(
     for row in created:
         await db.refresh(row)
 
-    return BrainstormExtractResponse(items=created)
+    from app.schemas.enrichment import EnrichmentStatus
+    enr = None if enrichment_summary.status == "full" else EnrichmentStatus(
+        status=enrichment_summary.status,
+        total=enrichment_summary.total,
+        enriched=enrichment_summary.enriched,
+        skipped=enrichment_summary.skipped,
+        reason=enrichment_summary.reason,
+    )
+    return BrainstormExtractResponse(items=created, enrichment=enr)
 
 
 @router.post("/{trip_id}/brainstorm/bulk", response_model=List[BrainstormItemOut])
@@ -272,9 +261,8 @@ async def promote(
     if not sources:
         return []
 
-    # Enrich any items missing a place_id before promoting
     unenriched = [
-        {k: getattr(src, k) for k in _COPY_FIELDS}
+        {k: getattr(src, k) for k in PLACE_FIELDS}
         for src in sources
         if not getattr(src, "place_id", None)
     ]
@@ -284,8 +272,7 @@ async def promote(
         for src in sources:
             if not getattr(src, "place_id", None) and src.title in _enriched_by_title:
                 enriched = _enriched_by_title[src.title]
-                for fld in ("place_id", "lat", "lng", "address", "photo_url",
-                            "rating", "opening_hours", "phone", "website"):
+                for fld in PLACE_FIELDS:
                     val = enriched.get(fld)
                     if val is not None:
                         setattr(src, fld, val)
@@ -293,12 +280,10 @@ async def promote(
     promoter = _first_name(current_user) or None
     created: list[IdeaBinItem] = []
     for src in sources:
-        fields = {k: getattr(src, k) for k in _COPY_FIELDS}
-        if not fields.get("time_hint") and fields.get("time_category"):
-            fields["time_hint"] = TIME_CATEGORY_DEFAULTS.get(fields["time_category"])
+        fields = {k: getattr(src, k) for k in PLACE_FIELDS}
+        fields["added_by"] = promoter
         idea = IdeaBinItem(
             trip_id=trip_id,
-            added_by=promoter,
             **fields,
         )
         db.add(idea)
@@ -333,16 +318,7 @@ async def promote(
         await db.refresh(idea)
 
     return [
-        IdeaBinItemSchema(
-            id=i.id, trip_id=i.trip_id, title=i.title,
-            description=i.description, category=i.category,
-            place_id=i.place_id, lat=i.lat, lng=i.lng,
-            address=i.address, photo_url=i.photo_url, rating=i.rating,
-            price_level=i.price_level, types=i.types, opening_hours=i.opening_hours,
-            phone=i.phone, website=i.website,
-            url_source=i.url_source, time_hint=i.time_hint, time_category=i.time_category,
-            added_by=i.added_by, up=0, down=0, my_vote=0,
-        )
+        IdeaBinItemSchema.model_validate(i, from_attributes=True, update={"up": 0, "down": 0, "my_vote": 0})
         for i in created
     ]
 

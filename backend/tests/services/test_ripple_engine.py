@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.services.ripple_engine import ripple_engine
-from app.models.all_models import Event, Trip, User
+from app.models.all_models import TimelineItem as Event, Trip, User
 
 
 @pytest.fixture

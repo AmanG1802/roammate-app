@@ -24,10 +24,22 @@ async def plan_trip(
     """
     client = get_dashboard_client()
     result = await client.plan_trip(body.prompt, user_id=current_user.id)
-    enriched_items = await get_google_maps_service().enrich_items(result["items"], user_id=current_user.id)
+    maps_svc = get_google_maps_service()
+    enriched_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
+        result["items"], user_id=current_user.id,
+    )
+    from app.schemas.enrichment import EnrichmentStatus
+    enr = None if enrichment_summary.status == "full" else EnrichmentStatus(
+        status=enrichment_summary.status,
+        total=enrichment_summary.total,
+        enriched=enrichment_summary.enriched,
+        skipped=enrichment_summary.skipped,
+        reason=enrichment_summary.reason,
+    )
     return PlanTripResponse(
         trip_name=result["trip_name"],
         start_date=result.get("start_date"),
         duration_days=result["duration_days"],
         items=[BrainstormItemBase(**it) for it in enriched_items],
+        enrichment=enr,
     )

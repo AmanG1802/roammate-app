@@ -5,7 +5,7 @@
  *  - Render (empty state, event list)
  *  - Drag from Idea Bin → empty timeline area  (regression: must always work)
  *  - Drag from Idea Bin → on top of an existing event card  (regression: was broken)
- *  - [Bug 1] time_hint from idea is passed as startTime to moveIdeaToTimeline
+ *  - [Bug 1] start_time from idea is passed as startTime to moveIdeaToTimeline
  *  - Drag-to-reorder within timeline
  *  - [Bug 4] Manual reorder calls setEventsRaw (not setEvents) so sortEvents can't undo it
  *  - "Move to bin" button
@@ -170,7 +170,7 @@ describe('Timeline – drag from Idea Bin', () => {
    * container area OR directly on top of an existing event card.
    */
 
-  it('handles idea drop onto the empty container area (no time_hint)', () => {
+  it('handles idea drop onto the empty container area (no start_time)', () => {
     mockStore([]);
     render(<Timeline tripId="1" />);
 
@@ -185,8 +185,10 @@ describe('Timeline – drag from Idea Bin', () => {
     expect(mockMoveIdea).toHaveBeenCalledWith('idea-99', '1', 'test-token', null, null);
   });
 
-  it('[Bug 1] passes parsed time from time_hint as startTime when idea has time_hint', () => {
-    mockStore([], [makeIdea({ id: 'idea-99', time_hint: '3pm' })]);
+  it('passes start_time as startTime when idea has start_time', () => {
+    const at3pm = new Date();
+    at3pm.setHours(15, 0, 0, 0);
+    mockStore([], [makeIdea({ id: 'idea-99', start_time: at3pm })]);
     render(<Timeline tripId="1" />);
 
     const dt = makeDataTransfer({ ideaId: 'idea-99' });
@@ -197,11 +199,11 @@ describe('Timeline – drag from Idea Bin', () => {
     expect(mockMoveIdea).toHaveBeenCalledOnce();
     const [, , , startTime] = mockMoveIdea.mock.calls[0] as [string, string, string, Date | null];
     expect(startTime).toBeInstanceOf(Date);
-    expect((startTime as Date).getHours()).toBe(15); // 3pm = 15:00
+    expect((startTime as Date).getHours()).toBe(15);
   });
 
-  it('[Bug 1] passes null startTime when idea has no time_hint', () => {
-    mockStore([], [makeIdea({ id: 'idea-99', time_hint: null })]);
+  it('passes null startTime when idea has no start_time', () => {
+    mockStore([], [makeIdea({ id: 'idea-99', start_time: null })]);
     render(<Timeline tripId="1" />);
 
     const dt = makeDataTransfer({ ideaId: 'idea-99' });
@@ -211,8 +213,10 @@ describe('Timeline – drag from Idea Bin', () => {
     expect(startTime).toBeNull();
   });
 
-  it('[Bug 1][REGRESSION] idea dropped onto an existing event card also carries time_hint', () => {
-    mockStore([makeEvent()], [makeIdea({ id: 'idea-77', time_hint: '2:30pm' })]);
+  it('[REGRESSION] idea dropped onto an existing event card carries start_time', () => {
+    const at230pm = new Date();
+    at230pm.setHours(14, 30, 0, 0);
+    mockStore([makeEvent()], [makeIdea({ id: 'idea-77', start_time: at230pm })]);
     render(<Timeline tripId="1" />);
 
     const dt = makeDataTransfer({ ideaId: 'idea-77' });
@@ -224,11 +228,11 @@ describe('Timeline – drag from Idea Bin', () => {
     expect(mockMoveIdea).toHaveBeenCalledOnce();
     const [, , , startTime] = mockMoveIdea.mock.calls[0] as [string, string, string, Date | null];
     expect(startTime).toBeInstanceOf(Date);
-    expect((startTime as Date).getHours()).toBe(14);   // 2pm portion
-    expect((startTime as Date).getMinutes()).toBe(30);  // :30 portion
+    expect((startTime as Date).getHours()).toBe(14);
+    expect((startTime as Date).getMinutes()).toBe(30);
   });
 
-  it('[REGRESSION] handles idea drop onto an existing event card (no time_hint)', () => {
+  it('[REGRESSION] handles idea drop onto an existing event card (no start_time)', () => {
     mockStore([makeEvent()]);
     render(<Timeline tripId="1" />);
 

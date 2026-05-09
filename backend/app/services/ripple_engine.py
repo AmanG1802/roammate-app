@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from datetime import timedelta
 from typing import List, Optional
-from app.models.all_models import Event
+from app.models.all_models import TimelineItem as Event
 from app.utils.tz import utc_now
 
 class RippleEngine:

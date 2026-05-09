@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 
 from app.db.session import get_db
-from app.models.all_models import Trip, TripMember, Event, TripDay, User
+from app.models.all_models import Trip, TripMember, TimelineItem, TripDay, User
 from app.schemas.dashboard import TodayWidgetOut, TodayWidgetPage, TodayTrip, TodayEvent
 from app.api.deps import get_current_user
 from app.utils.tz import utc_now, from_utc, today_in_tz, ensure_utc
@@ -105,7 +105,7 @@ async def get_today_widget(
     for t in reversed(past):
         sd = _to_date(t.start_date)
         ed = _to_date(t.end_date) or sd
-        count_stmt = select(sa_func.count(Event.id)).where(Event.trip_id == t.id)
+        count_stmt = select(sa_func.count(TimelineItem.id)).where(TimelineItem.trip_id == t.id)
         total_events = (await db.execute(count_stmt)).scalar_one()
         total_days = ((ed - sd).days + 1) if sd and ed else None
         pages.append(TodayWidgetPage(
@@ -119,9 +119,9 @@ async def get_today_widget(
         trip_today = today_in_tz(trip_tz)
         sd = _to_date(t.start_date)
         ev_stmt = (
-            select(Event)
-            .where(Event.trip_id == t.id, Event.day_date == trip_today)
-            .order_by(Event.start_time.nulls_last(), Event.sort_order)
+            select(TimelineItem)
+            .where(TimelineItem.trip_id == t.id, TimelineItem.day_date == trip_today)
+            .order_by(TimelineItem.start_time.nulls_last(), TimelineItem.sort_order)
         )
         events = list((await db.execute(ev_stmt)).scalars().all())
 

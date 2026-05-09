@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import List, Optional
 from pydantic import BaseModel, field_validator
 from datetime import datetime, date
 
@@ -15,9 +15,6 @@ class EventBase(PlaceFields):
     is_locked: bool = False
     event_type: Optional[str] = None
     sort_order: int = 0
-    opening_hours: Optional[Any] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
     is_skipped: bool = False
 
     @field_validator("start_time", "end_time", mode="after")

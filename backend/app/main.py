@@ -7,7 +7,7 @@ from app.db.base_class import Base
 from app.db.session import engine
 from app.db.auto_migrate import sync_schema
 from app.models.all_models import (  # noqa: F401 – ensure all models register on Base.metadata
-    User, Trip, TripMember, Event, IdeaBinItem, TripDay, Notification,
+    User, Trip, TripMember, TimelineItem, IdeaBinItem, TripDay, Notification,
     Group, GroupMember, IdeaVote, EventVote, IdeaTag,
     BrainstormBinItem, BrainstormMessage, ConciergeMessage,
     TokenUsage, GoogleMapsApiUsage, DayRoute,

@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.all_models import DayRoute, Event as EventModel, User
+from app.models.all_models import DayRoute, TimelineItem as EventModel, User
 from app.schemas.route import RouteLeg, RouteResponse, UnroutableEvent
 from app.services.google_maps import RoutePoint, get_google_maps_service
 from app.services.roles import require_trip_member

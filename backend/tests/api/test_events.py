@@ -149,7 +149,7 @@ async def test_move_to_bin(client: AsyncClient, auth_headers):
     assert resp.status_code == 200
     idea = resp.json()
     assert idea["title"] == "Dinner"
-    assert idea["time_hint"] == "7:30pm"
+    assert idea["start_time"] is not None
     assert idea["place_id"] == "p1"
     assert idea["lat"] == 1.0
     assert idea["added_by"] == "Alice"
@@ -176,9 +176,6 @@ async def test_move_to_bin_preserves_enriched_fields(client: AsyncClient, auth_h
         "rating": 4.7,
         "price_level": 0,
         "types": ["tourist_attraction", "point_of_interest"],
-        "opening_hours": {"open_now": True},
-        "phone": "+39 06 6991",
-        "website": "https://example.com/trevi",
         "time_category": "morning",
         "added_by": "Alice",
     }
@@ -201,12 +198,10 @@ async def test_move_to_bin_preserves_enriched_fields(client: AsyncClient, auth_h
     assert idea["rating"] == enriched["rating"]
     assert idea["price_level"] == enriched["price_level"]
     assert idea["types"] == enriched["types"]
-    assert idea["opening_hours"] == enriched["opening_hours"]
-    assert idea["phone"] == enriched["phone"]
-    assert idea["website"] == enriched["website"]
     assert idea["time_category"] == enriched["time_category"]
     assert idea["added_by"] == enriched["added_by"]
-    assert idea["time_hint"] == "10am"
+    assert idea["start_time"] is not None
+    assert idea["end_time"] is not None
 
 
 async def test_move_to_bin_no_start_time(client: AsyncClient, auth_headers):
@@ -215,7 +210,7 @@ async def test_move_to_bin_no_start_time(client: AsyncClient, auth_headers):
     resp = await client.post(
         f"/api/events/{event['id']}/move-to-bin", headers=auth_headers
     )
-    assert resp.json()["time_hint"] is None
+    assert resp.json()["start_time"] is None
 
 
 async def test_move_to_bin_non_member(

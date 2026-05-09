@@ -93,26 +93,13 @@ function travelMode(leg: { duration_s: number; distance_m: number }): 'walk' | '
   return speed < 2.8 ? 'walk' : 'drive';
 }
 
-/** Parse a time string like "2pm", "14:00", "2:30 PM" into a Date for today. */
+/** Parse a time input string ("HH:MM") into a Date for today. */
 function parseTimeString(raw: string): Date | null {
-  const s = raw.trim().toLowerCase();
-  const ampmMatch = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-  const militaryMatch = s.match(/^(\d{1,2}):(\d{2})$/);
-
+  const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
   const d = new Date();
-  if (ampmMatch) {
-    let h = parseInt(ampmMatch[1], 10);
-    const m = parseInt(ampmMatch[2] ?? '0', 10);
-    if (ampmMatch[3] === 'pm' && h !== 12) h += 12;
-    if (ampmMatch[3] === 'am' && h === 12) h = 0;
-    d.setHours(h, m, 0, 0);
-    return d;
-  }
-  if (militaryMatch) {
-    d.setHours(parseInt(militaryMatch[1], 10), parseInt(militaryMatch[2], 10), 0, 0);
-    return d;
-  }
-  return null;
+  d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
+  return d;
 }
 
 function TimeDisplay({
@@ -298,7 +285,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (noDaysExist) return;
     const token = localStorage.getItem('token');
     const idea = ideas.find((i: Idea) => i.id === ideaId);
-    const startTime = idea?.time_hint ? parseTimeString(idea.time_hint) : null;
+    const startTime = idea?.start_time ?? null;
     moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
   };
 
@@ -322,7 +309,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (ideaId) {
       if (noDaysExist) { setDraggingId(null); setDragOverId(null); return; }
       const idea = ideas.find((i: Idea) => i.id === ideaId);
-      const startTime = idea?.time_hint ? parseTimeString(idea.time_hint) : null;
+      const startTime = idea?.start_time ?? null;
       moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
       setDraggingId(null);
       setDragOverId(null);

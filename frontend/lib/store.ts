@@ -23,17 +23,6 @@ function makeLocalEvent(
   };
 }
 
-/** Format a Date into a compact time hint string, e.g. "3pm" or "3:30pm". */
-function formatTimeHint(date: Date): string {
-  let h = date.getHours();
-  const m = date.getMinutes();
-  const ampm = h >= 12 ? 'pm' : 'am';
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
-  const mStr = m === 0 ? '' : `:${String(m).padStart(2, '0')}`;
-  return `${h}${mStr}${ampm}`;
-}
-
 export interface Event {
   id: string;
   trip_id: string;
@@ -61,8 +50,10 @@ export interface Idea {
   title: string;
   lat: number;
   lng: number;
-  time_hint?: string | null;  // e.g. "2pm" extracted from input text
-  added_by?: string | null;   // first name of user who added the idea
+  place_id?: string | null;
+  start_time?: Date | null;
+  end_time?: Date | null;
+  added_by?: string | null;
   up?: number;
   down?: number;
   my_vote?: number;
@@ -320,7 +311,8 @@ export const useTripStore = create<TripState>((set, get) => ({
       title: event.title,
       lat: event.lat,
       lng: event.lng,
-      time_hint: event.start_time ? formatTimeHint(event.start_time) : undefined,
+      start_time: event.start_time ?? null,
+      end_time: event.end_time ?? null,
       added_by: event.added_by ?? null,
       up: event.up ?? 0,
       down: event.down ?? 0,
@@ -339,7 +331,13 @@ export const useTripStore = create<TripState>((set, get) => ({
           set((s) => ({
             ideas: s.ideas.map((i) =>
               i.id === `restored-${eventId}`
-                ? { id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0, time_hint: idea.time_hint ?? null, added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0 }
+                ? {
+                    id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0,
+                    place_id: idea.place_id ?? null,
+                    start_time: idea.start_time ? new Date(idea.start_time) : null,
+                    end_time: idea.end_time ? new Date(idea.end_time) : null,
+                    added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0,
+                  }
                 : i
             ),
           }));

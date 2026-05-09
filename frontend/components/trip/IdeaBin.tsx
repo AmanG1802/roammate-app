@@ -2,54 +2,35 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTripStore } from '@/lib/store';
-import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star } from 'lucide-react';
+import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 import { categoryAccent } from '@/lib/categoryColors';
 
-/** Extract a time hint from a text fragment, e.g. "Eiffel Tower at 2pm" → "2pm" */
-function extractTimeHint(text: string): string | null {
-  const match = text.match(
-    /(?:at\s+|@\s*)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{2}:\d{2})/i
-  );
-  return match ? match[1].trim() : null;
-}
-
-/** Strip time hint from text so the title is clean */
-function stripTimeHint(text: string): string {
-  return text
-    .replace(/\s+(?:at|@)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)/gi, '')
-    .replace(/\s+\d{2}:\d{2}/g, '')
-    .trim();
-}
-
-/** Convert a display hint like "2pm", "2:30pm", "14:00" → "HH:MM" for <input type="time"> */
-function hintToTimeValue(hint: string | null | undefined): string {
-  if (!hint) return '';
-  const s = hint.trim().toLowerCase();
-  const ampm = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-  if (ampm) {
-    let h = parseInt(ampm[1], 10);
-    const m = parseInt(ampm[2] ?? '0', 10);
-    if (ampm[3] === 'pm' && h !== 12) h += 12;
-    if (ampm[3] === 'am' && h === 12) h = 0;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-  const mil = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (mil) return `${String(mil[1]).padStart(2, '0')}:${mil[2]}`;
-  return '';
-}
-
-/** Convert "HH:MM" from <input type="time"> → friendly hint like "2pm" or "2:30pm" */
-function timeValueToHint(val: string): string | null {
-  if (!val) return null;
-  const [hStr, mStr] = val.split(':');
-  let h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
+/** Format a Date to a compact display string, e.g. "3pm" or "3:30pm". */
+function formatTime(d: Date | null | undefined): string {
+  if (!d) return 'No time';
+  let h = d.getHours();
+  const m = d.getMinutes();
   const ampm = h >= 12 ? 'pm' : 'am';
   if (h > 12) h -= 12;
   if (h === 0) h = 12;
   return m === 0 ? `${h}${ampm}` : `${h}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
+/** Convert a Date to "HH:MM" for <input type="time">. */
+function dateToTimeValue(d: Date | null | undefined): string {
+  if (!d) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Convert "HH:MM" from <input type="time"> to an ISO string (today's date). */
+function timeValueToISO(val: string): string | null {
+  if (!val) return null;
+  const [hStr, mStr] = val.split(':');
+  const d = new Date();
+  d.setHours(parseInt(hStr, 10), parseInt(mStr, 10), 0, 0);
+  return d.toISOString();
 }
 
 const SHOW_PHOTOS =
@@ -85,7 +66,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
             title: item.title,
             lat: item.lat ?? 0,
             lng: item.lng ?? 0,
-            time_hint: item.time_hint ?? null,
+            place_id: item.place_id ?? null,
+            start_time: item.start_time ? new Date(item.start_time) : null,
+            end_time: item.end_time ? new Date(item.end_time) : null,
             added_by: item.added_by ?? null,
             up: item.up ?? 0,
             down: item.down ?? 0,
@@ -137,15 +120,15 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
 
         if (response.ok) {
           const newItems = await response.json();
-          const fragments = inputText.split(/[,\n]/);
-          newItems.forEach((item: any, idx: number) => {
-            const fragment = fragments[idx] ?? '';
+          newItems.forEach((item: any) => {
             addIdea({
               id: item.id.toString(),
               title: item.title,
               lat: item.lat,
               lng: item.lng,
-              time_hint: item.time_hint ?? extractTimeHint(fragment),
+              place_id: item.place_id ?? null,
+              start_time: item.start_time ? new Date(item.start_time) : null,
+              end_time: item.end_time ? new Date(item.end_time) : null,
               added_by: item.added_by ?? null,
             });
           });
@@ -159,9 +142,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
         .map((raw) => {
           const trimmed = raw.trim();
           if (!trimmed) return null;
-          const timeHint = extractTimeHint(trimmed);
-          const title = stripTimeHint(trimmed) || trimmed;
-          return { id: Math.random().toString(36).slice(2, 9), title, lat: 41.8902, lng: 12.4922, time_hint: timeHint };
+          return { id: Math.random().toString(36).slice(2, 9), title: trimmed, lat: 41.8902, lng: 12.4922 };
         })
         .filter(Boolean)
         .forEach((idea: any) => addIdea(idea));
@@ -187,8 +168,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   };
 
   const handleSaveTime = async (ideaId: string) => {
-    const newHint = timeValueToHint(editingTimeVal);
-    setIdeas(ideas.map((i) => i.id === ideaId ? { ...i, time_hint: newHint } : i));
+    const iso = timeValueToISO(editingTimeVal);
+    const newDate = iso ? new Date(iso) : null;
+    setIdeas(ideas.map((i) => i.id === ideaId ? { ...i, start_time: newDate } : i));
     setEditingTimeId(null);
 
     if (!tripId) return;
@@ -200,7 +182,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas/${numericId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ time_hint: newHint }),
+        body: JSON.stringify({ start_time: iso }),
       });
     } catch { /* optimistic update already done */ }
   };
@@ -279,6 +261,12 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                 {/* Left accent bar */}
                 <div className={`absolute left-0 top-0 w-1 h-full ${accent.bar} rounded-l-2xl transition-all group-hover:w-1.5`} />
 
+                {!idea.place_id && (
+                  <div className="absolute top-1.5 right-1.5 z-10" title="Map data unavailable">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                  </div>
+                )}
+
                 {/* Row 1: [MapPin slot] Title | Trash */}
                 <div className="flex items-start gap-1.5 min-w-0">
                   <div className="w-3.5 flex justify-center shrink-0 pt-0.5">
@@ -349,13 +337,13 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                     <>
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 truncate min-w-0">
                         <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{idea.time_hint ?? 'No time'}</span>
+                        <span className="truncate">{formatTime(idea.start_time)}</span>
                       </span>
                       {!readOnly && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingTimeVal(hintToTimeValue(idea.time_hint));
+                            setEditingTimeVal(dateToTimeValue(idea.start_time));
                             setEditingTimeId(idea.id);
                           }}
                           className="p-0.5 text-slate-300 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
@@ -446,9 +434,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                         <Star className="w-2.5 h-2.5 text-amber-400" /> {ex.rating}
                       </span>
                     )}
-                    {idea.time_hint && (
+                    {idea.start_time && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-50 text-slate-700 rounded-md text-[10px] font-bold">
-                        <Clock className="w-2.5 h-2.5 text-slate-500" /> {idea.time_hint}
+                        <Clock className="w-2.5 h-2.5 text-slate-500" /> {formatTime(idea.start_time)}
                       </span>
                     )}
                     {ex.category && (

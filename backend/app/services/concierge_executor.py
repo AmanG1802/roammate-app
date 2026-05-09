@@ -15,7 +15,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.all_models import Event as EventModel, User as UserModel
+from app.models.all_models import TimelineItem as EventModel, User as UserModel
 from app.services.smart_ripple import smart_ripple_engine
 from app.utils.tz import utc_now, to_utc, today_in_tz, ensure_utc
 

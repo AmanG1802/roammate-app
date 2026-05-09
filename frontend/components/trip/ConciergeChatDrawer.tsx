@@ -133,7 +133,12 @@ function PlaceCardItem({
         </div>
       )}
       <div className="p-3 space-y-1.5">
-        <h4 className="font-semibold text-sm text-slate-900 line-clamp-1">{place.title}</h4>
+        <div className="flex items-center gap-1.5">
+          <h4 className="font-semibold text-sm text-slate-900 line-clamp-1 flex-1">{place.title}</h4>
+          {!place.place_id && (
+            <span title="Map data unavailable" className="shrink-0"><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /></span>
+          )}
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {place.rating != null && (
             <span className="flex items-center gap-0.5 text-xs text-amber-600">

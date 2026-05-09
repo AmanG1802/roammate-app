@@ -36,6 +36,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     lat: 0,
     lng: 0,
     sort_order: 0,
+    day_date: null,
     ...overrides,
   };
 }
@@ -63,7 +64,6 @@ describe('useTripStore – setEventsRaw (Bug 4)', () => {
     const late  = makeEvent({ id: 'late',  start_time: new Date('2026-05-01T14:00:00'), sort_order: 0 });
     const early = makeEvent({ id: 'early', start_time: new Date('2026-05-01T09:00:00'), sort_order: 1 });
 
-    // Place the later event first — setEventsRaw must not re-sort by time.
     useTripStore.getState().setEventsRaw([late, early]);
 
     const { events } = useTripStore.getState();
@@ -75,11 +75,9 @@ describe('useTripStore – setEventsRaw (Bug 4)', () => {
     const late  = makeEvent({ id: 'late',  start_time: new Date('2026-05-01T14:00:00'), sort_order: 0 });
     const early = makeEvent({ id: 'early', start_time: new Date('2026-05-01T09:00:00'), sort_order: 1 });
 
-    // setEvents re-sorts by start_time
     useTripStore.getState().setEvents([late, early]);
     expect(useTripStore.getState().events[0].id).toBe('early');
 
-    // setEventsRaw keeps provided order
     useTripStore.getState().setEventsRaw([late, early]);
     expect(useTripStore.getState().events[0].id).toBe('late');
   });
@@ -101,20 +99,18 @@ describe('useTripStore – moveIdeaToTimeline', () => {
     expect(state.events[0].start_time).toEqual(startTime);
   });
 
-  it('[Bug 1] startTime passed from time_hint becomes event start_time', async () => {
-    useTripStore.getState().addIdea(makeIdea({ id: 'idea-99', title: 'Coffee' }));
-
+  it('startTime from idea.start_time becomes event start_time', async () => {
     const at3pm = new Date();
     at3pm.setHours(15, 0, 0, 0);
+    useTripStore.getState().addIdea(makeIdea({ id: 'idea-99', title: 'Coffee', start_time: at3pm }));
 
-    // Caller (Timeline) parses time_hint → passes as startTime
     await useTripStore.getState().moveIdeaToTimeline('idea-99', null, null, at3pm);
 
     const { events } = useTripStore.getState();
     expect(events[0].start_time?.getHours()).toBe(15);
   });
 
-  it('[Bug 2] calls DELETE for idea after successful event creation', async () => {
+  it('calls DELETE for idea after successful event creation', async () => {
     useTripStore.getState().addIdea(makeIdea({ id: '42', title: 'Museum' }));
 
     fetchMock.mockImplementation((url: string) => {
@@ -127,7 +123,6 @@ describe('useTripStore – moveIdeaToTimeline', () => {
           }),
         } as unknown as Response);
       }
-      // DELETE /ideas/42
       return Promise.resolve({ ok: true } as Response);
     });
 
@@ -138,10 +133,9 @@ describe('useTripStore – moveIdeaToTimeline', () => {
     expect(deleteCall).toBeTruthy();
   });
 
-  it('[Bug 2] does NOT call DELETE for idea when event creation fails', async () => {
+  it('does NOT call DELETE for idea when event creation fails', async () => {
     useTripStore.getState().addIdea(makeIdea({ id: '99', title: 'Cafe' }));
 
-    // All fetches return non-ok (event POST fails)
     fetchMock.mockResolvedValue({ ok: false } as Response);
 
     await useTripStore.getState().moveIdeaToTimeline('99', '1', 'token', null);
@@ -154,9 +148,9 @@ describe('useTripStore – moveIdeaToTimeline', () => {
 
 // ── moveEventToIdea ───────────────────────────────────────────────────────────
 
-describe('useTripStore – moveEventToIdea (Bug 3)', () => {
-  it('restores time_hint from start_time when returning event to bin', async () => {
-    const startTime = new Date('2026-05-01T15:00:00'); // 3pm
+describe('useTripStore – moveEventToIdea', () => {
+  it('preserves start_time when returning event to bin', async () => {
+    const startTime = new Date('2026-05-01T15:00:00');
     useTripStore.setState({
       events: [makeEvent({ id: 'ev-42', start_time: startTime, end_time: null })],
     });
@@ -165,12 +159,10 @@ describe('useTripStore – moveEventToIdea (Bug 3)', () => {
 
     const { ideas } = useTripStore.getState();
     expect(ideas).toHaveLength(1);
-    expect(ideas[0].time_hint).toBeTruthy();
-    expect(ideas[0].time_hint).toMatch(/3/);    // hour "3" present
-    expect(ideas[0].time_hint).toMatch(/pm/i);  // am/pm marker present
+    expect(ideas[0].start_time).toEqual(startTime);
   });
 
-  it('restored idea has no time_hint when event had null start_time', async () => {
+  it('restored idea has null start_time when event had null start_time', async () => {
     useTripStore.setState({
       events: [makeEvent({ id: 'ev-43', start_time: null, end_time: null })],
     });
@@ -178,14 +170,13 @@ describe('useTripStore – moveEventToIdea (Bug 3)', () => {
     await useTripStore.getState().moveEventToIdea('ev-43', null, null);
 
     const { ideas } = useTripStore.getState();
-    expect(ideas[0].time_hint == null || ideas[0].time_hint === '').toBe(true);
+    expect(ideas[0].start_time == null).toBe(true);
   });
 
-  it('round-trips time_hint: idea → timeline → back to bin', async () => {
-    useTripStore.getState().addIdea(makeIdea({ id: 'idea-1', time_hint: '2pm' }));
-
+  it('round-trips start_time: idea → timeline → back to bin', async () => {
     const at2pm = new Date();
     at2pm.setHours(14, 0, 0, 0);
+    useTripStore.getState().addIdea(makeIdea({ id: 'idea-1', start_time: at2pm }));
 
     await useTripStore.getState().moveIdeaToTimeline('idea-1', null, null, at2pm);
     const eventId = useTripStore.getState().events[0].id;
@@ -194,8 +185,7 @@ describe('useTripStore – moveEventToIdea (Bug 3)', () => {
 
     const { ideas } = useTripStore.getState();
     expect(ideas).toHaveLength(1);
-    expect(ideas[0].time_hint).toMatch(/2/);
-    expect(ideas[0].time_hint).toMatch(/pm/i);
+    expect(ideas[0].start_time?.getHours()).toBe(14);
   });
 });
 
@@ -206,15 +196,13 @@ describe('useTripStore – reorderEvent (Bug 4)', () => {
     const late  = makeEvent({ id: 'ev-late',  start_time: new Date('2026-05-01T14:00:00'), sort_order: 0 });
     const early = makeEvent({ id: 'ev-early', start_time: new Date('2026-05-01T09:00:00'), sort_order: 1 });
 
-    // Manually place later event first (user's drag choice)
     useTripStore.getState().setEventsRaw([late, early]);
 
-    // reorderEvent updates sort_orders without sorting
     await useTripStore.getState().reorderEvent('ev-late', 0, null);
     await useTripStore.getState().reorderEvent('ev-early', 1, null);
 
     const { events } = useTripStore.getState();
-    expect(events[0].id).toBe('ev-late');   // manual order preserved
+    expect(events[0].id).toBe('ev-late');
     expect(events[1].id).toBe('ev-early');
   });
 });

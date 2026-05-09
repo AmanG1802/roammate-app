@@ -19,7 +19,6 @@ from typing import Any
 
 from app.config.persona_catalog import Persona, PERSONA_DESCRIPTIONS
 from app.core.config import settings
-from app.core.time_categories import TIME_CATEGORY_DEFAULTS
 from app.schemas.concierge import ConciergeResponse
 from app.schemas.llm import LLMExtractResponse, LLMItem, LLMPlanResponse
 from app.services.llm.fallbacks import (
@@ -60,7 +59,6 @@ def llm_item_to_brainstorm(item: LLMItem) -> dict[str, Any]:
         "description": item.d or None,
         "category": item.cat.value,
         "time_category": item.tc,
-        "time_hint": TIME_CATEGORY_DEFAULTS.get(item.tc),
         "price_level": item.price,
         "types": item.tags or None,
         "place_id": None,
@@ -69,10 +67,6 @@ def llm_item_to_brainstorm(item: LLMItem) -> dict[str, Any]:
         "address": None,
         "photo_url": None,
         "rating": None,
-        "opening_hours": None,
-        "phone": None,
-        "website": None,
-        "url_source": None,
     }
 
 

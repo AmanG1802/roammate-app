@@ -17,7 +17,7 @@ from typing import Optional
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.all_models import Event
+from app.models.all_models import TimelineItem as Event
 from app.services.google_maps import RoutePoint, get_google_maps_service
 from app.utils.tz import utc_now, ensure_utc
 

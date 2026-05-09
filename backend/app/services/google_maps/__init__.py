@@ -19,6 +19,7 @@ from functools import lru_cache
 from app.core.config import settings
 from app.services.google_maps.base import (
     BaseMapService,
+    EnrichmentSummary,
     RoutePoint,
     RouteLegResult,
     RouteResult,
@@ -51,6 +52,7 @@ def get_google_maps_service() -> BaseMapService:
 
 __all__ = [
     "BaseMapService",
+    "EnrichmentSummary",
     "MockMapService",
     "MockGoogleMapsService",
     "RoutePoint",

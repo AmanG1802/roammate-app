@@ -103,13 +103,6 @@ _VIBE_KEYWORDS: dict[str, list[str]] = {
     "photography":["photo", "photography", "instagram", "scenic", "viewpoint"],
 }
 
-# ── Time hint extraction (reused from idea_bin.py) ───────────────────────────
-
-_TIME_RE = re.compile(
-    r"(?:at\s+|@\s*)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{2}:\d{2})",
-    re.IGNORECASE,
-)
-
 # ── Date extraction via dateutil (lazy import) ───────────────────────────────
 
 _DATE_RANGE_RE = re.compile(
@@ -149,7 +142,6 @@ class PreExtracted:
     group_size: Optional[int] = None
     budget_tier: Optional[str] = None
     vibes: list[str] = field(default_factory=list)
-    time_hints: list[str] = field(default_factory=list)
     explicit_places: list[str] = field(default_factory=list)
     residual_text: str = ""
 
@@ -259,10 +251,6 @@ def _extract_vibes(text: str) -> list[str]:
     return found
 
 
-def _extract_time_hints(text: str) -> list[str]:
-    return [m.group(1).strip() for m in _TIME_RE.finditer(text)]
-
-
 def _extract_explicit_places(text: str) -> list[str]:
     places: list[str] = []
     for m in _QUOTED_RE.finditer(text):
@@ -312,7 +300,6 @@ def pre_extract(text: str) -> PreExtracted:
         group_size=_extract_group_size(text),
         budget_tier=_extract_budget(text),
         vibes=_extract_vibes(text),
-        time_hints=_extract_time_hints(text),
         explicit_places=_extract_explicit_places(text),
     )
     result.residual_text = _build_residual(text, result)
