@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -32,7 +32,7 @@ function roleMeta(role: string) {
   return ROLE_OPTIONS.find((r) => r.value === role) ?? ROLE_OPTIONS[1];
 }
 
-export default function TripPlannerPage() {
+function TripPlannerPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tripId = searchParams.get('id');
@@ -878,5 +878,13 @@ export default function TripPlannerPage() {
         </div>
       )}
     </ProtectedRoute>
+  );
+}
+
+export default function TripPlannerPage() {
+  return (
+    <Suspense>
+      <TripPlannerPageContent />
+    </Suspense>
   );
 }
