@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
 from app.db.session import get_db
-from app.models.all_models import IdeaBinItem, IdeaTag, User
+from app.models.all_models import IdeaBinItem, IdeaTag, User, PLACE_FIELDS
 from app.schemas.library import TagList, CopyIdeaRequest
 from app.schemas.trip import IdeaBinItem as IdeaBinItemSchema
 from app.services.roles import require_trip_member, require_vote_role
@@ -63,15 +63,12 @@ async def copy_idea_to_trip(
     await require_trip_member(db, src.trip_id, current_user.id)
     await require_trip_member(db, body.target_trip_id, current_user.id)
 
+    fields = {f: getattr(src, f) for f in PLACE_FIELDS}
     copy = IdeaBinItem(
         trip_id=body.target_trip_id,
-        title=src.title,
-        place_id=src.place_id,
-        lat=src.lat,
-        lng=src.lng,
-        url_source=src.url_source,
-        time_hint=src.time_hint,
-        added_by=src.added_by,
+        **fields,
+        start_time=src.start_time,
+        end_time=src.end_time,
         origin_idea_id=src.origin_idea_id or src.id,
     )
     db.add(copy)

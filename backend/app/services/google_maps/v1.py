@@ -30,6 +30,8 @@ _FIND_PLACE_URL = "https://maps.googleapis.com/maps/api/place/findplacefromtext/
 _PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 _DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
 _PHOTO_BASE = "https://maps.googleapis.com/maps/api/place/photo"
+_TEXT_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+_NEARBY_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 
 _FIND_FIELDS = "place_id,name,geometry,formatted_address"
 _DETAIL_FIELDS_BASE = "place_id,name,geometry,formatted_address,types"
@@ -48,6 +50,8 @@ def _build_detail_fields() -> str:
 class MapServiceV1(BaseMapService):
     """Google Maps service backed by the legacy Web Service APIs."""
 
+    _directions_op: str = "directions"
+
     def __init__(self, api_key: Optional[str]) -> None:
         super().__init__(api_key=api_key)
 
@@ -65,7 +69,7 @@ class MapServiceV1(BaseMapService):
         cached, state = await gmap_cache.get_find_place(query)
         if cached is not gmap_cache.MISS:
             self._track(
-                op="find_place",
+                op="place_details_v1",
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
                 cache_state=state,
@@ -75,7 +79,7 @@ class MapServiceV1(BaseMapService):
 
         if not await breaker.allow():
             self._track(
-                op="find_place",
+                op="place_details_v1",
                 status="circuit_open",
                 breaker_state="open",
                 query=query,
@@ -92,17 +96,17 @@ class MapServiceV1(BaseMapService):
         try:
             if client is not None:
                 data, attempts, http_status = await self._request_with_retry(
-                    client, _FIND_PLACE_URL, params=params, op="find_place",
+                    client, _FIND_PLACE_URL, params=params, op="place_details_v1",
                 )
             else:
                 async with httpx.AsyncClient() as own:
                     data, attempts, http_status = await self._request_with_retry(
-                        own, _FIND_PLACE_URL, params=params, op="find_place",
+                        own, _FIND_PLACE_URL, params=params, op="place_details_v1",
                     )
         except Exception as exc:
             await breaker.record_failure()
             self._track(
-                op="find_place",
+                op="place_details_v1",
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
                 error_class=exc.__class__.__name__,
@@ -115,7 +119,7 @@ class MapServiceV1(BaseMapService):
         if data is None or data.get("status") not in {"OK", "ZERO_RESULTS"}:
             await breaker.record_failure()
             self._track(
-                op="find_place",
+                op="place_details_v1",
                 status="error",
                 latency_ms=latency_ms,
                 attempts=attempts,
@@ -131,7 +135,7 @@ class MapServiceV1(BaseMapService):
         candidate = candidates[0] if candidates else None
         await gmap_cache.set_find_place(query, candidate)
         self._track(
-            op="find_place",
+            op="place_details_v1",
             status="ok" if candidate else "zero_results",
             latency_ms=latency_ms,
             attempts=attempts,
@@ -158,7 +162,7 @@ class MapServiceV1(BaseMapService):
         cached, state = await gmap_cache.get_place_details(place_id, detail_fields)
         if cached is not gmap_cache.MISS:
             self._track(
-                op="place_details",
+                op="place_details_v1",
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
                 cache_state=state,
@@ -168,7 +172,7 @@ class MapServiceV1(BaseMapService):
 
         if not await breaker.allow():
             self._track(
-                op="place_details",
+                op="place_details_v1",
                 status="circuit_open",
                 breaker_state="open",
                 place_id=place_id,
@@ -184,17 +188,17 @@ class MapServiceV1(BaseMapService):
         try:
             if client is not None:
                 data, attempts, http_status = await self._request_with_retry(
-                    client, _PLACE_DETAILS_URL, params=params, op="place_details",
+                    client, _PLACE_DETAILS_URL, params=params, op="place_details_v1",
                 )
             else:
                 async with httpx.AsyncClient() as own:
                     data, attempts, http_status = await self._request_with_retry(
-                        own, _PLACE_DETAILS_URL, params=params, op="place_details",
+                        own, _PLACE_DETAILS_URL, params=params, op="place_details_v1",
                     )
         except Exception as exc:
             await breaker.record_failure()
             self._track(
-                op="place_details",
+                op="place_details_v1",
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
                 error_class=exc.__class__.__name__,
@@ -207,7 +211,7 @@ class MapServiceV1(BaseMapService):
         if data is None or data.get("status") != "OK":
             await breaker.record_failure()
             self._track(
-                op="place_details",
+                op="place_details_v1",
                 status="error",
                 latency_ms=latency_ms,
                 attempts=attempts,
@@ -222,7 +226,7 @@ class MapServiceV1(BaseMapService):
         result = data.get("result")
         await gmap_cache.set_place_details(place_id, detail_fields, result)
         self._track(
-            op="place_details",
+            op="place_details_v1",
             status="ok" if result else "zero_results",
             latency_ms=latency_ms,
             attempts=attempts,
@@ -280,6 +284,81 @@ class MapServiceV1(BaseMapService):
         item["lat"] = geo.get("lat")
         item["lng"] = geo.get("lng")
         item["address"] = candidate.get("formatted_address")
+
+    # ── nearby_search (Text Search or Nearby Search) ────────────────────
+
+    async def nearby_search(
+        self,
+        query: str,
+        lat: float,
+        lng: float,
+        radius_m: int = 1500,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        location = f"{lat},{lng}"
+
+        if settings.GOOGLE_MAPS_USE_NEARBY_API:
+            url = _NEARBY_SEARCH_URL
+            params: dict[str, Any] = {
+                "location": location,
+                "radius": radius_m,
+                "keyword": query,
+                "key": self.api_key,
+            }
+        else:
+            url = _TEXT_SEARCH_URL
+            params = {
+                "query": query,
+                "location": location,
+                "radius": radius_m,
+                "key": self.api_key,
+            }
+
+        t0 = __import__("time").monotonic()
+        try:
+            async with httpx.AsyncClient() as client:
+                data, attempts, http_status = await self._request_with_retry(
+                    client, url, params=params, op="nearby_or_text_search",
+                )
+        except Exception as exc:
+            self._track(
+                op="nearby_or_text_search", status="error",
+                latency_ms=int((__import__("time").monotonic() - t0) * 1000),
+                error_class=exc.__class__.__name__,
+            )
+            return []
+
+        if not data or data.get("status") not in {"OK", "ZERO_RESULTS"}:
+            return []
+
+        results = (data.get("results") or [])[:limit]
+        places: list[dict[str, Any]] = []
+        for r in results:
+            geo = r.get("geometry", {}).get("location", {})
+            place: dict[str, Any] = {
+                "place_id": r.get("place_id", ""),
+                "title": r.get("name", ""),
+                "address": r.get("formatted_address") or r.get("vicinity", ""),
+                "lat": geo.get("lat", 0),
+                "lng": geo.get("lng", 0),
+                "types": (r.get("types") or [])[:5],
+            }
+            if settings.GOOGLE_MAPS_FETCH_RATING:
+                place["rating"] = r.get("rating")
+                place["price_level"] = r.get("price_level")
+            if settings.GOOGLE_MAPS_FETCH_PHOTOS:
+                photos = r.get("photos") or []
+                if photos:
+                    ref = photos[0].get("photo_reference")
+                    if ref:
+                        place["photo_url"] = self.photo_url(ref)
+            places.append(place)
+
+        self._track(
+            op="nearby_or_text_search", status="ok",
+            latency_ms=int((__import__("time").monotonic() - t0) * 1000),
+        )
+        return places
 
     # ── directions (legacy Directions API) ───────────────────────────────
 

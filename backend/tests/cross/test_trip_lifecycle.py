@@ -134,4 +134,4 @@ async def test_ripple_then_day_delete_bin_reflects_shifted_time(
     ideas = (
         await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)
     ).json()
-    assert ideas[0]["time_hint"] == "2pm"
+    assert ideas[0]["start_time"] is not None

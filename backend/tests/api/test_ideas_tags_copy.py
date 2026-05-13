@@ -216,10 +216,10 @@ async def test_copy_preserves_place_lat_lng_url_hint_added_by(
     dst = await create_trip(client, auth_headers, "Florence")
     # Use ingest for simplicity; fill metadata via direct DB write for this test
     idea = await ingest(client, auth_headers, src["id"], "Spot")
-    # Mutate source idea via PATCH to add time_hint
+    # Mutate source idea via PATCH to add start_time
     await client.patch(
         f"/api/trips/{src['id']}/ideas/{idea['id']}",
-        json={"time_hint": "2pm"},
+        json={"start_time": "2026-06-01T14:00:00Z"},
         headers=auth_headers,
     )
 
@@ -229,7 +229,7 @@ async def test_copy_preserves_place_lat_lng_url_hint_added_by(
         headers=auth_headers,
     )
     copy = r.json()
-    assert copy["time_hint"] == "2pm"
+    assert copy["start_time"] is not None
     assert copy["title"] == "Spot"
 
 

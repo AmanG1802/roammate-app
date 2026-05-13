@@ -8,6 +8,32 @@ from pydantic import BaseModel
 from app.services.llm.models.base import BaseLLMModel, LLMResponse
 
 
+def _ensure_additional_properties_false(schema: dict) -> dict:
+    """Recursively set additionalProperties: false on all object schemas.
+
+    OpenAI structured outputs require this on every object-type node.
+    """
+    if schema.get("type") == "object" or "properties" in schema:
+        schema.setdefault("additionalProperties", False)
+    for key in ("properties", "$defs", "definitions"):
+        val = schema.get(key)
+        if isinstance(val, dict):
+            for v in val.values():
+                if isinstance(v, dict):
+                    _ensure_additional_properties_false(v)
+    for key in ("items",):
+        val = schema.get(key)
+        if isinstance(val, dict):
+            _ensure_additional_properties_false(val)
+    for key in ("allOf", "anyOf", "oneOf"):
+        val = schema.get(key)
+        if isinstance(val, list):
+            for item in val:
+                if isinstance(item, dict):
+                    _ensure_additional_properties_false(item)
+    return schema
+
+
 class OpenAIModel(BaseLLMModel):
 
     def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
@@ -45,11 +71,15 @@ class OpenAIModel(BaseLLMModel):
             "max_tokens": effective_max_tokens,
         }
         if response_schema is not None:
+            clean_schema = _ensure_additional_properties_false(
+                response_schema.model_json_schema()
+            )
             kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "response",
-                    "schema": response_schema.model_json_schema(),
+                    "schema": clean_schema,
+                    "strict": True,
                 },
             }
 

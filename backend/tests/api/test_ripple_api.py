@@ -29,6 +29,40 @@ async def test_ripple_shifts_future_events(client: AsyncClient, auth_headers):
     assert shifted[0]["end_time"].startswith("2026-06-01T11:30:00")
 
 
+async def test_ripple_skips_events_with_sufficient_buffer(client: AsyncClient, auth_headers):
+    """Events with large gaps between them should NOT be shifted."""
+    trip = await create_trip(client, auth_headers)
+    await _create_event(
+        client, auth_headers, trip["id"],
+        title="Morning", start_time="2026-06-01T09:00:00", end_time="2026-06-01T10:00:00",
+    )
+    await _create_event(
+        client, auth_headers, trip["id"],
+        title="Afternoon", start_time="2026-06-01T15:00:00", end_time="2026-06-01T16:00:00",
+    )
+    await _create_event(
+        client, auth_headers, trip["id"],
+        title="Evening", start_time="2026-06-01T20:00:00", end_time="2026-06-01T21:00:00",
+    )
+    resp = await client.post(
+        f"/api/events/ripple/{trip['id']}",
+        json={"delta_minutes": 15, "start_from_time": "2026-06-01T08:00:00"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    shifted = resp.json()
+    assert len(shifted) == 1, f"Expected only 1 shifted event, got {len(shifted)}"
+    assert shifted[0]["title"] == "Morning"
+    assert shifted[0]["start_time"].startswith("2026-06-01T09:15:00")
+
+    all_events = (
+        await client.get(f"/api/events/?trip_id={trip['id']}", headers=auth_headers)
+    ).json()
+    by_title = {e["title"]: e for e in all_events}
+    assert by_title["Afternoon"]["start_time"].startswith("2026-06-01T15:00:00"), "Afternoon should not be shifted"
+    assert by_title["Evening"]["start_time"].startswith("2026-06-01T20:00:00"), "Evening should not be shifted"
+
+
 async def test_ripple_non_member(
     client: AsyncClient, auth_headers, second_auth_headers
 ):
@@ -49,15 +83,14 @@ async def test_ripple_missing_delta(client: AsyncClient, auth_headers):
     assert resp.status_code == 422
 
 
-async def test_ripple_strips_tz_on_start_from_time(
+async def test_ripple_accepts_utc_start_from_time(
     client: AsyncClient, auth_headers
 ):
     trip = await create_trip(client, auth_headers)
     await _create_event(
         client, auth_headers, trip["id"],
-        start_time="2026-06-01T10:00:00", end_time="2026-06-01T11:00:00",
+        start_time="2026-06-01T10:00:00Z", end_time="2026-06-01T11:00:00Z",
     )
-    # tz-aware input should be handled
     resp = await client.post(
         f"/api/events/ripple/{trip['id']}",
         json={"delta_minutes": 15, "start_from_time": "2026-06-01T09:00:00Z"},

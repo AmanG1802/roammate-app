@@ -33,8 +33,8 @@ class LibraryIdeaOut(BaseModel):
     place_id: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
-    url_source: Optional[str] = None
-    time_hint: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
     added_by: Optional[str] = None
     origin_idea_id: Optional[int] = None
     tags: List[str] = []

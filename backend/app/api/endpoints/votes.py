@@ -9,7 +9,7 @@ from sqlalchemy import select, func as sa_func
 
 from app.db.session import get_db
 from app.models.all_models import (
-    IdeaBinItem, Event, IdeaVote, EventVote, User,
+    IdeaBinItem, TimelineItem as Event, IdeaVote, EventVote, User,
 )
 from app.schemas.votes import VoteRequest, VoteTally, VoterList, VoterInfo
 from app.services.roles import require_trip_member, require_vote_role

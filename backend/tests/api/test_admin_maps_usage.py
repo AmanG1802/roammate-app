@@ -20,22 +20,22 @@ async def seed_maps_usage(db_session: AsyncSession):
     now = datetime.utcnow()
     rows = [
         GoogleMapsApiUsage(
-            user_id=None, trip_id=None, op="find_place",
+            user_id=None, trip_id=None, op="place_details_v1",
             status="ok", latency_ms=45, cache_state="miss",
             cost_usd=0.017, created_at=now,
         ),
         GoogleMapsApiUsage(
-            user_id=None, trip_id=None, op="find_place",
+            user_id=None, trip_id=None, op="place_details_v1",
             status="ok", latency_ms=1, cache_state="hit",
             cost_usd=0.0, created_at=now,
         ),
         GoogleMapsApiUsage(
-            user_id=None, trip_id=None, op="place_details",
+            user_id=None, trip_id=None, op="place_details_v1",
             status="ok", latency_ms=60, cache_state="miss",
             cost_usd=0.017, created_at=now,
         ),
         GoogleMapsApiUsage(
-            user_id=None, trip_id=None, op="place_details",
+            user_id=None, trip_id=None, op="place_details_v1",
             status="error", latency_ms=5000, cache_state=None,
             error_class="Timeout", cost_usd=0.017,
             created_at=now - timedelta(days=35),
@@ -44,6 +44,11 @@ async def seed_maps_usage(db_session: AsyncSession):
             user_id=None, trip_id=None, op="directions",
             status="ok", latency_ms=120, cache_state="miss",
             cost_usd=0.01, created_at=now,
+        ),
+        GoogleMapsApiUsage(
+            user_id=None, trip_id=None, op="routes",
+            status="ok", latency_ms=95, cache_state="miss",
+            cost_usd=0.005, created_at=now,
         ),
     ]
     for row in rows:
@@ -58,7 +63,7 @@ async def test_summary_no_filters(
     resp = await client.get("/api/admin/maps-usage/summary", headers=admin_headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["total_calls"] == 5
+    assert data["total_calls"] == 6
     assert "cache_hits" in data
     assert "cache_hit_rate_pct" in data
     assert "error_count" in data
@@ -71,12 +76,12 @@ async def test_summary_filter_by_ops_multi(
     client: AsyncClient, admin_headers, seed_maps_usage
 ):
     resp = await client.get(
-        "/api/admin/maps-usage/summary?ops=find_place&ops=directions",
+        "/api/admin/maps-usage/summary?ops=place_details_v1&ops=directions",
         headers=admin_headers,
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["total_calls"] == 3  # 2 find_place + 1 directions
+    assert data["total_calls"] == 5  # 4 place_details_v1 + 1 directions
 
 
 async def test_summary_filter_by_month(
@@ -89,8 +94,8 @@ async def test_summary_filter_by_month(
     )
     assert resp.status_code == 200
     data = resp.json()
-    # 4 of 5 rows are this month (one is 35 days ago)
-    assert data["total_calls"] == 4
+    # 5 of 6 rows are this month (one is 35 days ago)
+    assert data["total_calls"] == 5
 
 
 async def test_summary_filter_by_day(
@@ -111,9 +116,9 @@ async def test_summary_cache_hit_rate_calculation(
 ):
     resp = await client.get("/api/admin/maps-usage/summary", headers=admin_headers)
     data = resp.json()
-    # 1 cache hit out of 5 total = 20%
+    # 1 cache hit out of 6 total → round(16.667, 1) = 16.7%
     assert data["cache_hits"] == 1
-    assert data["cache_hit_rate_pct"] == 20.0
+    assert data["cache_hit_rate_pct"] == 16.7
 
 
 async def test_summary_error_rate_calculation(
@@ -121,9 +126,9 @@ async def test_summary_error_rate_calculation(
 ):
     resp = await client.get("/api/admin/maps-usage/summary", headers=admin_headers)
     data = resp.json()
-    # 1 error out of 5 total = 20%
+    # 1 error out of 6 total → round(16.667, 1) = 16.7%
     assert data["error_count"] == 1
-    assert data["error_rate_pct"] == 20.0
+    assert data["error_rate_pct"] == 16.7
 
 
 async def test_summary_zero_rows_returns_zero_rates_not_nan(
@@ -152,7 +157,7 @@ async def test_users_pivots_calls_by_op_per_user(
     assert len(data) == 1
     assert data[0]["name"] == "Unattributed"
     assert "calls_by_op" in data[0]
-    assert data[0]["calls_by_op"]["find_place"] == 2
+    assert data[0]["calls_by_op"]["place_details_v1"] == 4
 
 
 async def test_users_total_cost_summed_per_user(
@@ -161,5 +166,5 @@ async def test_users_total_cost_summed_per_user(
     resp = await client.get("/api/admin/maps-usage/users", headers=admin_headers)
     data = resp.json()
     user = data[0]
-    # Sum of all costs: 0.017 + 0.0 + 0.017 + 0.017 + 0.01 = 0.061
-    assert user["cost_usd"] == pytest.approx(0.061, abs=0.001)
+    # Sum of all costs: 0.017 + 0.0 + 0.017 + 0.017 + 0.01 + 0.005 = 0.066
+    assert user["cost_usd"] == pytest.approx(0.066, abs=0.001)

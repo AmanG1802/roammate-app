@@ -59,7 +59,8 @@ type Idea = {
   place_id?: string | null;
   lat?: number | null;
   lng?: number | null;
-  time_hint?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
   added_by?: string | null;
 };
 

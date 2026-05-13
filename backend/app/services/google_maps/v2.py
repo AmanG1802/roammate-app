@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 # ── External endpoints (Places API New + Routes API) ───────────────────────
 _PLACES_SEARCH_TEXT_URL = "https://places.googleapis.com/v1/places:searchText"
+_PLACES_SEARCH_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
 _PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
 _ROUTES_COMPUTE_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 _PHOTO_BASE = "https://places.googleapis.com/v1"
@@ -67,6 +68,8 @@ _TRAVEL_MODE = "DRIVE"
 class MapServiceV2(BaseMapService):
     """Google Maps service backed by the new Places API + Routes API."""
 
+    _directions_op: str = "routes"
+
     def __init__(self, api_key: Optional[str]) -> None:
         super().__init__(api_key=api_key)
 
@@ -84,7 +87,7 @@ class MapServiceV2(BaseMapService):
         cached, state = await gmap_cache.get_find_place(query)
         if cached is not gmap_cache.MISS:
             self._track(
-                op="find_place",
+                op="place_details_v2",
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
                 cache_state=state,
@@ -94,7 +97,7 @@ class MapServiceV2(BaseMapService):
 
         if not await breaker.allow():
             self._track(
-                op="find_place",
+                op="place_details_v2",
                 status="circuit_open",
                 breaker_state="open",
                 query=query,
@@ -116,7 +119,7 @@ class MapServiceV2(BaseMapService):
                     method="POST",
                     json_body=json_body,
                     headers=headers,
-                    op="find_place",
+                    op="place_details_v2",
                 )
             else:
                 async with httpx.AsyncClient() as own:
@@ -126,12 +129,12 @@ class MapServiceV2(BaseMapService):
                         method="POST",
                         json_body=json_body,
                         headers=headers,
-                        op="find_place",
+                        op="place_details_v2",
                     )
         except Exception as exc:
             await breaker.record_failure()
             self._track(
-                op="find_place",
+                op="place_details_v2",
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
                 error_class=exc.__class__.__name__,
@@ -144,7 +147,7 @@ class MapServiceV2(BaseMapService):
         if data is None:
             await breaker.record_failure()
             self._track(
-                op="find_place",
+                op="place_details_v2",
                 status="error",
                 latency_ms=latency_ms,
                 attempts=attempts,
@@ -159,7 +162,7 @@ class MapServiceV2(BaseMapService):
         candidate = places[0] if places else None
         await gmap_cache.set_find_place(query, candidate)
         self._track(
-            op="find_place",
+            op="place_details_v2",
             status="ok" if candidate else "zero_results",
             latency_ms=latency_ms,
             attempts=attempts,
@@ -188,7 +191,7 @@ class MapServiceV2(BaseMapService):
         )
         if cached is not gmap_cache.MISS:
             self._track(
-                op="place_details",
+                op="place_details_v2",
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
                 cache_state=state,
@@ -198,7 +201,7 @@ class MapServiceV2(BaseMapService):
 
         if not await breaker.allow():
             self._track(
-                op="place_details",
+                op="place_details_v2",
                 status="circuit_open",
                 breaker_state="open",
                 place_id=place_id,
@@ -218,7 +221,7 @@ class MapServiceV2(BaseMapService):
                     url,
                     method="GET",
                     headers=headers,
-                    op="place_details",
+                    op="place_details_v2",
                 )
             else:
                 async with httpx.AsyncClient() as own:
@@ -227,12 +230,12 @@ class MapServiceV2(BaseMapService):
                         url,
                         method="GET",
                         headers=headers,
-                        op="place_details",
+                        op="place_details_v2",
                     )
         except Exception as exc:
             await breaker.record_failure()
             self._track(
-                op="place_details",
+                op="place_details_v2",
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
                 error_class=exc.__class__.__name__,
@@ -245,7 +248,7 @@ class MapServiceV2(BaseMapService):
         if data is None or not data.get("id"):
             await breaker.record_failure()
             self._track(
-                op="place_details",
+                op="place_details_v2",
                 status="error",
                 latency_ms=latency_ms,
                 attempts=attempts,
@@ -261,7 +264,7 @@ class MapServiceV2(BaseMapService):
             place_id, field_mask, result
         )
         self._track(
-            op="place_details",
+            op="place_details_v2",
             status="ok" if result else "zero_results",
             latency_ms=latency_ms,
             attempts=attempts,
@@ -333,6 +336,102 @@ class MapServiceV2(BaseMapService):
         if candidate.get("formattedAddress"):
             item["address"] = candidate["formattedAddress"]
 
+    # ── nearby_search (Text Search or Nearby Search — new APIs) ─────────
+
+    async def nearby_search(
+        self,
+        query: str,
+        lat: float,
+        lng: float,
+        radius_m: int = 1500,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        field_parts = [
+            "places.id", "places.displayName", "places.formattedAddress",
+            "places.location", "places.types",
+        ]
+        if settings.GOOGLE_MAPS_FETCH_RATING:
+            field_parts.extend(["places.rating", "places.priceLevel"])
+        if settings.GOOGLE_MAPS_FETCH_PHOTOS:
+            field_parts.append("places.photos")
+        field_mask = ",".join(field_parts)
+
+        headers = {
+            "X-Goog-Api-Key": self.api_key or "",
+            "X-Goog-FieldMask": field_mask,
+            "Content-Type": "application/json",
+        }
+
+        circle = {
+            "center": {"latitude": lat, "longitude": lng},
+            "radius": float(radius_m),
+        }
+
+        if settings.GOOGLE_MAPS_USE_NEARBY_API:
+            url = _PLACES_SEARCH_NEARBY_URL
+            json_body: dict[str, Any] = {
+                "locationRestriction": {"circle": circle},
+                "maxResultCount": limit,
+            }
+        else:
+            url = _PLACES_SEARCH_TEXT_URL
+            json_body = {
+                "textQuery": query,
+                "locationBias": {"circle": circle},
+                "maxResultCount": limit,
+            }
+
+        import time as _time
+        t0 = _time.monotonic()
+        try:
+            async with httpx.AsyncClient() as client:
+                data, attempts, http_status = await self._request_with_retry(
+                    client, url, method="POST",
+                    json_body=json_body, headers=headers, op="nearby_or_text_search",
+                )
+        except Exception as exc:
+            self._track(
+                op="nearby_or_text_search", status="error",
+                latency_ms=int((_time.monotonic() - t0) * 1000),
+                error_class=exc.__class__.__name__,
+            )
+            return []
+
+        if not data:
+            return []
+
+        results = (data.get("places") or [])[:limit]
+        places: list[dict[str, Any]] = []
+        for r in results:
+            loc = r.get("location") or {}
+            display = r.get("displayName") or {}
+            place: dict[str, Any] = {
+                "place_id": r.get("id", ""),
+                "title": display.get("text", ""),
+                "address": r.get("formattedAddress", ""),
+                "lat": loc.get("latitude", 0),
+                "lng": loc.get("longitude", 0),
+                "types": (r.get("types") or [])[:5],
+            }
+            if settings.GOOGLE_MAPS_FETCH_RATING:
+                place["rating"] = r.get("rating")
+                price_enum = r.get("priceLevel")
+                if isinstance(price_enum, str):
+                    place["price_level"] = _PRICE_LEVEL_ENUM_TO_INT.get(price_enum)
+                else:
+                    place["price_level"] = price_enum
+            if settings.GOOGLE_MAPS_FETCH_PHOTOS:
+                photos = r.get("photos") or []
+                if photos and photos[0].get("name"):
+                    place["photo_url"] = self.photo_url(photos[0]["name"])
+            places.append(place)
+
+        self._track(
+            op="nearby_or_text_search", status="ok",
+            latency_ms=int((_time.monotonic() - t0) * 1000),
+        )
+        return places
+
     # ── directions (Routes API) ──────────────────────────────────────────
 
     async def _directions_api_call(
@@ -373,7 +472,7 @@ class MapServiceV2(BaseMapService):
                 method="POST",
                 json_body=json_body,
                 headers=headers,
-                op="directions",
+                op="routes",
             )
         if not data:
             raise RuntimeError(

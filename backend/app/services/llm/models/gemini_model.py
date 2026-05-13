@@ -9,6 +9,44 @@ from pydantic import BaseModel
 from app.services.llm.models.base import BaseLLMModel, LLMResponse
 
 
+def _clean_schema_for_gemini(schema: dict) -> dict:
+    """Make a Pydantic JSON schema compatible with Gemini's structured output.
+
+    Gemini rejects ``additionalProperties`` and ``$ref`` / ``$defs``.  This
+    helper inlines all ``$defs`` references and then strips
+    ``additionalProperties`` recursively.
+    """
+    defs = schema.pop("$defs", schema.pop("definitions", None))
+    if defs:
+        raw = json.dumps(schema)
+        for name, definition in defs.items():
+            ref = json.dumps({"$ref": f"#/$defs/{name}"})
+            raw = raw.replace(ref, json.dumps(definition))
+            ref_alt = json.dumps({"$ref": f"#/definitions/{name}"})
+            raw = raw.replace(ref_alt, json.dumps(definition))
+        schema = json.loads(raw)
+
+    _strip_additional_properties(schema)
+    return schema
+
+
+def _strip_additional_properties(schema: dict) -> None:
+    """Recursively remove 'additionalProperties' keys."""
+    schema.pop("additionalProperties", None)
+    for key in ("properties", "items"):
+        val = schema.get(key)
+        if isinstance(val, dict):
+            for v in val.values():
+                if isinstance(v, dict):
+                    _strip_additional_properties(v)
+    for key in ("allOf", "anyOf", "oneOf"):
+        val = schema.get(key)
+        if isinstance(val, list):
+            for item in val:
+                if isinstance(item, dict):
+                    _strip_additional_properties(item)
+
+
 class GeminiModel(BaseLLMModel):
 
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
@@ -60,7 +98,10 @@ class GeminiModel(BaseLLMModel):
             config_kwargs["system_instruction"] = system_text
         if response_schema is not None:
             config_kwargs["response_mime_type"] = "application/json"
-            config_kwargs["response_schema"] = response_schema
+            clean_schema = _clean_schema_for_gemini(
+                response_schema.model_json_schema()
+            )
+            config_kwargs["response_schema"] = clean_schema
 
         config = types.GenerateContentConfig(**config_kwargs)
 

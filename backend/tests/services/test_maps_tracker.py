@@ -19,20 +19,20 @@ from tests.conftest import TestSessionLocal, wait_for_tracker_writes
 async def test_track_call_logs_structured_record(caplog):
     with caplog.at_level(logging.INFO, logger="roammate.google_maps"):
         track_call(
-            op="find_place",
+            op="place_details_v1",
             status="ok",
             latency_ms=42,
             cache_state="miss",
         )
     assert any("google_api" in r.message for r in caplog.records)
-    assert any("op=find_place" in r.message for r in caplog.records)
+    assert any("op=place_details_v1" in r.message for r in caplog.records)
 
 
 async def test_track_call_persists_google_maps_api_usage_row(
     tracker_db, db_session: AsyncSession
 ):
     track_call(
-        op="find_place",
+        op="place_details_v1",
         status="ok",
         latency_ms=55,
         attempts=1,
@@ -45,7 +45,7 @@ async def test_track_call_persists_google_maps_api_usage_row(
     rows = (await db_session.execute(select(GoogleMapsApiUsage))).scalars().all()
     assert len(rows) == 1
     row = rows[0]
-    assert row.op == "find_place"
+    assert row.op == "place_details_v1"
     assert row.status == "ok"
     assert row.latency_ms == 55
     assert row.cache_state == "miss"
@@ -56,7 +56,7 @@ async def test_track_call_persists_google_maps_api_usage_row(
 async def test_track_call_cost_zero_for_cache_hits(
     tracker_db, db_session: AsyncSession
 ):
-    track_call(op="find_place", status="ok", cache_state="hit")
+    track_call(op="place_details_v1", status="ok", cache_state="hit")
     await wait_for_tracker_writes()
 
     row = (await db_session.execute(select(GoogleMapsApiUsage))).scalars().first()
@@ -67,19 +67,19 @@ async def test_track_call_cost_zero_for_cache_hits(
 async def test_track_call_cost_uses_maps_pricing_for_op(
     tracker_db, db_session: AsyncSession
 ):
-    track_call(op="find_place", status="ok", cache_state="miss")
+    track_call(op="place_details_v1", status="ok", cache_state="miss")
     await wait_for_tracker_writes()
 
     row = (await db_session.execute(select(GoogleMapsApiUsage))).scalars().first()
     assert row is not None
-    # find_place: $17.00/1000 = $0.017 per call
-    assert float(row.cost_usd) == 0.017
+    # place_details_v1: $5.10/1000 = $0.0051 per call
+    assert float(row.cost_usd) == 0.0051
 
 
 async def test_track_call_user_id_optional(
     tracker_db, db_session: AsyncSession
 ):
-    track_call(op="place_details", status="ok", cache_state="miss")
+    track_call(op="place_details_v1", status="ok", cache_state="miss")
     await wait_for_tracker_writes()
 
     row = (await db_session.execute(select(GoogleMapsApiUsage))).scalars().first()
@@ -116,5 +116,5 @@ async def test_track_call_db_failure_swallowed_logs_warning(
     monkeypatch.setattr(tracker_mod, "_persist_maps_usage", _broken)
 
     # Should NOT raise
-    track_call(op="find_place", status="ok", cache_state="miss")
+    track_call(op="place_details_v1", status="ok", cache_state="miss")
     await asyncio.sleep(0.05)

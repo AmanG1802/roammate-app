@@ -22,9 +22,10 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import httpx
+from pydantic import BaseModel
 
 from app.services.google_maps import cache as gmap_cache
 from app.services.google_maps.breaker import breaker
@@ -38,6 +39,22 @@ RETRY_BACKOFF_BASE = 1.0
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 REQUEST_TIMEOUT_S = 10.0
 ENRICH_CONCURRENCY = 5
+
+
+# ── Enrichment summary ─────────────────────────────────────────────────────
+
+FailureReason = Literal[
+    "quota_exceeded", "missing_api_key", "breaker_open",
+    "network_error", "upstream_error",
+]
+
+
+class EnrichmentSummary(BaseModel):
+    status: Literal["full", "partial", "none"]
+    total: int
+    enriched: int
+    skipped: int
+    reason: Optional[FailureReason] = None
 
 
 # ── Shared dataclasses ─────────────────────────────────────────────────────
@@ -138,11 +155,14 @@ class BaseMapService(abc.ABC):
     handled here once.
     """
 
+    _directions_op: str
+
     def __init__(self, api_key: Optional[str], *, _mock: bool = False) -> None:
         self.api_key = api_key
         self._is_mock = _mock
         self._current_user_id: Optional[int] = None
         self._current_trip_id: Optional[int] = None
+        self._last_failure_reason: Optional[FailureReason] = None
 
     def _track(self, **kwargs: Any) -> None:
         """Wrapper around track_call that injects current user/trip context."""
@@ -263,6 +283,25 @@ class BaseMapService(abc.ABC):
         """
         ...
 
+    @abc.abstractmethod
+    async def nearby_search(
+        self,
+        query: str,
+        lat: float,
+        lng: float,
+        radius_m: int = 1500,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Search for places near a location.
+
+        Implementation switches between Nearby Search API and Text Search API
+        based on settings.GOOGLE_MAPS_USE_NEARBY_API.
+
+        Returns normalized place card dicts with keys:
+        place_id, title, address, lat, lng, rating, price_level, photo_url, types
+        """
+        ...
+
     # ── Enrichment (shared) ──────────────────────────────────────────────
 
     async def enrich_item(
@@ -289,7 +328,18 @@ class BaseMapService(abc.ABC):
                 self._apply_details(item, details)
             else:
                 self._apply_find_place_fallback(item, candidate, pid)
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response is not None else 0
+            if status == 429:
+                self._last_failure_reason = "quota_exceeded"
+            else:
+                self._last_failure_reason = "upstream_error"
+            log.warning("enrich_item failed for %r", title, exc_info=True)
+        except (httpx.NetworkError, httpx.TimeoutException):
+            self._last_failure_reason = "network_error"
+            log.warning("enrich_item network error for %r", title, exc_info=True)
         except Exception:
+            self._last_failure_reason = "upstream_error"
             log.warning("enrich_item failed for %r", title, exc_info=True)
         return item
 
@@ -337,6 +387,53 @@ class BaseMapService(abc.ABC):
         self._current_trip_id = None
         return list(results)
 
+    async def enrich_items_with_summary(
+        self,
+        items: list[dict[str, Any]],
+        *,
+        user_id: Optional[int] = None,
+        trip_id: Optional[int] = None,
+    ) -> tuple[list[dict[str, Any]], EnrichmentSummary]:
+        """Like ``enrich_items`` but returns an ``EnrichmentSummary`` alongside."""
+        total = len(items)
+        self._last_failure_reason = None
+
+        if not items:
+            return items, EnrichmentSummary(status="full", total=0, enriched=0, skipped=0)
+
+        if not self._is_mock and not self.api_key:
+            self._last_failure_reason = "missing_api_key"
+            return items, EnrichmentSummary(
+                status="none", total=total, enriched=0, skipped=total,
+                reason="missing_api_key",
+            )
+
+        if not self._is_mock and not await breaker.allow():
+            self._last_failure_reason = "breaker_open"
+            return items, EnrichmentSummary(
+                status="none", total=total, enriched=0, skipped=total,
+                reason="breaker_open",
+            )
+
+        results = await self.enrich_items(items, user_id=user_id, trip_id=trip_id)
+        enriched = sum(1 for r in results if r.get("place_id"))
+        skipped = total - enriched
+
+        if enriched == total:
+            status: Literal["full", "partial", "none"] = "full"
+        elif enriched > 0:
+            status = "partial"
+        else:
+            status = "none"
+
+        return results, EnrichmentSummary(
+            status=status,
+            total=total,
+            enriched=enriched,
+            skipped=skipped,
+            reason=self._last_failure_reason if skipped > 0 else None,
+        )
+
     # ── Directions (shared cache + breaker + tracker) ────────────────────
 
     async def directions(
@@ -355,10 +452,11 @@ class BaseMapService(abc.ABC):
 
         idents = [w.identifier() for w in waypoints]
         _CACHE_MODE = "driving"
+        op = self._directions_op
         cached, state = await gmap_cache.get_directions(idents, _CACHE_MODE)
         if cached is not gmap_cache.MISS:
             track_call(
-                op="directions",
+                op=op,
                 status="cache_hit" if state == "hit" else "cache_negative",
                 latency_ms=0,
                 cache_state=state,
@@ -370,7 +468,7 @@ class BaseMapService(abc.ABC):
 
         if not await breaker.allow():
             track_call(
-                op="directions",
+                op=op,
                 status="circuit_open",
                 breaker_state="open",
                 waypoint_count=len(waypoints),
@@ -385,7 +483,7 @@ class BaseMapService(abc.ABC):
         except Exception as exc:
             await breaker.record_failure()
             track_call(
-                op="directions",
+                op=op,
                 status="error",
                 latency_ms=int((time.monotonic() - t0) * 1000),
                 error_class=exc.__class__.__name__,
@@ -400,7 +498,7 @@ class BaseMapService(abc.ABC):
         await gmap_cache.set_directions(idents, _CACHE_MODE, data)
         latency_ms = int((time.monotonic() - t0) * 1000)
         track_call(
-            op="directions",
+            op=op,
             status="ok",
             latency_ms=latency_ms,
             waypoint_count=len(waypoints),

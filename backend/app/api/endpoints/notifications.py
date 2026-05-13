@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +8,7 @@ from app.db.session import get_db
 from app.models.all_models import Notification, User
 from app.schemas.notification import NotificationOut, UnreadCountOut, ActorSummary
 from app.api.deps import get_current_user
+from app.utils.tz import utc_now
 
 router = APIRouter()
 
@@ -76,7 +76,7 @@ async def mark_read(
     if not n:
         raise HTTPException(status_code=404, detail="Notification not found")
     if n.read_at is None:
-        n.read_at = datetime.now(timezone.utc)
+        n.read_at = utc_now()
         await db.commit()
 
 
@@ -88,7 +88,7 @@ async def mark_all_read(
     stmt = (
         update(Notification)
         .where(Notification.user_id == current_user.id, Notification.read_at.is_(None))
-        .values(read_at=datetime.now(timezone.utc))
+        .values(read_at=utc_now())
     )
     await db.execute(stmt)
     await db.commit()

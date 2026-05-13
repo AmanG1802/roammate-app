@@ -1,6 +1,7 @@
 """Schemas for the trip route endpoint."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel
@@ -35,6 +36,10 @@ class RouteResponse(BaseModel):
     unroutable: list[UnroutableEvent] = []
     # ``need_two_points`` — fewer than 2 routable events on this day.
     reason: Optional[Literal["need_two_points"]] = None
+    # Persistence fields — populated when route is stored/fetched from DB
+    waypoint_fingerprint: Optional[str] = None
+    computed_at: Optional[datetime] = None
+    is_stale: bool = False
 
 
 class RouteValidationError(BaseModel):

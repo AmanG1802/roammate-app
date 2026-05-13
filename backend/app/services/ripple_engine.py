@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import List, Optional
-from app.models.all_models import Event
+from app.models.all_models import TimelineItem as Event
+from app.utils.tz import utc_now
 
 class RippleEngine:
     async def shift_itinerary(
@@ -10,14 +11,14 @@ class RippleEngine:
         db: AsyncSession,
         trip_id: int,
         delta_minutes: int,
-        start_from_time: Optional[datetime] = None
+        start_from_time=None
     ) -> List[Event]:
         """
         Shifts all events in a trip by a certain number of minutes.
         If start_from_time is provided, only events starting after this time are shifted.
         """
         if not start_from_time:
-            start_from_time = datetime.now()
+            start_from_time = utc_now()
 
         # Fetch all events for the trip starting after start_from_time
         stmt = (

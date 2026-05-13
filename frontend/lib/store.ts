@@ -2,21 +2,6 @@ import { create } from 'zustand';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
-/**
- * Format a Date as a naive ISO-like string using *local* time values,
- * e.g. "2026-04-16T14:00:00".  Unlike Date.toISOString() (which converts to
- * UTC), this preserves the wall-clock time the user intended.  The backend
- * stores TIMESTAMP WITHOUT TIME ZONE, so sending local values avoids the
- * UTC-shift that was turning "2pm IST" into "8:30am".
- */
-function toLocalISOString(d: Date): string {
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
-}
-
 /** Create a temporary local event (used when API is unavailable). */
 function makeLocalEvent(
   idea: Idea,
@@ -38,17 +23,6 @@ function makeLocalEvent(
   };
 }
 
-/** Format a Date into a compact time hint string, e.g. "3pm" or "3:30pm". */
-function formatTimeHint(date: Date): string {
-  let h = date.getHours();
-  const m = date.getMinutes();
-  const ampm = h >= 12 ? 'pm' : 'am';
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
-  const mStr = m === 0 ? '' : `:${String(m).padStart(2, '0')}`;
-  return `${h}${mStr}${ampm}`;
-}
-
 export interface Event {
   id: string;
   trip_id: string;
@@ -68,6 +42,8 @@ export interface Event {
   photo_url?: string | null;
   rating?: number | null;
   address?: string | null;
+  place_id?: string | null;
+  is_skipped?: boolean;
 }
 
 export interface Idea {
@@ -75,8 +51,10 @@ export interface Idea {
   title: string;
   lat: number;
   lng: number;
-  time_hint?: string | null;  // e.g. "2pm" extracted from input text
-  added_by?: string | null;   // first name of user who added the idea
+  place_id?: string | null;
+  start_time?: Date | null;
+  end_time?: Date | null;
+  added_by?: string | null;
   up?: number;
   down?: number;
   my_vote?: number;
@@ -137,6 +115,9 @@ interface TripState {
   /** Persist a time update for a single event. */
   updateEventTime: (eventId: string, startTime: Date | null, endTime: Date | null, token: string | null) => Promise<void>;
 
+  /** Toggle is_skipped for an event. */
+  toggleEventSkip: (eventId: string, token: string | null) => Promise<void>;
+
   /** Persist sort_order after manual drag-to-reorder. */
   reorderEvent: (eventId: string, newSortOrder: number, token: string | null) => Promise<void>;
 
@@ -153,11 +134,22 @@ interface TripState {
   setRouteLegs: (tripId: string, dayDate: string, legs: RouteLeg[]) => void;
   clearRouteLegsForDay: (tripId: string, dayDate: string) => void;
 
+  /** Route persistence metadata — staleness tracking from backend. */
+  routeMetaByDay: Record<string, { fingerprint: string; computedAt: string; isStale: boolean }>;
+  setRouteMeta: (tripId: string, dayDate: string, meta: { fingerprint: string; computedAt: string; isStale: boolean }) => void;
+  clearRouteMetaForDay: (tripId: string, dayDate: string) => void;
+
   /** Map-Timeline bidirectional highlight. */
   hoveredEventId: string | null;
   selectedEventId: string | null;
   setHoveredEventId: (id: string | null) => void;
   setSelectedEventId: (id: string | null) => void;
+
+  /** Concierge drawer state. */
+  conciergeOpen: boolean;
+  conciergePreAction: { type: string; payload?: any } | null;
+  openConcierge: (preAction?: { type: string; payload?: any } | null) => void;
+  closeConcierge: () => void;
 }
 
 function mapApiEvent(raw: Record<string, unknown>): Event {
@@ -180,6 +172,8 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
     photo_url: (raw.photo_url as string) ?? null,
     rating: (raw.rating as number) ?? null,
     address: (raw.address as string) ?? null,
+    place_id: (raw.place_id as string) ?? null,
+    is_skipped: (raw.is_skipped as boolean) ?? false,
   };
 }
 
@@ -199,6 +193,7 @@ export const useTripStore = create<TripState>((set, get) => ({
   events: [],
   tripDays: [],
   legsByDay: {},
+  routeMetaByDay: {},
   collaborators: [
     { id: '1', name: 'You', color: '#4f46e5' },
     { id: '2', name: 'Sarah', color: '#ec4899' },
@@ -270,8 +265,8 @@ export const useTripStore = create<TripState>((set, get) => ({
           lat: idea.lat,
           lng: idea.lng,
           day_date: dayDate ?? null,
-          start_time: startTime ? toLocalISOString(startTime) : null,
-          end_time: startTime ? toLocalISOString(new Date(startTime.getTime() + 3600_000)) : null,
+          start_time: startTime ? startTime.toISOString() : null,
+          end_time: startTime ? new Date(startTime.getTime() + 3600_000).toISOString() : null,
           sort_order: maxOrder + 1,
           added_by: idea.added_by ?? null,
           source_idea_id: !isNaN(numId) ? numId : null,
@@ -318,7 +313,8 @@ export const useTripStore = create<TripState>((set, get) => ({
       title: event.title,
       lat: event.lat,
       lng: event.lng,
-      time_hint: event.start_time ? formatTimeHint(event.start_time) : undefined,
+      start_time: event.start_time ?? null,
+      end_time: event.end_time ?? null,
       added_by: event.added_by ?? null,
       up: event.up ?? 0,
       down: event.down ?? 0,
@@ -337,7 +333,13 @@ export const useTripStore = create<TripState>((set, get) => ({
           set((s) => ({
             ideas: s.ideas.map((i) =>
               i.id === `restored-${eventId}`
-                ? { id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0, time_hint: idea.time_hint ?? null, added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0 }
+                ? {
+                    id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0,
+                    place_id: idea.place_id ?? null,
+                    start_time: idea.start_time ? new Date(idea.start_time) : null,
+                    end_time: idea.end_time ? new Date(idea.end_time) : null,
+                    added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0,
+                  }
                 : i
             ),
           }));
@@ -367,12 +369,42 @@ export const useTripStore = create<TripState>((set, get) => ({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            start_time: startTime ? toLocalISOString(startTime) : null,
-            end_time: endTime ? toLocalISOString(endTime) : null,
+            start_time: startTime ? startTime.toISOString() : null,
+            end_time: endTime ? endTime.toISOString() : null,
           }),
         });
       } catch {
         // Silently fail; local state is already updated
+      }
+    }
+  },
+
+  toggleEventSkip: async (eventId, token) => {
+    const { events } = get();
+    const event = events.find((e) => e.id === eventId);
+    if (!event) return;
+    const newSkipped = !event.is_skipped;
+
+    set((s) => ({
+      events: s.events.map((e) =>
+        e.id === eventId ? { ...e, is_skipped: newSkipped } : e
+      ),
+    }));
+
+    if (token) {
+      try {
+        await fetch(`${API}/events/${eventId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ is_skipped: newSkipped }),
+        });
+      } catch {
+        // Revert on failure
+        set((s) => ({
+          events: s.events.map((e) =>
+            e.id === eventId ? { ...e, is_skipped: !newSkipped } : e
+          ),
+        }));
       }
     }
   },
@@ -499,8 +531,54 @@ export const useTripStore = create<TripState>((set, get) => ({
       return { legsByDay: next };
     }),
 
+  setRouteMeta: (tripId, dayDate, meta) =>
+    set((s) => ({ routeMetaByDay: { ...s.routeMetaByDay, [legsKey(tripId, dayDate)]: meta } })),
+
+  clearRouteMetaForDay: (tripId, dayDate) =>
+    set((s) => {
+      const next = { ...s.routeMetaByDay };
+      delete next[legsKey(tripId, dayDate)];
+      return { routeMetaByDay: next };
+    }),
+
   hoveredEventId: null,
   selectedEventId: null,
   setHoveredEventId: (id) => set({ hoveredEventId: id }),
   setSelectedEventId: (id) => set({ selectedEventId: id }),
+
+  conciergeOpen: false,
+  conciergePreAction: null,
+  openConcierge: (preAction = null) => set({ conciergeOpen: true, conciergePreAction: preAction }),
+  closeConcierge: () => set({ conciergeOpen: false, conciergePreAction: null }),
 }));
+
+
+export type ReEnrichKind = 'brainstorm' | 'idea' | 'event';
+
+export interface ReEnrichResult {
+  place_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  address?: string | null;
+  photo_url?: string | null;
+  rating?: number | null;
+  description?: string | null;
+  category?: string | null;
+}
+
+export async function reEnrichItem(kind: ReEnrichKind, itemId: number): Promise<ReEnrichResult> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const res = await fetch(`${API}/trips/enrich`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ kind, item_id: itemId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? 'Enrichment failed');
+  }
+  return res.json();
+}

@@ -24,12 +24,7 @@ _SAMPLE_ITEM = {
     "rating": 4.7,
     "price_level": 2,
     "types": ["landmark", "tourist_attraction"],
-    "opening_hours": {"mon_sun": "8:30–15:30"},
-    "phone": "+66 2 623 5500",
-    "website": "https://www.royalgrandpalace.th/",
-    "time_hint": None,
     "time_category": "late afternoon",
-    "url_source": None,
 }
 
 

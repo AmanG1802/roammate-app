@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useTripStore, Event, Idea, legsKey, RouteLeg } from '@/lib/store';
+import { useTripStore, Event, Idea, legsKey, RouteLeg, reEnrichItem } from '@/lib/store';
 import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 import { categoryAccent } from '@/lib/categoryColors';
+import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
 const SHOW_PHOTOS =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_PHOTOS ?? 'true').toLowerCase() === 'true';
@@ -26,13 +27,14 @@ interface TimelineProps {
 /**
  * Returns the set of event IDs that conflict with any prior event in the list.
  * An event conflicts if its start_time falls before the maximum end_time of any
- * earlier event in the rendered order. Only the later item(s) in an overlap are
- * flagged. TBD events (no start_time / end_time) are skipped.
+ * earlier event in the rendered order. TBD events (no start_time / end_time) and
+ * skipped events are excluded from conflict detection entirely.
  */
 function computeConflicts(events: Event[]): Set<string> {
   const conflicts = new Set<string>();
   let maxEndSoFar: Date | null = null;
   for (const ev of events) {
+    if (ev.is_skipped) continue;
     if (ev.start_time && maxEndSoFar && ev.start_time < maxEndSoFar) {
       conflicts.add(ev.id);
     }
@@ -92,26 +94,21 @@ function travelMode(leg: { duration_s: number; distance_m: number }): 'walk' | '
   return speed < 2.8 ? 'walk' : 'drive';
 }
 
-/** Parse a time string like "2pm", "14:00", "2:30 PM" into a Date for today. */
-function parseTimeString(raw: string): Date | null {
-  const s = raw.trim().toLowerCase();
-  const ampmMatch = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-  const militaryMatch = s.match(/^(\d{1,2}):(\d{2})$/);
+/** Parse a time input string ("HH:MM") into a Date on the given base date (defaults to today). */
+function parseTimeString(raw: string, baseDate?: Date | null): Date | null {
+  const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const d = baseDate ? new Date(baseDate) : new Date();
+  d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
+  return d;
+}
 
-  const d = new Date();
-  if (ampmMatch) {
-    let h = parseInt(ampmMatch[1], 10);
-    const m = parseInt(ampmMatch[2] ?? '0', 10);
-    if (ampmMatch[3] === 'pm' && h !== 12) h += 12;
-    if (ampmMatch[3] === 'am' && h === 12) h = 0;
-    d.setHours(h, m, 0, 0);
-    return d;
-  }
-  if (militaryMatch) {
-    d.setHours(parseInt(militaryMatch[1], 10), parseInt(militaryMatch[2], 10), 0, 0);
-    return d;
-  }
-  return null;
+/** Pin the time-of-day from `time` to `day`'s calendar date. */
+function pinTimeToDay(time: Date | null | undefined, day: Date | null | undefined): Date | null {
+  if (!time) return null;
+  if (!day) return time;
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(),
+    time.getHours(), time.getMinutes(), 0, 0);
 }
 
 function TimeDisplay({
@@ -178,8 +175,9 @@ function TimeEditor({
   const isDirty = startVal !== initialStart || endVal !== initialEnd;
 
   const handleConfirm = () => {
-    const startDate = startVal ? parseTimeString(startVal) : null;
-    const endDate = endVal ? parseTimeString(endVal) : null;
+    const baseDate = event.day_date ? new Date(event.day_date + 'T00:00:00') : null;
+    const startDate = startVal ? parseTimeString(startVal, baseDate) : null;
+    const endDate = endVal ? parseTimeString(endVal, baseDate) : null;
     if (startDate && endDate && endDate <= startDate) {
       endDate.setTime(startDate.getTime() + 3600_000);
     }
@@ -243,7 +241,7 @@ function TimeEditor({
 }
 
 export default function Timeline({ tripId, filterDay, readOnly = false, canVote = false }: TimelineProps) {
-  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, reorderEvent, setEventsRaw, tripDays, legsByDay,
+  const { events, ideas, loadEvents, moveIdeaToTimeline, moveEventToIdea, updateEventTime, toggleEventSkip, reorderEvent, setEventsRaw, tripDays, legsByDay,
     selectedEventId, setHoveredEventId, setSelectedEventId } =
     useTripStore();
 
@@ -251,6 +249,32 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [tooltipId, setTooltipId] = useState<string | null>(null);
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+
+  const handleRetry = useCallback(async (eventId: string) => {
+    setRetryingIds((prev) => new Set(prev).add(eventId));
+    try {
+      const enriched = await reEnrichItem('event', Number(eventId));
+      setEventsRaw(events.map((ev) => {
+        if (ev.id !== eventId) return ev;
+        return {
+          ...ev,
+          place_id: enriched.place_id ?? ev.place_id,
+          lat: enriched.lat ?? ev.lat,
+          lng: enriched.lng ?? ev.lng,
+          address: enriched.address ?? ev.address,
+          photo_url: enriched.photo_url ?? ev.photo_url,
+          rating: enriched.rating ?? ev.rating,
+          description: enriched.description ?? ev.description,
+          category: enriched.category ?? ev.category,
+        };
+      }));
+    } catch {
+      // Badge stays visible so user can retry again
+    } finally {
+      setRetryingIds((prev) => { const next = new Set(prev); next.delete(eventId); return next; });
+    }
+  }, [events, setEventsRaw]);
 
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -297,7 +321,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (noDaysExist) return;
     const token = localStorage.getItem('token');
     const idea = ideas.find((i: Idea) => i.id === ideaId);
-    const startTime = idea?.time_hint ? parseTimeString(idea.time_hint) : null;
+    const startTime = pinTimeToDay(idea?.start_time, filterDay);
     moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
   };
 
@@ -321,7 +345,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (ideaId) {
       if (noDaysExist) { setDraggingId(null); setDragOverId(null); return; }
       const idea = ideas.find((i: Idea) => i.id === ideaId);
-      const startTime = idea?.time_hint ? parseTimeString(idea.time_hint) : null;
+      const startTime = pinTimeToDay(idea?.start_time, filterDay);
       moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
       setDraggingId(null);
       setDragOverId(null);
@@ -413,16 +437,17 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                 );
               }
               const isMapSelected = selectedEventId === event.id;
+              const isSkipped = !!event.is_skipped;
               cardEls.push(
                 <motion.div
                   key={event.id}
                   layout
                   ref={(el: HTMLDivElement | null) => { if (el) cardRefs.current.set(event.id, el); else cardRefs.current.delete(event.id); }}
                   initial={{ opacity: 0, x: -16 }}
-                  animate={{ opacity: isDragging ? 0.4 : 1, x: 0 }}
+                  animate={{ opacity: isDragging ? 0.4 : isSkipped ? 0.5 : 1, x: 0 }}
                   exit={{ opacity: 0, x: -16 }}
-                  draggable={!readOnly}
-                  onDragStartCapture={(e) => { if (!readOnly) handleEventDragStart(e, event.id); }}
+                  draggable={!readOnly && !isSkipped}
+                  onDragStartCapture={(e) => { if (!readOnly && !isSkipped) handleEventDragStart(e, event.id); }}
                   onDragOver={(e) => { if (!readOnly) handleEventDragOver(e, event.id); }}
                   onDrop={(e) => { if (!readOnly) handleEventDrop(e, event.id); }}
                   onDragEndCapture={() => { if (!readOnly) handleEventDragEnd(); }}
@@ -435,27 +460,37 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                     <div className="absolute top-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full -translate-y-2" />
                   )}
 
-                  {/* Timeline dot — colored by category */}
+                  {/* Timeline dot — grey if skipped, colored by category otherwise */}
                   <div className="absolute left-0 top-5 w-9 h-9 flex items-center justify-center">
-                    <div className={`w-3.5 h-3.5 ${accent.dot} rounded-full border-[3px] border-white shadow-sm group-hover:scale-110 transition-transform z-10`} />
+                    <div className={`w-3.5 h-3.5 ${isSkipped ? 'bg-slate-300' : accent.dot} rounded-full border-[3px] border-white shadow-sm group-hover:scale-110 transition-transform z-10`} />
                   </div>
 
-                  <div className={`p-4 bg-white border rounded-2xl shadow-sm hover:shadow-md transition-all ${
-                    isConflict ? 'border-red-200' : 'border-slate-100 hover:border-indigo-100'
+                  <div className={`p-4 border rounded-2xl shadow-sm transition-all ${
+                    isSkipped
+                      ? 'bg-slate-50 border-slate-200 border-dashed'
+                      : isConflict
+                        ? 'bg-white border-red-200 hover:shadow-md'
+                        : 'bg-white border-slate-100 hover:border-indigo-100 hover:shadow-md'
                   }`}>
                     {/* Row 1: grip + title (full width) */}
                     <div className="flex items-start gap-2">
-                      {!readOnly && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
-                      <h4 className="font-black text-slate-900 leading-tight flex-1 min-w-0">
+                      {!readOnly && !isSkipped && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
+                      <h4 className={`font-black leading-tight flex-1 min-w-0 ${isSkipped ? 'line-through text-slate-400' : 'text-slate-900'}`}>
                         {event.title}
                       </h4>
+                      {isSkipped && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-slate-100 border border-slate-200">
+                          Skipped
+                        </span>
+                      )}
                     </div>
 
                     {/* Rows 2-4 + detail panel: indented to align with title start */}
                     <div className={!readOnly ? 'ml-6' : undefined}>
-                      {/* Row 2: time range + move-to-bin */}
+                      {/* Row 2: time range + enrichment warning + move-to-bin */}
                       <div className="flex items-center justify-between mt-1.5">
                         <div className="flex items-center gap-2">
+                          {!event.place_id && <EnrichmentBadge size={3.5} onRetry={() => handleRetry(event.id)} retrying={retryingIds.has(event.id)} />}
                           {readOnly ? (
                             event.start_time ? (
                               <span
@@ -490,18 +525,33 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                           )}
                         </div>
                         {!readOnly && (
-                          <button
-                            title="Send back to Idea Bin"
-                            data-testid={`move-to-bin-${event.id}`}
-                            onClick={() => {
-                              const token = localStorage.getItem('token');
-                              moveEventToIdea(event.id, tripId, token);
-                            }}
-                            className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
-                          >
-                            <Undo2 className="w-2.5 h-2.5" />
-                            Move to bin
-                          </button>
+                          isSkipped ? (
+                            <button
+                              title="Restore this event"
+                              data-testid={`unskip-${event.id}`}
+                              onClick={() => {
+                                const token = localStorage.getItem('token');
+                                toggleEventSkip(event.id, token);
+                              }}
+                              className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 uppercase tracking-tighter transition-colors"
+                            >
+                              <Check className="w-2.5 h-2.5" />
+                              Restore
+                            </button>
+                          ) : (
+                            <button
+                              title="Send back to Idea Bin"
+                              data-testid={`move-to-bin-${event.id}`}
+                              onClick={() => {
+                                const token = localStorage.getItem('token');
+                                moveEventToIdea(event.id, tripId, token);
+                              }}
+                              className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Undo2 className="w-2.5 h-2.5" />
+                              Move to bin
+                            </button>
+                          )
                         )}
                       </div>
 

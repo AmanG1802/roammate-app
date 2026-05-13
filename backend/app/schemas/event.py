@@ -1,53 +1,26 @@
-from typing import Any, List, Optional
+from typing import List, Optional
 from pydantic import BaseModel, field_validator
-from datetime import datetime, date, timezone
+from datetime import datetime, date
+
+from app.schemas.place import PlaceFields
+from app.utils.tz import ensure_utc
 
 
-def _strip_tz(dt: Optional[datetime]) -> Optional[datetime]:
-    """Convert a timezone-aware datetime to a naive (UTC) datetime.
-
-    The DB columns are TIMESTAMP WITHOUT TIME ZONE, but the frontend sends
-    ISO strings with a 'Z' suffix which Pydantic parses as tz-aware.
-    asyncpg rejects mixing tz-aware and tz-naive values, so we strip the
-    tzinfo after converting to UTC.
-    """
-    if dt is None:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
-
-
-class EventBase(BaseModel):
+class EventBase(PlaceFields):
     trip_id: int
-    title: str
-    place_id: Optional[str] = None
     location_name: Optional[str] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
     day_date: Optional[date] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     is_locked: bool = False
     event_type: Optional[str] = None
     sort_order: int = 0
-    added_by: Optional[str] = None
-    description: Optional[str] = None
-    category: Optional[str] = None
-    address: Optional[str] = None
-    photo_url: Optional[str] = None
-    rating: Optional[float] = None
-    price_level: Optional[int] = None
-    types: Optional[Any] = None
-    opening_hours: Optional[Any] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
-    time_category: Optional[str] = None
+    is_skipped: bool = False
 
     @field_validator("start_time", "end_time", mode="after")
     @classmethod
-    def _normalize_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
-        return _strip_tz(v)
+    def _ensure_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return ensure_utc(v)
 
 class EventCreate(EventBase):
     source_idea_id: Optional[int] = None
@@ -59,11 +32,12 @@ class EventUpdate(BaseModel):
     end_time: Optional[datetime] = None
     sort_order: Optional[int] = None
     time_category: Optional[str] = None
+    is_skipped: Optional[bool] = None
 
     @field_validator("start_time", "end_time", mode="after")
     @classmethod
-    def _normalize_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
-        return _strip_tz(v)
+    def _ensure_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return ensure_utc(v)
 
 class Event(EventBase):
     id: int
@@ -79,5 +53,5 @@ class RippleRequest(BaseModel):
 
     @field_validator("start_from_time", mode="after")
     @classmethod
-    def _normalize_tz(cls, v: Optional[datetime]) -> Optional[datetime]:
-        return _strip_tz(v)
+    def _ensure_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return ensure_utc(v)

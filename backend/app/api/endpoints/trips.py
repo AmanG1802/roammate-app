@@ -6,7 +6,7 @@ from sqlalchemy import select, update, func as sa_func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from app.db.session import get_db
-from app.models.all_models import Trip, TripMember, User, IdeaBinItem as IdeaBinItemModel, TripDay, Event as EventModel, Notification, IdeaVote, EventVote
+from app.models.all_models import Trip, TripMember, User, IdeaBinItem as IdeaBinItemModel, TripDay, TimelineItem as EventModel, Notification, IdeaVote, EventVote, PLACE_FIELDS
 from app.schemas.trip import (
     Trip as TripSchema, TripCreate, TripUpdate, IngestRequest, IdeaBinItem,
     TripMemberOut, InviteRequest, TripDayCreate, TripDayOut,
@@ -75,6 +75,7 @@ async def create_trip(
         name=trip_in.name,
         start_date=trip_in.start_date,
         end_date=trip_in.end_date,
+        timezone=trip_in.timezone,
         created_by_id=current_user.id
     )
     db.add(trip)
@@ -308,6 +309,8 @@ async def update_trip(
 
     if update.end_date is not None:
         trip.end_date = update.end_date
+    if update.timezone is not None:
+        trip.timezone = update.timezone
 
     all_members = await notification_service.all_trip_member_ids(db, trip_id)
     others = [uid for uid in all_members if uid != current_user.id]
@@ -479,20 +482,16 @@ async def get_idea_bin(
     )
     my_map = dict((await db.execute(my_stmt)).all())
 
-    return [
-        IdeaBinItem(
-            id=i.id, trip_id=i.trip_id, title=i.title,
-            description=i.description, category=i.category,
-            place_id=i.place_id, lat=i.lat, lng=i.lng,
-            address=i.address, photo_url=i.photo_url, rating=i.rating,
-            price_level=i.price_level, types=i.types, opening_hours=i.opening_hours,
-            phone=i.phone, website=i.website,
-            url_source=i.url_source, time_hint=i.time_hint, added_by=i.added_by,
-            up=up_map.get(i.id, 0), down=down_map.get(i.id, 0),
+    results = []
+    for i in ideas:
+        data = IdeaBinItem.model_validate(i, from_attributes=True).model_dump()
+        data.update(
+            up=up_map.get(i.id, 0),
+            down=down_map.get(i.id, 0),
             my_vote=my_map.get(i.id, 0),
         )
-        for i in ideas
-    ]
+        results.append(IdeaBinItem.model_validate(data))
+    return results
 
 
 @router.get("/{trip_id}/members", response_model=List[TripMemberOut])
@@ -736,7 +735,7 @@ async def update_idea(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update an idea's fields (e.g. time_hint)."""
+    """Update an idea's fields (e.g. start_time)."""
     stmt = select(TripMember).where(
         TripMember.trip_id == trip_id,
         TripMember.user_id == current_user.id,
@@ -752,8 +751,10 @@ async def update_idea(
     if not item:
         raise HTTPException(status_code=404, detail="Idea not found")
 
-    if "time_hint" in update:
-        item.time_hint = update["time_hint"]
+    if "start_time" in update:
+        item.start_time = update["start_time"]
+    if "end_time" in update:
+        item.end_time = update["end_time"]
     if "time_category" in update:
         item.time_category = update["time_category"]
     if "title" in update:
@@ -909,21 +910,12 @@ async def delete_trip_day(
 
     if items_action == "bin":
         for evt in day_events:
-            hint = None
-            if evt.start_time:
-                h = evt.start_time.hour
-                m = evt.start_time.minute
-                ampm = "pm" if h >= 12 else "am"
-                h12 = h % 12 or 12
-                hint = f"{h12}:{m:02d}{ampm}" if m else f"{h12}{ampm}"
+            fields = {f: getattr(evt, f) for f in PLACE_FIELDS}
             idea = IdeaBinItemModel(
                 trip_id=trip_id,
-                title=evt.title,
-                place_id=evt.place_id,
-                lat=evt.lat,
-                lng=evt.lng,
-                time_hint=hint,
-                added_by=evt.added_by,
+                **fields,
+                start_time=evt.start_time,
+                end_time=evt.end_time,
             )
             db.add(idea)
             await db.flush()

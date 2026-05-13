@@ -3,15 +3,17 @@
 import { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
 import { Lightbulb, Trash2, Loader2, MapPin, Info, Star, Clock, X, PackagePlus } from 'lucide-react';
 import { categoryAccent } from '@/lib/categoryColors';
+import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
+import { reEnrichItem } from '@/lib/store';
 
 export type BrainstormItem = {
   id: number;
   title: string;
   description?: string | null;
   category?: string | null;
+  place_id?: string | null;
   photo_url?: string | null;
   rating?: number | null;
-  time_hint?: string | null;
   time_category?: string | null;
   address?: string | null;
 };
@@ -73,8 +75,37 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
     setSelected(new Set());
   };
 
+  const [promoteError, setPromoteError] = useState<string | null>(null);
+  const [retryingIds, setRetryingIds] = useState<Set<number>>(new Set());
+
+  const handleRetry = useCallback(async (itemId: number) => {
+    setRetryingIds((prev) => new Set(prev).add(itemId));
+    try {
+      const enriched = await reEnrichItem('brainstorm', itemId);
+      setItems((prev) =>
+        prev.map((it) => {
+          if (it.id !== itemId) return it;
+          return {
+            ...it,
+            place_id: enriched.place_id ?? it.place_id,
+            address: enriched.address ?? it.address,
+            photo_url: enriched.photo_url ?? it.photo_url,
+            rating: enriched.rating ?? it.rating,
+            description: enriched.description ?? it.description,
+            category: enriched.category ?? it.category,
+          };
+        }),
+      );
+    } catch {
+      // Badge stays visible so the user can retry again
+    } finally {
+      setRetryingIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
+    }
+  }, []);
+
   const promote = async (idsOrAll: number[] | null) => {
     setWorking(true);
+    setPromoteError(null);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/promote`, {
         method: 'POST',
@@ -85,7 +116,11 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
         window.dispatchEvent(new CustomEvent('idea-bin:refresh'));
         exitSelection();
         refresh();
+      } else {
+        setPromoteError('Could not promote items — please try again.');
       }
+    } catch {
+      setPromoteError('Network error — check your connection and try again.');
     } finally {
       setWorking(false);
     }
@@ -214,7 +249,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                     )}
                   </div>
 
-                  {/* Row 2: [Info slot] Rating + Time category */}
+                  {/* Row 2: [Info slot] Warning + Rating + Time category */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div className="w-3.5 flex justify-center shrink-0">
                       <button
@@ -229,15 +264,16 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
                         <Info className="w-3 h-3" />
                       </button>
                     </div>
+                    {!item.place_id && <EnrichmentBadge size={3} onRetry={() => handleRetry(item.id)} retrying={retryingIds.has(item.id)} />}
                     {SHOW_RATING && item.rating != null && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
                         <Star className="w-2.5 h-2.5 text-amber-400" /> {item.rating}
                       </span>
                     )}
-                    {(item.time_category ?? item.time_hint) && (
+                    {item.time_category && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400 truncate min-w-0">
                         <Clock className="w-2.5 h-2.5 text-slate-300 shrink-0" />
-                        <span className="truncate">{item.time_category ?? item.time_hint}</span>
+                        <span className="truncate">{item.time_category}</span>
                       </span>
                     )}
                   </div>
@@ -263,9 +299,9 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
             {openItem && (
               <div
                 className="absolute left-0 right-0 z-20"
-                style={{ top: popoverTop, height: 280 }}
+                style={{ top: popoverTop }}
               >
-                <DetailPopover item={openItem} onClose={() => setOpenId(null)} />
+                <DetailPopover item={openItem} onClose={() => setOpenId(null)} onRetry={() => handleRetry(openItem.id)} retrying={retryingIds.has(openItem.id)} />
               </div>
             )}
           </div>
@@ -274,7 +310,11 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
 
       {/* Footer actions */}
       {items.length > 0 && (
-        <div className="border-t border-slate-100 px-4 py-3 flex items-center justify-center gap-2 shrink-0 bg-white">
+        <div className="border-t border-slate-100 px-4 py-3 flex flex-col items-center gap-2 shrink-0 bg-white">
+          {promoteError && (
+            <p className="text-xs font-bold text-rose-500 text-center">{promoteError}</p>
+          )}
+          <div className="flex items-center justify-center gap-2">
           {!selectionMode ? (
             <>
               <button
@@ -314,22 +354,26 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
               </button>
             </>
           )}
+          </div>
         </div>
       )}
     </div>
   );
 });
 
-function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () => void }) {
+function DetailPopover({ item, onClose, onRetry, retrying }: { item: BrainstormItem; onClose: () => void; onRetry?: () => void; retrying?: boolean }) {
   const accent = categoryAccent(item.category);
   return (
-    <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden" style={{ maxHeight: 280 }}>
       {/* Popover header */}
       <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-slate-100 shrink-0">
         <div className="flex items-start gap-2 min-w-0">
           <div className={`w-1 self-stretch rounded-full shrink-0 ${accent.bar}`} />
           <div className="min-w-0">
-            <p className="text-sm font-black text-slate-900 leading-tight truncate">{item.title}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-black text-slate-900 leading-tight truncate">{item.title}</p>
+              {!item.place_id && <EnrichmentBadge size={3.5} onRetry={onRetry} retrying={retrying} />}
+            </div>
             {item.address && (
               <p className="text-[11px] font-medium text-slate-500 truncate mt-0.5">{item.address}</p>
             )}
@@ -356,23 +400,25 @@ function DetailPopover({ item, onClose }: { item: BrainstormItem; onClose: () =>
           </div>
         )}
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {SHOW_RATING && item.rating != null && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100">
-              <Star className="w-3 h-3 text-amber-400" /> {item.rating}
-            </span>
-          )}
-          {item.time_hint && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-100">
-              <Clock className="w-3 h-3 text-slate-400" /> {item.time_hint}
-            </span>
-          )}
-          {item.category && (
-            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${accent.badge}`}>
-              {item.category}
-            </span>
-          )}
-        </div>
+        {((SHOW_RATING && item.rating != null) || !!item.time_category || !!item.category) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {SHOW_RATING && item.rating != null && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100">
+                <Star className="w-3 h-3 text-amber-400" /> {item.rating}
+              </span>
+            )}
+            {item.time_category && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-100">
+                <Clock className="w-3 h-3 text-slate-400" /> {item.time_category}
+              </span>
+            )}
+            {item.category && (
+              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${accent.badge}`}>
+                {item.category}
+              </span>
+            )}
+          </div>
+        )}
 
         {item.description && (
           <p className="text-sm font-medium text-slate-500 leading-relaxed">{item.description}</p>

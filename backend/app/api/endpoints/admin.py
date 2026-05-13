@@ -41,7 +41,8 @@ class LoginResponse(BaseModel):
 async def admin_login(body: LoginRequest):
     if body.username != settings.ADMIN_USERNAME or body.password != settings.ADMIN_PASSWORD:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    expire = datetime.utcnow() + timedelta(hours=settings.ADMIN_TOKEN_EXPIRE_HOURS)
+    from app.utils.tz import utc_now
+    expire = utc_now() + timedelta(hours=settings.ADMIN_TOKEN_EXPIRE_HOURS)
     token = jwt.encode({"admin": True, "exp": expire}, settings.SECRET_KEY, algorithm=ALGORITHM)
     return LoginResponse(access_token=token)
 

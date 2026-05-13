@@ -97,18 +97,24 @@ async def test_ingest_google_maps_failure_falls_back(client: AsyncClient, auth_h
     assert resp.json()[0]["place_id"] is None
 
 
-async def test_ingest_source_url_persisted(client: AsyncClient, auth_headers):
+async def test_ingest_returns_idea_with_place_fields(client: AsyncClient, auth_headers):
     trip = await create_trip(client, auth_headers)
     with patch(
         "app.services.idea_bin.google_maps_service.find_place",
-        new=AsyncMock(return_value=None),
+        new=AsyncMock(return_value={
+            "id": "p1",
+            "displayName": {"text": "Louvre", "languageCode": "en"},
+            "location": {"latitude": 48.86, "longitude": 2.34},
+        }),
     ):
         resp = await client.post(
             f"/api/trips/{trip['id']}/ingest",
-            json={"text": "A", "source_url": "https://example.com/x"},
+            json={"text": "Louvre"},
             headers=auth_headers,
         )
-    assert resp.json()[0]["url_source"] == "https://example.com/x"
+    item = resp.json()[0]
+    assert item["place_id"] == "p1"
+    assert item["lat"] == 48.86
 
 
 async def test_ingest_non_member_forbidden(
@@ -156,17 +162,17 @@ async def test_get_ideas_non_member(
     assert resp.status_code == 403
 
 
-async def test_patch_idea_title_and_time_hint(client: AsyncClient, auth_headers):
+async def test_patch_idea_title_and_start_time(client: AsyncClient, auth_headers):
     trip = await create_trip(client, auth_headers)
     idea = await _seed_idea(client, auth_headers, trip["id"])
     resp = await client.patch(
         f"/api/trips/{trip['id']}/ideas/{idea['id']}",
-        json={"title": "Updated", "time_hint": "3pm"},
+        json={"title": "Updated", "start_time": "2026-06-01T15:00:00Z"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
     assert resp.json()["title"] == "Updated"
-    assert resp.json()["time_hint"] == "3pm"
+    assert resp.json()["start_time"] is not None
 
 
 async def test_patch_idea_non_member(

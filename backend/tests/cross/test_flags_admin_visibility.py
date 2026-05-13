@@ -25,11 +25,11 @@ async def seed_maps_with_flags(db_session: AsyncSession):
             cache_state="miss", cost_usd=0.007, created_at=now,
         ),
         GoogleMapsApiUsage(
-            op="find_place", status="ok", latency_ms=40,
+            op="place_details_v1", status="ok", latency_ms=40,
             cache_state="miss", cost_usd=0.017, created_at=now,
         ),
         GoogleMapsApiUsage(
-            op="place_details", status="ok", latency_ms=50,
+            op="place_details_v1", status="ok", latency_ms=50,
             cache_state="miss", cost_usd=0.017, created_at=now,
         ),
     ]

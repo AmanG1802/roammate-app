@@ -24,7 +24,7 @@ async def test_extract_items_full_fields():
     required_fields = (
         "title", "description", "category", "lat", "lng",
         "address", "photo_url", "rating", "price_level",
-        "types", "opening_hours",
+        "types", "time_category",
     )
     for item in items:
         for field in required_fields:

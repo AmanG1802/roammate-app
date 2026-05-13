@@ -29,6 +29,8 @@ async def test_plan_trip_returns_preview(client: AsyncClient, auth_headers):
     assert body["duration_days"] == 3
     assert isinstance(body["items"], list)
     assert len(body["items"]) > 0
+    # Mock enrichment is always full → enrichment field is null
+    assert body.get("enrichment") is None
 
 
 async def test_plan_trip_items_have_full_fields(client: AsyncClient, auth_headers):
@@ -41,7 +43,7 @@ async def test_plan_trip_items_have_full_fields(client: AsyncClient, auth_header
     for field in (
         "title", "description", "category", "lat", "lng",
         "address", "photo_url", "rating", "price_level",
-        "types", "opening_hours",
+        "types", "time_category",
     ):
         assert field in item, f"Missing field: {field}"
         assert item[field] is not None, f"Field is None: {field}"

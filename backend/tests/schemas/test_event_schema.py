@@ -3,52 +3,70 @@ from datetime import datetime, timezone, timedelta
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.event import EventCreate, EventUpdate, RippleRequest, _strip_tz
+from app.schemas.event import EventCreate, EventUpdate, RippleRequest
 from app.schemas.trip import TripCreate, TripUpdate, InviteRequest, IngestRequest
+from app.utils.tz import ensure_utc
 
 
-# ── Event tz stripping ────────────────────────────────────────────────────────
+# ── ensure_utc helper ────────────────────────────────────────────────────────
 
-def test_strip_tz_none():
-    assert _strip_tz(None) is None
+def test_ensure_utc_none():
+    assert ensure_utc(None) is None
 
 
-def test_strip_tz_utc():
+def test_ensure_utc_naive_becomes_utc():
+    dt = datetime(2026, 6, 1, 14, 0)
+    out = ensure_utc(dt)
+    assert out.tzinfo is not None
+    assert out.tzinfo == timezone.utc
+    assert out == datetime(2026, 6, 1, 14, 0, tzinfo=timezone.utc)
+
+
+def test_ensure_utc_already_utc_passthrough():
     dt = datetime(2026, 6, 1, 14, 0, tzinfo=timezone.utc)
-    out = _strip_tz(dt)
-    assert out.tzinfo is None
-    assert out == datetime(2026, 6, 1, 14, 0)
+    out = ensure_utc(dt)
+    assert out == dt
 
 
-def test_strip_tz_non_utc():
-    tz = timezone(timedelta(hours=5))
+def test_ensure_utc_non_utc_converts():
+    tz = timezone(timedelta(hours=5, minutes=30))
     dt = datetime(2026, 6, 1, 14, 0, tzinfo=tz)
-    out = _strip_tz(dt)
-    assert out.tzinfo is None
-    assert out == datetime(2026, 6, 1, 9, 0)
+    out = ensure_utc(dt)
+    assert out.tzinfo == timezone.utc
+    assert out == datetime(2026, 6, 1, 8, 30, tzinfo=timezone.utc)
 
 
-def test_event_create_strips_tz_on_both_times():
+# ── Event schema ensures UTC ────────────────────────────────────────────────
+
+def test_event_create_ensures_utc_on_both_times():
     e = EventCreate(
         trip_id=1, title="T",
         start_time=datetime(2026, 6, 1, 14, 0, tzinfo=timezone.utc),
         end_time=datetime(2026, 6, 1, 15, 0, tzinfo=timezone.utc),
     )
-    assert e.start_time.tzinfo is None
-    assert e.end_time.tzinfo is None
+    assert e.start_time.tzinfo == timezone.utc
+    assert e.end_time.tzinfo == timezone.utc
 
 
-def test_event_update_strips_tz():
+def test_event_create_naive_gets_utc():
+    e = EventCreate(
+        trip_id=1, title="T",
+        start_time=datetime(2026, 6, 1, 14, 0),
+    )
+    assert e.start_time.tzinfo == timezone.utc
+
+
+def test_event_update_ensures_utc():
     e = EventUpdate(start_time=datetime(2026, 6, 1, 14, 0, tzinfo=timezone.utc))
-    assert e.start_time.tzinfo is None
+    assert e.start_time.tzinfo == timezone.utc
 
 
-def test_ripple_request_strips_tz():
+def test_ripple_request_ensures_utc():
     r = RippleRequest(
         delta_minutes=10,
         start_from_time=datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc),
     )
-    assert r.start_from_time.tzinfo is None
+    assert r.start_from_time.tzinfo == timezone.utc
 
 
 # ── Trip validators ───────────────────────────────────────────────────────────
@@ -80,6 +98,16 @@ def test_trip_update_rejects_end_before_start():
 
 def test_trip_create_only_name_ok():
     TripCreate(name="T")
+
+
+def test_trip_create_default_timezone():
+    t = TripCreate(name="T")
+    assert t.timezone == "UTC"
+
+
+def test_trip_create_with_timezone():
+    t = TripCreate(name="T", timezone="Asia/Bangkok")
+    assert t.timezone == "Asia/Bangkok"
 
 
 # ── Request schemas ───────────────────────────────────────────────────────────

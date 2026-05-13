@@ -9,6 +9,23 @@ from pydantic import BaseModel
 from app.services.llm.models.base import BaseLLMModel, LLMResponse
 
 
+def _clean_schema_for_claude(schema: dict) -> dict:
+    """Inline $defs and remove unsupported keys for Claude tool schemas."""
+    defs = schema.pop("$defs", schema.pop("definitions", None))
+    if not defs:
+        return schema
+
+    import json as _json
+    raw = _json.dumps(schema)
+    for name, definition in defs.items():
+        ref = f'{{"$ref": "#/$defs/{name}"}}'
+        replacement = _json.dumps(definition)
+        raw = raw.replace(ref, replacement)
+        ref_alt = f'{{"$ref": "#/definitions/{name}"}}'
+        raw = raw.replace(ref_alt, replacement)
+    return _json.loads(raw)
+
+
 class ClaudeModel(BaseLLMModel):
 
     def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
@@ -59,7 +76,9 @@ class ClaudeModel(BaseLLMModel):
         # Structured output via tool_use: define a single tool whose input
         # schema matches the Pydantic model, then force the model to call it.
         if response_schema is not None:
-            tool_schema = response_schema.model_json_schema()
+            tool_schema = _clean_schema_for_claude(
+                response_schema.model_json_schema()
+            )
             kwargs["tools"] = [
                 {
                     "name": "structured_response",

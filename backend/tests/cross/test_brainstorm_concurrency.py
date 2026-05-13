@@ -24,12 +24,7 @@ _SAMPLE_ITEM = {
     "rating": 4.7,
     "price_level": 2,
     "types": ["landmark"],
-    "opening_hours": None,
-    "phone": None,
-    "website": None,
-    "time_hint": None,
     "time_category": "morning",
-    "url_source": None,
 }
 
 

@@ -19,7 +19,7 @@ from typing import Any
 
 from app.config.persona_catalog import Persona, PERSONA_DESCRIPTIONS
 from app.core.config import settings
-from app.core.time_categories import TIME_CATEGORY_DEFAULTS
+from app.schemas.concierge import ConciergeResponse
 from app.schemas.llm import LLMExtractResponse, LLMItem, LLMPlanResponse
 from app.services.llm.fallbacks import (
     BANGKOK_FALLBACK_ITEMS,
@@ -59,7 +59,6 @@ def llm_item_to_brainstorm(item: LLMItem) -> dict[str, Any]:
         "description": item.d or None,
         "category": item.cat.value,
         "time_category": item.tc,
-        "time_hint": TIME_CATEGORY_DEFAULTS.get(item.tc),
         "price_level": item.price,
         "types": item.tags or None,
         "place_id": None,
@@ -68,10 +67,6 @@ def llm_item_to_brainstorm(item: LLMItem) -> dict[str, Any]:
         "address": None,
         "photo_url": None,
         "rating": None,
-        "opening_hours": None,
-        "phone": None,
-        "website": None,
-        "url_source": None,
     }
 
 
@@ -224,8 +219,8 @@ class RoammateServiceV1(BaseLLMService):
             # only cares about ``map_output``.  See plan §"User-output persistence".
             return [llm_item_to_brainstorm(item) for item in parsed.map_output]
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            log.warning("LLM extract parse failed (%s), using fallback", exc)
-            return [dict(item) for item in BANGKOK_FALLBACK_ITEMS]
+            log.warning("LLM extract parse failed (%s)", exc)
+            raise RuntimeError(f"Failed to parse brainstorm items from AI: {exc}") from exc
 
     # ── plan_trip ───────────────────────────────────────────────────────
 
@@ -284,8 +279,82 @@ class RoammateServiceV1(BaseLLMService):
                 "items": [llm_item_to_brainstorm(item) for item in parsed.map_output],
             }
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            log.warning("LLM plan_trip parse failed (%s), using fallback", exc)
+            log.warning("LLM plan_trip parse failed (%s)", exc)
+            raise RuntimeError(f"Failed to parse trip plan from AI: {exc}") from exc
+
+    # ── concierge_dispatch ─────────────────────────────────────────────
+
+    _WITTY_RETRIES = [
+        "Hmm, my travel brain just short-circuited! Could you rephrase that? I promise I'm usually sharper than this.",
+        "Oops, I tripped over my own suitcase there. Mind saying that a different way?",
+        "My compass is spinning -- could you point me in the right direction again?",
+        "I think jet lag just hit me. Can you try that one more time?",
+        "Even the best concierge needs a double espresso sometimes. Let's try again!",
+    ]
+
+    async def concierge_dispatch(
+        self,
+        history: list[dict[str, str]],
+        user_message: str,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        import random
+
+        if not settings.LLM_ENABLED:
             return {
-                **THAILAND_PLAN_FALLBACK,
-                "items": [dict(item) for item in BANGKOK_FALLBACK_ITEMS],
+                "intent": "chat_only",
+                "user_message": "I'm currently offline, but I'll be back soon! Try again in a bit.",
+                "params": {},
+                "requires_confirmation": False,
+            }
+
+        ctx = context or {}
+        events_list = ctx.get("events_list", "No events scheduled today.")
+        travel_times = ctx.get("travel_times", "No travel time data available.")
+        current_time = ctx.get("current_time", "unknown")
+
+        template = _load_prompt("concierge_dispatch_v1.txt")
+        system_prompt = (
+            template
+            .replace("{current_time}", current_time)
+            .replace("{events_list}", events_list)
+            .replace("{travel_times}", travel_times)
+        )
+
+        trimmed = _trim_history(history)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            *trimmed,
+            {"role": "user", "content": user_message},
+        ]
+
+        response = await self._model.complete(
+            messages,
+            response_schema=ConciergeResponse,
+            temperature=0.3,
+            max_tokens=1500,
+        )
+        _log_and_track("concierge_dispatch", response, context)
+
+        try:
+            data = json.loads(response.content)
+            parsed = ConciergeResponse(**data)
+            try:
+                params = json.loads(parsed.params_json) if parsed.params_json else {}
+            except (json.JSONDecodeError, TypeError):
+                params = {}
+            return {
+                "intent": parsed.intent.value if hasattr(parsed.intent, "value") else str(parsed.intent),
+                "user_message": parsed.user_message,
+                "params": params,
+                "requires_confirmation": parsed.requires_confirmation,
+            }
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            log.warning("Concierge dispatch parse failed (%s)", exc)
+            witty = random.choice(self._WITTY_RETRIES)
+            return {
+                "intent": "chat_only",
+                "user_message": witty,
+                "params": {"retry": True},
+                "requires_confirmation": False,
             }

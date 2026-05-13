@@ -2,25 +2,12 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.enrichment import EnrichmentStatus
+from app.schemas.place import PlaceFields
 
-class BrainstormItemBase(BaseModel):
-    title: str
-    description: Optional[str] = None
-    category: Optional[str] = None
-    place_id: Optional[str] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
-    address: Optional[str] = None
-    photo_url: Optional[str] = None
-    rating: Optional[float] = None
-    price_level: Optional[int] = None
-    types: Optional[List[str]] = None
-    opening_hours: Optional[dict] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
-    time_hint: Optional[str] = None
-    time_category: Optional[str] = None
-    url_source: Optional[str] = None
+
+class BrainstormItemBase(PlaceFields):
+    pass
 
 
 class BrainstormItemCreate(BrainstormItemBase):
@@ -55,6 +42,7 @@ class BrainstormChatResponse(BaseModel):
 
 class BrainstormExtractResponse(BaseModel):
     items: List[BrainstormItemOut]
+    enrichment: Optional[EnrichmentStatus] = None
 
 
 class BrainstormBulkRequest(BaseModel):
@@ -74,3 +62,4 @@ class PlanTripResponse(BaseModel):
     start_date: Optional[datetime] = None
     duration_days: int
     items: List[BrainstormItemBase]
+    enrichment: Optional[EnrichmentStatus] = None

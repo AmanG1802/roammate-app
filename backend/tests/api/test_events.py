@@ -41,16 +41,15 @@ async def test_create_event_missing_fields(client: AsyncClient, auth_headers):
     assert resp.status_code == 422
 
 
-async def test_create_event_strips_tz(client: AsyncClient, auth_headers):
+async def test_create_event_preserves_utc(client: AsyncClient, auth_headers):
     trip = await create_trip(client, auth_headers)
     event = await _create_event(
         client, auth_headers, trip["id"],
         start_time="2026-06-01T14:00:00Z",
         end_time="2026-06-01T15:00:00Z",
     )
-    # tz suffix should be gone (stored and returned naive)
-    assert "Z" not in event["start_time"]
-    assert "+00:00" not in event["start_time"]
+    assert event["start_time"].startswith("2026-06-01T14:00:00")
+    assert event["end_time"].startswith("2026-06-01T15:00:00")
 
 
 async def test_get_events_by_trip(client: AsyncClient, auth_headers):
@@ -150,7 +149,7 @@ async def test_move_to_bin(client: AsyncClient, auth_headers):
     assert resp.status_code == 200
     idea = resp.json()
     assert idea["title"] == "Dinner"
-    assert idea["time_hint"] == "7:30pm"
+    assert idea["start_time"] is not None
     assert idea["place_id"] == "p1"
     assert idea["lat"] == 1.0
     assert idea["added_by"] == "Alice"
@@ -159,13 +158,59 @@ async def test_move_to_bin(client: AsyncClient, auth_headers):
     assert resp.json() == []
 
 
+async def test_move_to_bin_preserves_enriched_fields(client: AsyncClient, auth_headers):
+    """All Google Maps enrichment fields must survive event → idea bin transfer."""
+    trip = await create_trip(client, auth_headers)
+    enriched = {
+        "title": "Trevi Fountain",
+        "place_id": "ChIJ1UCDJ1NgLxMRtrsCzOHxdvY",
+        "lat": 41.9009,
+        "lng": 12.4833,
+        "day_date": "2026-06-01",
+        "start_time": "2026-06-01T10:00:00",
+        "end_time": "2026-06-01T11:00:00",
+        "description": "Iconic Baroque fountain",
+        "category": "Culture & Arts",
+        "address": "Piazza di Trevi, 00187 Roma RM, Italy",
+        "photo_url": "https://maps.example.com/photo/trevi.jpg",
+        "rating": 4.7,
+        "price_level": 0,
+        "types": ["tourist_attraction", "point_of_interest"],
+        "time_category": "morning",
+        "added_by": "Alice",
+    }
+    event = await _create_event(client, auth_headers, trip["id"], **enriched)
+
+    resp = await client.post(
+        f"/api/events/{event['id']}/move-to-bin", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    idea = resp.json()
+
+    assert idea["title"] == "Trevi Fountain"
+    assert idea["place_id"] == enriched["place_id"]
+    assert idea["lat"] == enriched["lat"]
+    assert idea["lng"] == enriched["lng"]
+    assert idea["description"] == enriched["description"]
+    assert idea["category"] == enriched["category"]
+    assert idea["address"] == enriched["address"]
+    assert idea["photo_url"] == enriched["photo_url"]
+    assert idea["rating"] == enriched["rating"]
+    assert idea["price_level"] == enriched["price_level"]
+    assert idea["types"] == enriched["types"]
+    assert idea["time_category"] == enriched["time_category"]
+    assert idea["added_by"] == enriched["added_by"]
+    assert idea["start_time"] is not None
+    assert idea["end_time"] is not None
+
+
 async def test_move_to_bin_no_start_time(client: AsyncClient, auth_headers):
     trip = await create_trip(client, auth_headers)
     event = await _create_event(client, auth_headers, trip["id"], title="NoTime")
     resp = await client.post(
         f"/api/events/{event['id']}/move-to-bin", headers=auth_headers
     )
-    assert resp.json()["time_hint"] is None
+    assert resp.json()["start_time"] is None
 
 
 async def test_move_to_bin_non_member(

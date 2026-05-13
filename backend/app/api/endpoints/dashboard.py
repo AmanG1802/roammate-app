@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 
 from app.db.session import get_db
-from app.models.all_models import Trip, TripMember, Event, TripDay, User
+from app.models.all_models import Trip, TripMember, TimelineItem, TripDay, User
 from app.schemas.dashboard import TodayWidgetOut, TodayWidgetPage, TodayTrip, TodayEvent
 from app.api.deps import get_current_user
+from app.utils.tz import utc_now, from_utc, today_in_tz, ensure_utc
 
 router = APIRouter()
 
@@ -71,22 +72,19 @@ def _pick_default(n_past: int, n_active: int, past: list[Trip], upcoming: list[T
     return 0
 
 
+def _trip_today(trip: Trip) -> date:
+    """Determine 'today' relative to the trip's destination timezone."""
+    tz_name = trip.timezone or "UTC"
+    return today_in_tz(tz_name)
+
+
 @router.get("/today", response_model=TodayWidgetOut)
 async def get_today_widget(
-    client_now: Optional[str] = Query(None, description="Client's current ISO datetime for timezone-correct comparisons"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Return all trip widget pages for the dashboard carousel."""
-    if client_now:
-        try:
-            now = datetime.fromisoformat(client_now.replace("Z", "+00:00").replace("Z", ""))
-            now = now.replace(tzinfo=None)
-        except ValueError:
-            now = datetime.now()
-    else:
-        now = datetime.now()
-    today = now.date()
+    now = utc_now()
 
     stmt = (
         select(Trip)
@@ -95,17 +93,19 @@ async def get_today_widget(
     )
     trips = list((await db.execute(stmt)).scalars().all())
 
+    user_tz = current_user.timezone or "UTC"
+    today = today_in_tz(user_tz)
+
     active, upcoming, past = _classify(trips, today)
     if not active and not upcoming and not past:
         return TodayWidgetOut()
 
     pages: list[TodayWidgetPage] = []
 
-    # Past pages (oldest-first so leftmost = earliest)
     for t in reversed(past):
         sd = _to_date(t.start_date)
         ed = _to_date(t.end_date) or sd
-        count_stmt = select(sa_func.count(Event.id)).where(Event.trip_id == t.id)
+        count_stmt = select(sa_func.count(TimelineItem.id)).where(TimelineItem.trip_id == t.id)
         total_events = (await db.execute(count_stmt)).scalar_one()
         total_days = ((ed - sd).days + 1) if sd and ed else None
         pages.append(TodayWidgetPage(
@@ -114,23 +114,26 @@ async def get_today_widget(
             total_events=total_events, total_days=total_days,
         ))
 
-    # Active (ongoing) trip page — at most one
     for t in active:
+        trip_tz = t.timezone or "UTC"
+        trip_today = today_in_tz(trip_tz)
         sd = _to_date(t.start_date)
         ev_stmt = (
-            select(Event)
-            .where(Event.trip_id == t.id, Event.day_date == today)
-            .order_by(Event.start_time.nulls_last(), Event.sort_order)
+            select(TimelineItem)
+            .where(TimelineItem.trip_id == t.id, TimelineItem.day_date == trip_today)
+            .order_by(TimelineItem.start_time.nulls_last(), TimelineItem.sort_order)
         )
         events = list((await db.execute(ev_stmt)).scalars().all())
 
         ongoing_idx: int | None = None
         next_idx: int | None = None
         for i, e in enumerate(events):
-            if e.start_time is not None and e.end_time is not None:
-                if e.start_time <= now < e.end_time:
+            st = ensure_utc(e.start_time)
+            et = ensure_utc(e.end_time)
+            if st is not None and et is not None:
+                if st <= now < et:
                     ongoing_idx = i
-            if next_idx is None and e.start_time is not None and e.start_time > now:
+            if next_idx is None and st is not None and st > now:
                 next_idx = i
 
         today_events = [
@@ -150,19 +153,18 @@ async def get_today_widget(
         total_days = ((ed - sd).days + 1) if sd and ed else (len(trip_days) or None)
         day_number = None
         for idx, td in enumerate(trip_days):
-            if _to_date(td.date) == today:
+            if _to_date(td.date) == trip_today:
                 day_number = idx + 1
                 break
         if day_number is None and sd:
-            day_number = (today - sd).days + 1
+            day_number = (trip_today - sd).days + 1
 
         pages.append(TodayWidgetPage(
             state="in_trip", trip=TodayTrip.model_validate(t),
-            today_date=today, today_events=today_events,
+            today_date=trip_today, today_events=today_events,
             day_number=day_number, total_days=total_days,
         ))
 
-    # Upcoming pages (soonest-first so rightmost = furthest)
     for t in upcoming:
         sd = _to_date(t.start_date)
         pages.append(TodayWidgetPage(

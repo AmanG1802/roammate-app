@@ -33,6 +33,9 @@ interface RouteResponse {
   ordered_event_ids: string[];
   unroutable: { event_id: string; reason: string }[];
   reason: 'need_two_points' | 'missing_start_times' | 'time_conflicts' | null;
+  waypoint_fingerprint?: string | null;
+  computed_at?: string | null;
+  is_stale?: boolean;
 }
 
 type Toast = { kind: 'error' | 'info' | 'success'; message: string } | null;
@@ -50,11 +53,13 @@ function hasConflict(a: Event, b: Event): boolean {
 function computeGateFailures(events: Event[]): {
   hasMissingTimes: boolean;
   hasConflicts: boolean;
+  hasMissingPlaceIds: boolean;
 } {
   if (events.length === 0) {
-    return { hasMissingTimes: false, hasConflicts: false };
+    return { hasMissingTimes: false, hasConflicts: false, hasMissingPlaceIds: false };
   }
   const hasMissingTimes = events.some((e) => !e.start_time);
+  const hasMissingPlaceIds = events.some((e) => !e.place_id);
   const sorted = [...events].sort((a, b) => {
     if (a.start_time && b.start_time) {
       return a.start_time.getTime() - b.start_time.getTime();
@@ -70,13 +75,17 @@ function computeGateFailures(events: Event[]): {
       break;
     }
   }
-  return { hasMissingTimes, hasConflicts };
+  return { hasMissingTimes, hasConflicts, hasMissingPlaceIds };
 }
 
 function gateFailureMessage(gate: {
   hasMissingTimes: boolean;
   hasConflicts: boolean;
+  hasMissingPlaceIds: boolean;
 }): string | null {
+  if (gate.hasMissingPlaceIds) {
+    return 'Map data could not be fetched for some items. Retry enrichment before generating the route.';
+  }
   if (gate.hasMissingTimes && gate.hasConflicts) {
     return 'Add missing start times and resolve conflicts before generating the route.';
   }
@@ -191,7 +200,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const { events, ideas, hoveredEventId, setSelectedEventId } = useTripStore();
+  const { events, ideas, hoveredEventId, setSelectedEventId, setRouteLegs, setRouteMeta } = useTripStore();
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const markerByEventIdRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
   const polylineRef = useRef<google.maps.Polyline | null>(null);
@@ -211,6 +220,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
   const [lastRouteData, setLastRouteData] = useState<RouteResponse | null>(null);
   const [selectedLegIdx, setSelectedLegIdx] = useState<number | null>(null);
   const legInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  const [backendStale, setBackendStale] = useState(false);
 
   // ── Day filtering ───────────────────────────────────────────────────────
   const dayEvents = useMemo(() => {
@@ -219,18 +229,22 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
     return events.filter((e) => e.day_date === dayStr);
   }, [events, filterDay]);
 
-  const gates = useMemo(() => computeGateFailures(dayEvents), [dayEvents]);
+  // Active (non-skipped) events used for routing, gates, and fingerprint
+  const activeEvents = useMemo(() => dayEvents.filter((e) => !e.is_skipped), [dayEvents]);
+
+  const gates = useMemo(() => computeGateFailures(activeEvents), [activeEvents]);
   const gateMessage = gateFailureMessage(gates);
 
-  const currentFingerprint = useMemo(() => evFingerprint(dayEvents), [dayEvents]);
+  const currentFingerprint = useMemo(() => evFingerprint(activeEvents), [activeEvents]);
   const currentDayKey = filterDay ? toLocalISODate(filterDay) : null;
   const stale = useMemo(() => {
+    if (backendStale) return true;
     if (!routeSnapshot) return false;
     return (
       routeSnapshot.fingerprint !== currentFingerprint ||
       routeSnapshot.filterDay !== currentDayKey
     );
-  }, [routeSnapshot, currentFingerprint, currentDayKey]);
+  }, [routeSnapshot, currentFingerprint, currentDayKey, backendStale]);
 
   useEffect(() => {
     if (
@@ -248,6 +262,57 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
     const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // ── Auto-fetch persisted route on mount / day switch ─────────────────
+  useEffect(() => {
+    if (!tripId || !currentDayKey) return;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/trips/${tripId}/route?day_date=${currentDayKey}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (cancelled) return;
+        if (!res.ok || res.status === 204) return;
+
+        const data: RouteResponse | null = await res.json();
+        if (cancelled || !data || !data.encoded_polyline) return;
+
+        setLastRouteData(data);
+        setBackendStale(data.is_stale ?? false);
+        setRouteLegs(tripId, currentDayKey, data.legs);
+
+        if (data.waypoint_fingerprint) {
+          setRouteMeta(tripId, currentDayKey, {
+            fingerprint: data.waypoint_fingerprint,
+            computedAt: data.computed_at ?? '',
+            isStale: data.is_stale ?? false,
+          });
+        }
+
+        setRouteSnapshot({
+          fingerprint: currentFingerprint,
+          filterDay: currentDayKey,
+        });
+
+        if (MOCK_MODE) {
+          setMockRoute(data);
+        } else if (map) {
+          await drawRoute(data, map, data.is_stale ?? false);
+        }
+      } catch {
+        // Network error on auto-fetch is silent — user can still click Refresh
+      }
+    })();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, currentDayKey]);
 
   // ── Helper to clear route visuals ────────────────────────────────────
   const clearRouteVisuals = useCallback(() => {
@@ -315,7 +380,8 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
       let hasMarkers = false;
       const allMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 
-      dayEvents.forEach((event, index) => {
+      const visibleEvents = dayEvents.filter((e) => !e.is_skipped);
+      visibleEvents.forEach((event, index) => {
         if (!event.lat || !event.lng) return;
         const pinColor = categoryPinColor(event.category);
         const pin = new PinElement({
@@ -454,7 +520,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
   }, [map, mapTypeIdx]);
 
   // ── Draw route: per-leg colored polylines, click for travel info ─────
-  const drawRoute = useCallback(async (data: RouteResponse, gMap: google.maps.Map) => {
+  const drawRoute = useCallback(async (data: RouteResponse, gMap: google.maps.Map, dimmed = false) => {
     clearRouteVisuals();
     setSelectedLegIdx(null);
     if (legInfoWindowRef.current) {
@@ -464,8 +530,13 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
     if (!data.encoded_polyline) return;
     const fullPath = decodePolyline(data.encoded_polyline);
 
+    const baseOpacity = dimmed ? 0.4 : 0.85;
+    const legOpacity = dimmed ? 0.35 : 0.75;
+    const dashIcon: google.maps.IconSequence[] = dimmed
+      ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '12px' }]
+      : [];
+
     if (data.legs.length === 0 || data.legs.length === 1) {
-      // Single-color polyline when 0 or 1 legs
       const color = LEG_COLORS[0];
       const arrowSymbol: google.maps.Symbol = {
         path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
@@ -475,13 +546,16 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
         fillColor: color,
         fillOpacity: 1,
       };
+      const icons: google.maps.IconSequence[] = dimmed
+        ? dashIcon
+        : [{ icon: arrowSymbol, offset: '0', repeat: '120px' }];
       const poly = new google.maps.Polyline({
         path: fullPath,
         geodesic: false,
         strokeColor: color,
-        strokeOpacity: 0.85,
+        strokeOpacity: dimmed ? 0 : baseOpacity,
         strokeWeight: 5,
-        icons: [{ icon: arrowSymbol, offset: '0', repeat: '120px' }],
+        icons,
         map: gMap,
       });
 
@@ -546,14 +620,17 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
           fillColor: color,
           fillOpacity: 1,
         };
+        const icons: google.maps.IconSequence[] = dimmed
+          ? dashIcon
+          : [{ icon: arrowSymbol, offset: '50%', repeat: '100px' }];
 
         const poly = new google.maps.Polyline({
           path: segPath,
           geodesic: false,
           strokeColor: color,
-          strokeOpacity: 0.75,
+          strokeOpacity: dimmed ? 0 : legOpacity,
           strokeWeight: 5,
-          icons: [{ icon: arrowSymbol, offset: '50%', repeat: '100px' }],
+          icons,
           map: gMap,
         });
 
@@ -568,7 +645,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
         setSelectedLegIdx(null);
         if (legInfoWindowRef.current) legInfoWindowRef.current.close();
         polylinesRef.current.forEach((p) => {
-          p.setOptions({ strokeOpacity: 0.75, strokeWeight: 5 });
+          p.setOptions({ strokeOpacity: dimmed ? 0 : legOpacity, strokeWeight: 5 });
         });
       });
     }
@@ -632,7 +709,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
       return;
     }
 
-    if (dayEvents.length === 0) {
+    if (activeEvents.length === 0) {
       setToast({ kind: 'info', message: 'No items on this day to route.' });
       return;
     }
@@ -682,7 +759,15 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
 
       if (tripId && currentDayKey) {
         useTripStore.getState().setRouteLegs(tripId, currentDayKey, data.legs);
+        if (data.waypoint_fingerprint) {
+          useTripStore.getState().setRouteMeta(tripId, currentDayKey, {
+            fingerprint: data.waypoint_fingerprint,
+            computedAt: data.computed_at ?? '',
+            isStale: false,
+          });
+        }
       }
+      setBackendStale(false);
 
       if (data.reason === 'need_two_points') {
         setToast({
@@ -735,6 +820,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
     filterDay,
     tripId,
     dayEvents,
+    activeEvents,
     map,
     gateMessage,
     currentFingerprint,
@@ -743,7 +829,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
   ]);
 
   const refreshDisabled =
-    !filterDay || dayEvents.length < 2 || gateMessage !== null;
+    !filterDay || activeEvents.length < 2 || gateMessage !== null;
   const disabledTooltip =
     gateMessage ??
     (!filterDay
@@ -757,7 +843,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
     return (
       <div ref={containerRef} className="flex-1 h-full relative bg-gradient-to-br from-slate-100 via-slate-50 to-indigo-50">
         <MockMapPane
-          events={dayEvents}
+          events={activeEvents}
           mockRoute={mockRoute}
           stale={stale}
         />
@@ -767,6 +853,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
           disabled={refreshDisabled}
           stale={stale}
           tooltip={disabledTooltip}
+          gateMessage={gateMessage}
         />
         <DayBadge filterDay={filterDay} />
         <ToastView toast={toast} />
@@ -783,7 +870,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
       <div ref={mapRef} className="absolute inset-0" />
 
       {/* Empty state overlay when no markers for this day */}
-      {mapLoaded && dayEvents.filter((e) => e.lat && e.lng).length === 0 && (
+      {mapLoaded && dayEvents.filter((e) => !e.is_skipped && e.lat && e.lng).length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200 shadow-lg p-8 text-center max-w-xs pointer-events-auto">
             <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -801,6 +888,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
         disabled={refreshDisabled}
         stale={stale}
         tooltip={disabledTooltip}
+        gateMessage={gateMessage}
       />
       <DayBadge filterDay={filterDay} />
 
@@ -933,40 +1021,66 @@ function RefreshButton({
   disabled,
   stale,
   tooltip,
+  gateMessage,
 }: {
   onClick: () => void;
   loading: boolean;
   disabled: boolean;
   stale: boolean;
   tooltip: string;
+  gateMessage: string | null;
 }) {
+  const hasGate = gateMessage !== null;
+
+  const borderClass = hasGate
+    ? 'border-rose-200 text-rose-400 cursor-not-allowed opacity-70'
+    : stale && !disabled
+      ? 'border-amber-300 text-amber-600 hover:bg-amber-50'
+      : disabled
+        ? 'border-slate-200 text-slate-300 cursor-not-allowed opacity-70'
+        : 'border-indigo-200 text-indigo-600 hover:bg-indigo-50';
+
+  const contextMessage = hasGate
+    ? gateMessage
+    : stale
+      ? 'Timeline changed \u2014 refresh to update route'
+      : null;
+
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2">
-      <button
-        onClick={onClick}
-        aria-disabled={disabled || loading}
-        title={tooltip}
-        className={`flex items-center gap-2 px-4 py-2.5 bg-white/95 backdrop-blur rounded-full shadow-md border transition-all cursor-pointer active:scale-95 ${
-          disabled
-            ? 'border-slate-200 text-slate-300 cursor-not-allowed opacity-70'
-            : 'border-indigo-200 text-indigo-600 hover:bg-indigo-50'
-        }`}
-      >
-        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        <span className="text-xs font-black uppercase tracking-widest">
-          {loading ? 'Routing…' : 'Refresh Route'}
-        </span>
-      </button>
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onClick}
+          aria-disabled={disabled || loading}
+          title={tooltip}
+          className={`flex items-center gap-2 px-4 py-2.5 bg-white/95 backdrop-blur rounded-full shadow-md border transition-all cursor-pointer active:scale-95 ${borderClass}`}
+        >
+          {stale && !disabled && !loading && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+            </span>
+          )}
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <span className="text-xs font-black uppercase tracking-widest">
+            {loading ? 'Routing\u2026' : 'Refresh Route'}
+          </span>
+        </button>
+      </div>
       <AnimatePresence>
-        {stale && !loading && (
-          <motion.span
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            className="px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-600 rounded-full text-[10px] font-black uppercase tracking-widest"
+        {contextMessage && !loading && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className={`text-[10px] font-bold px-3 py-1 rounded-full border backdrop-blur ${
+              hasGate
+                ? 'bg-rose-50/90 border-rose-200 text-rose-500'
+                : 'bg-amber-50/90 border-amber-200 text-amber-600'
+            }`}
           >
-            Stale Route
-          </motion.span>
+            {contextMessage}
+          </motion.p>
         )}
       </AnimatePresence>
     </div>

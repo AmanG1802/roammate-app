@@ -104,7 +104,64 @@ async def test_delete_day_items_action_bin(client: AsyncClient, auth_headers):
     ).json()
     assert len(ideas) == 1
     assert ideas[0]["title"] == "Colosseum"
-    assert ideas[0]["time_hint"] == "2pm"
+    assert ideas[0]["start_time"] is not None
+
+
+async def test_delete_day_bin_preserves_enriched_fields(client: AsyncClient, auth_headers):
+    """Deleting a day with items_action=bin must preserve all enriched fields on the idea."""
+    trip = await create_trip(client, auth_headers, start_date="2026-06-01T00:00:00")
+    enriched = {
+        "trip_id": trip["id"],
+        "title": "Trevi Fountain",
+        "place_id": "ChIJ1UCDJ1NgLxMRtrsCzOHxdvY",
+        "lat": 41.9009,
+        "lng": 12.4833,
+        "day_date": "2026-06-01",
+        "start_time": "2026-06-01T10:00:00",
+        "end_time": "2026-06-01T11:00:00",
+        "description": "Iconic Baroque fountain",
+        "category": "Culture & Arts",
+        "address": "Piazza di Trevi, 00187 Roma RM, Italy",
+        "photo_url": "https://maps.example.com/photo/trevi.jpg",
+        "rating": 4.7,
+        "price_level": 0,
+        "types": ["tourist_attraction", "point_of_interest"],
+        "time_category": "morning",
+        "added_by": "Alice",
+    }
+    await client.post("/api/events/", json=enriched, headers=auth_headers)
+
+    days = (
+        await client.get(f"/api/trips/{trip['id']}/days", headers=auth_headers)
+    ).json()
+    day_id = days[0]["id"]
+    resp = await client.delete(
+        f"/api/trips/{trip['id']}/days/{day_id}?items_action=bin",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 204
+
+    ideas = (
+        await client.get(f"/api/trips/{trip['id']}/ideas", headers=auth_headers)
+    ).json()
+    assert len(ideas) == 1
+    idea = ideas[0]
+
+    assert idea["title"] == "Trevi Fountain"
+    assert idea["place_id"] == enriched["place_id"]
+    assert idea["lat"] == enriched["lat"]
+    assert idea["lng"] == enriched["lng"]
+    assert idea["description"] == enriched["description"]
+    assert idea["category"] == enriched["category"]
+    assert idea["address"] == enriched["address"]
+    assert idea["photo_url"] == enriched["photo_url"]
+    assert idea["rating"] == enriched["rating"]
+    assert idea["price_level"] == enriched["price_level"]
+    assert idea["types"] == enriched["types"]
+    assert idea["time_category"] == enriched["time_category"]
+    assert idea["added_by"] == enriched["added_by"]
+    assert idea["start_time"] is not None
+    assert idea["end_time"] is not None
 
 
 async def test_delete_day_items_action_delete(client: AsyncClient, auth_headers):

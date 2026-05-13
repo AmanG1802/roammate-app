@@ -47,6 +47,7 @@ class MockMapService(BaseMapService):
     return deterministic data without HTTP traffic.
     """
 
+    _directions_op: str = "directions_mock"
     _ANCHOR_LAT = 13.7563
     _ANCHOR_LNG = 100.5018
 
@@ -161,6 +162,49 @@ class MockMapService(BaseMapService):
             item["lng"] = location["longitude"]
         if candidate.get("formattedAddress"):
             item["address"] = candidate["formattedAddress"]
+
+    async def nearby_search(
+        self,
+        query: str,
+        lat: float,
+        lng: float,
+        radius_m: int = 1500,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        await asyncio.sleep(_MOCK_NETWORK_DELAY_S)
+        mock_places = [
+            {
+                "title": "Roma Cafe",
+                "rating": 4.5, "price_level": 1,
+                "types": ["cafe", "food", "establishment"],
+            },
+            {
+                "title": "Espresso Bar Trastevere",
+                "rating": 4.3, "price_level": 2,
+                "types": ["cafe", "bar", "establishment"],
+            },
+            {
+                "title": "Caffe Sant'Eustachio",
+                "rating": 4.7, "price_level": 1,
+                "types": ["cafe", "food", "establishment"],
+            },
+        ]
+        places: list[dict[str, Any]] = []
+        for i, mp in enumerate(mock_places[:limit]):
+            d_lat, d_lng = _stable_offset(mp["title"])
+            seed = hashlib.md5(mp["title"].encode()).hexdigest()[:8]
+            places.append({
+                "place_id": f"mock_nearby_{_slug(mp['title'])}",
+                "title": mp["title"],
+                "address": f"{mp['title']}, Near {query.title()}, Mock City",
+                "lat": lat + d_lat,
+                "lng": lng + d_lng,
+                "rating": mp.get("rating"),
+                "price_level": mp.get("price_level"),
+                "photo_url": f"https://picsum.photos/seed/{seed}/400/300",
+                "types": mp.get("types", []),
+            })
+        return places
 
     async def _directions_api_call(
         self,

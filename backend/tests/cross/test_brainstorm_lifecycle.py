@@ -4,7 +4,6 @@ from httpx import AsyncClient
 
 from tests.conftest import create_trip, invite_and_accept
 from app.services.llm_client import _BANGKOK_FALLBACK_ITEMS
-from app.core.time_categories import TIME_CATEGORY_DEFAULTS
 
 
 _SAMPLE_ITEM = {
@@ -19,12 +18,7 @@ _SAMPLE_ITEM = {
     "rating": 4.7,
     "price_level": 2,
     "types": ["landmark", "tourist_attraction"],
-    "opening_hours": {"mon_sun": "8:30–15:30"},
-    "phone": "+66 2 623 5500",
-    "website": "https://www.royalgrandpalace.th/",
-    "time_hint": None,
     "time_category": "late afternoon",
-    "url_source": None,
 }
 
 
@@ -281,13 +275,12 @@ async def test_trip_delete_cascades_brainstorm(
 
 
 @pytest.mark.asyncio
-async def test_promote_time_category_default_carries_to_idea(
+async def test_promote_time_category_carries_to_idea(
     client: AsyncClient, auth_headers
 ):
     trip = await create_trip(client, auth_headers)
     item_with_category = {
         **_SAMPLE_ITEM,
-        "time_hint": None,
         "time_category": "evening",
     }
     await client.post(
@@ -301,5 +294,4 @@ async def test_promote_time_category_default_carries_to_idea(
         headers=auth_headers,
     )).json()
 
-    assert ideas[0]["time_hint"] == TIME_CATEGORY_DEFAULTS["evening"]
     assert ideas[0]["time_category"] == "evening"
