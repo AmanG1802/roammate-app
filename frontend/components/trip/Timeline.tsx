@@ -94,13 +94,21 @@ function travelMode(leg: { duration_s: number; distance_m: number }): 'walk' | '
   return speed < 2.8 ? 'walk' : 'drive';
 }
 
-/** Parse a time input string ("HH:MM") into a Date for today. */
-function parseTimeString(raw: string): Date | null {
+/** Parse a time input string ("HH:MM") into a Date on the given base date (defaults to today). */
+function parseTimeString(raw: string, baseDate?: Date | null): Date | null {
   const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
-  const d = new Date();
+  const d = baseDate ? new Date(baseDate) : new Date();
   d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
   return d;
+}
+
+/** Pin the time-of-day from `time` to `day`'s calendar date. */
+function pinTimeToDay(time: Date | null | undefined, day: Date | null | undefined): Date | null {
+  if (!time) return null;
+  if (!day) return time;
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(),
+    time.getHours(), time.getMinutes(), 0, 0);
 }
 
 function TimeDisplay({
@@ -167,8 +175,9 @@ function TimeEditor({
   const isDirty = startVal !== initialStart || endVal !== initialEnd;
 
   const handleConfirm = () => {
-    const startDate = startVal ? parseTimeString(startVal) : null;
-    const endDate = endVal ? parseTimeString(endVal) : null;
+    const baseDate = event.day_date ? new Date(event.day_date + 'T00:00:00') : null;
+    const startDate = startVal ? parseTimeString(startVal, baseDate) : null;
+    const endDate = endVal ? parseTimeString(endVal, baseDate) : null;
     if (startDate && endDate && endDate <= startDate) {
       endDate.setTime(startDate.getTime() + 3600_000);
     }
@@ -312,7 +321,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (noDaysExist) return;
     const token = localStorage.getItem('token');
     const idea = ideas.find((i: Idea) => i.id === ideaId);
-    const startTime = idea?.start_time ?? null;
+    const startTime = pinTimeToDay(idea?.start_time, filterDay);
     moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
   };
 
@@ -336,7 +345,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (ideaId) {
       if (noDaysExist) { setDraggingId(null); setDragOverId(null); return; }
       const idea = ideas.find((i: Idea) => i.id === ideaId);
-      const startTime = idea?.start_time ?? null;
+      const startTime = pinTimeToDay(idea?.start_time, filterDay);
       moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
       setDraggingId(null);
       setDragOverId(null);

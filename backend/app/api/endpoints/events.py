@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 from typing import List
+from datetime import datetime, timezone
 from app.db.session import get_db
 from app.models.all_models import (
     TimelineItem as EventModel, TripMember, User,
@@ -89,6 +90,7 @@ async def create_event(
             db.add(EventVote(event_id=event.id, user_id=v.user_id, value=v.value))
         if src_votes:
             await db.commit()
+            await db.refresh(event)
 
     recipients = await notification_service.trip_member_ids(
         db, event.trip_id, exclude_user_id=current_user.id
@@ -103,6 +105,7 @@ async def create_event(
             trip_id=event.trip_id,
         )
         await db.commit()
+        await db.refresh(event)
     return await _event_with_votes(db, event, current_user.id)
 
 
@@ -162,6 +165,7 @@ async def update_event(
                 trip_id=event.trip_id,
             )
             await db.commit()
+            await db.refresh(event)
     return await _event_with_votes(db, event, current_user.id)
 
 
@@ -224,11 +228,20 @@ async def move_event_to_bin(
         raise HTTPException(status_code=403, detail="Not a member of this trip")
 
     fields = {f: getattr(event, f) for f in PLACE_FIELDS}
+    # Preserve time-of-day but reset the date to today so the idea bin item
+    # carries a meaningful time without being anchored to the old trip date.
+    _today = datetime.now(timezone.utc)
+
+    def _redate(dt: datetime | None) -> datetime | None:
+        if dt is None:
+            return None
+        return dt.replace(year=_today.year, month=_today.month, day=_today.day)
+
     idea = IdeaBinItemModel(
         **fields,
         trip_id=event.trip_id,
-        start_time=event.start_time,
-        end_time=event.end_time,
+        start_time=_redate(event.start_time),
+        end_time=_redate(event.end_time),
     )
     trip_id = event.trip_id
     title = event.title

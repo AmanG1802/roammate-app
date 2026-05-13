@@ -444,9 +444,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
           return (
             <div
               className="absolute left-5 right-5 z-20"
-              style={{ top: popoverTop, height: 220 }}
+              style={{ top: popoverTop }}
             >
-              <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden" style={{ maxHeight: 220 }}>
                 <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-slate-100 shrink-0">
                   <div className="flex items-start gap-2 min-w-0">
                     <div className={`w-1 self-stretch rounded-full shrink-0 ${accent.bar}`} />
@@ -473,23 +473,25 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                       className="w-full h-24 object-cover rounded-lg border border-slate-100"
                     />
                   )}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {SHOW_RATING && ex.rating != null && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
-                        <Star className="w-2.5 h-2.5 text-amber-400" /> {ex.rating}
-                      </span>
-                    )}
-                    {idea.start_time && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-50 text-slate-700 rounded-md text-[10px] font-bold">
-                        <Clock className="w-2.5 h-2.5 text-slate-500" /> {formatTime(idea.start_time)}
-                      </span>
-                    )}
-                    {ex.category && (
-                      <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${accent.badge}`}>
-                        {ex.category}
-                      </span>
-                    )}
-                  </div>
+                  {((SHOW_RATING && ex.rating != null) || !!idea.start_time || !!ex.category) && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {SHOW_RATING && ex.rating != null && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
+                          <Star className="w-2.5 h-2.5 text-amber-400" /> {ex.rating}
+                        </span>
+                      )}
+                      {idea.start_time && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-50 text-slate-700 rounded-md text-[10px] font-bold">
+                          <Clock className="w-2.5 h-2.5 text-slate-500" /> {formatTime(idea.start_time)}
+                        </span>
+                      )}
+                      {ex.category && (
+                        <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${accent.badge}`}>
+                          {ex.category}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {ex.description && (
                     <p className="text-[11px] font-medium text-slate-500 leading-relaxed">{ex.description}</p>
                   )}

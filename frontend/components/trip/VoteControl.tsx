@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 
 type Kind = 'idea' | 'event';
@@ -78,7 +78,7 @@ function VoterPopup({ voters }: { voters: { name: string; avatar_url?: string | 
   );
 }
 
-export default function VoteControl({
+function VoteControl({
   kind,
   id,
   canVote,
@@ -98,6 +98,7 @@ export default function VoteControl({
   const [hoverUp, setHoverUp] = useState(false);
   const [hoverDown, setHoverDown] = useState(false);
   const votersFetched = useRef(false);
+  const prevInitial = useRef(initial);
 
   const path = kind === 'idea' ? `ideas/${id}` : `events/${id}`;
 
@@ -122,8 +123,14 @@ export default function VoteControl({
     if (!initial) fetchTally();
   }, [initial, fetchTally]);
 
+  // Sync from parent only when the actual values change (not just object reference).
+  // Prevents hover-driven re-renders in Timeline from resetting the optimistic update.
   useEffect(() => {
-    if (initial) setTally(initial);
+    if (!initial) return;
+    const prev = prevInitial.current;
+    prevInitial.current = initial;
+    if (prev && prev.up === initial.up && prev.down === initial.down && prev.my_vote === initial.my_vote) return;
+    setTally(initial);
   }, [initial]);
 
   const cast = useCallback(async (want: 1 | -1) => {
@@ -231,3 +238,13 @@ export default function VoteControl({
     </div>
   );
 }
+
+export default memo(VoteControl, (prev, next) =>
+  prev.kind === next.kind &&
+  prev.id === next.id &&
+  prev.canVote === next.canVote &&
+  prev.size === next.size &&
+  prev.initial?.up === next.initial?.up &&
+  prev.initial?.down === next.initial?.down &&
+  prev.initial?.my_vote === next.initial?.my_vote
+);

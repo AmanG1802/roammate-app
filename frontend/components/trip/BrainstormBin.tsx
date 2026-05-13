@@ -299,7 +299,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
             {openItem && (
               <div
                 className="absolute left-0 right-0 z-20"
-                style={{ top: popoverTop, height: 280 }}
+                style={{ top: popoverTop }}
               >
                 <DetailPopover item={openItem} onClose={() => setOpenId(null)} onRetry={() => handleRetry(openItem.id)} retrying={retryingIds.has(openItem.id)} />
               </div>
@@ -364,7 +364,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
 function DetailPopover({ item, onClose, onRetry, retrying }: { item: BrainstormItem; onClose: () => void; onRetry?: () => void; retrying?: boolean }) {
   const accent = categoryAccent(item.category);
   return (
-    <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-xl flex flex-col overflow-hidden" style={{ maxHeight: 280 }}>
       {/* Popover header */}
       <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-slate-100 shrink-0">
         <div className="flex items-start gap-2 min-w-0">
@@ -400,23 +400,25 @@ function DetailPopover({ item, onClose, onRetry, retrying }: { item: BrainstormI
           </div>
         )}
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {SHOW_RATING && item.rating != null && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100">
-              <Star className="w-3 h-3 text-amber-400" /> {item.rating}
-            </span>
-          )}
-          {item.time_category && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-100">
-              <Clock className="w-3 h-3 text-slate-400" /> {item.time_category}
-            </span>
-          )}
-          {item.category && (
-            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${accent.badge}`}>
-              {item.category}
-            </span>
-          )}
-        </div>
+        {((SHOW_RATING && item.rating != null) || !!item.time_category || !!item.category) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {SHOW_RATING && item.rating != null && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100">
+                <Star className="w-3 h-3 text-amber-400" /> {item.rating}
+              </span>
+            )}
+            {item.time_category && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-100">
+                <Clock className="w-3 h-3 text-slate-400" /> {item.time_category}
+              </span>
+            )}
+            {item.category && (
+              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${accent.badge}`}>
+                {item.category}
+              </span>
+            )}
+          </div>
+        )}
 
         {item.description && (
           <p className="text-sm font-medium text-slate-500 leading-relaxed">{item.description}</p>
