@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTripStore, Event, Idea, legsKey, RouteLeg, reEnrichItem } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { format } from 'date-fns';
-import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
+import { Clock, MapPin, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 import { categoryAccent } from '@/lib/categoryColors';
@@ -395,9 +395,6 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
         <h2 className="text-xl font-black text-slate-900 tracking-tight">
           {filterDay ? format(filterDay, 'EEEE, MMM d') : 'Full Itinerary'}
         </h2>
-        <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors">
-          <MoreVertical className="w-4 h-4" />
-        </button>
       </div>
 
       {visibleEvents.length === 0 && isLoadingEvents ? (

@@ -124,6 +124,11 @@ function VoteControl({
     if (!initial) fetchTally();
   }, [initial, fetchTally]);
 
+  useEffect(() => {
+    votersFetched.current = false;
+    setVoters(null);
+  }, [path]);
+
   // Sync from parent only when the actual values change (not just object reference).
   // Prevents hover-driven re-renders in Timeline from resetting the optimistic update.
   useEffect(() => {

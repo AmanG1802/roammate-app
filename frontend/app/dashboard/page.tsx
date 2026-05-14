@@ -14,6 +14,8 @@ import DashboardTripPlanner from '@/components/dashboard/DashboardTripPlanner';
 import UserMenu from '@/components/UserMenu';
 import PersonaSoftPrompt from '@/components/PersonaSoftPrompt';
 import OnboardingPersonaModal from '@/components/OnboardingPersonaModal';
+import { useToast } from '@/components/ui/Toast';
+import { toastBus } from '@/lib/toast-bus';
 
 type Section = 'dashboard' | 'trips' | 'invitations' | 'groups';
 
@@ -24,6 +26,8 @@ function getInitials(name: string): string {
 export default function DashboardPage() {
   const { user } = useAuth(true);
   const router = useRouter();
+  const toast = useToast();
+  const [tripsError, setTripsError] = useState(false);
   const [section, setSection] = useState<Section>('dashboard');
   const [trips, setTrips] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,42 +65,40 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  const handlePersonaComplete = async (personas: string[]) => {
+  const savePersonas = async (personas: string[]): Promise<boolean> => {
     const token = getToken();
     const API = process.env.NEXT_PUBLIC_API_URL ?? '';
     try {
-      await fetch(`${API}/users/me/personas`, {
+      const res = await fetch(`${API}/users/me/personas`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ personas }),
       });
+      if (!res.ok) throw new Error(`status ${res.status}`);
       const saved = localStorage.getItem('user');
       if (saved) {
         const u = JSON.parse(saved);
         localStorage.setItem('user', JSON.stringify({ ...u, personas }));
       }
-    } catch {}
-    setShowPersonaModal(false);
+      return true;
+    } catch {
+      toast.show("Couldn't save your preferences — please try again", { kind: 'error' });
+      return false;
+    }
+  };
+
+  const handlePersonaComplete = async (personas: string[]) => {
+    const ok = await savePersonas(personas);
+    if (ok) setShowPersonaModal(false);
   };
 
   const handlePersonaSkip = async () => {
-    const token = getToken();
-    const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-    try {
-      await fetch(`${API}/users/me/personas`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personas: [] }),
-      });
-      const saved = localStorage.getItem('user');
-      if (saved) {
-        const u = JSON.parse(saved);
-        localStorage.setItem('user', JSON.stringify({ ...u, personas: [] }));
-      }
-    } catch {}
-    setShowPersonaModal(false);
-    setShowSkipToast(true);
-    setTimeout(() => setShowSkipToast(false), 4000);
+    const ok = await savePersonas([]);
+    if (ok) {
+      setShowPersonaModal(false);
+      setShowSkipToast(true);
+      setTimeout(() => setShowSkipToast(false), 4000);
+    }
   };
 
   const openCreateModal = () => {
@@ -127,6 +129,7 @@ export default function DashboardPage() {
   }, []);
 
   const fetchTrips = async (signal?: AbortSignal) => {
+    setTripsError(false);
     try {
       const token = getToken();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
@@ -139,12 +142,17 @@ export default function DashboardPage() {
         router.push('/login');
         return;
       }
-      if (response.ok) setTrips(await response.json());
+      if (response.ok) {
+        setTrips(await response.json());
+      } else {
+        setTripsError(true);
+      }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       console.error(err);
+      setTripsError(true);
     } finally {
-      if (!signal?.aborted) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -175,22 +183,35 @@ export default function DashboardPage() {
       if (res.ok) {
         setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
         onTripMutated();
+        toast.show('Invitation accepted', { kind: 'success' });
+      } else {
+        toast.show("Couldn't accept invitation — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally { setRespondingTo(null); }
+    } catch {
+      toast.show('Network error — could not accept invitation', { kind: 'error' });
+    } finally {
+      setRespondingTo(null);
+    }
   };
 
   const handleDeclineInvite = async (memberId: number) => {
     setRespondingTo(memberId);
     try {
       const token = getToken();
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/decline`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/decline`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
-      setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
-    } catch { /* ignore */ }
-    finally { setRespondingTo(null); }
+      if (res.ok || res.status === 204) {
+        setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
+      } else {
+        toast.show("Couldn't decline invitation — please try again", { kind: 'error' });
+      }
+    } catch {
+      toast.show('Network error — could not decline invitation', { kind: 'error' });
+    } finally {
+      setRespondingTo(null);
+    }
   };
 
   const handleCreateTrip = async (e: React.FormEvent) => {
@@ -367,6 +388,8 @@ export default function DashboardPage() {
                 <TripGrid
                   trips={currentAndUpcoming.slice(0, 6)}
                   isLoading={isLoading}
+                  loadError={tripsError}
+                  onRetry={() => fetchTrips()}
                   onNewTrip={openCreateModal}
                   onTripUpdate={onTripMutated}
                 />
@@ -411,6 +434,8 @@ export default function DashboardPage() {
                 <TripGrid
                   trips={filteredTrips}
                   isLoading={isLoading}
+                  loadError={tripsError}
+                  onRetry={() => fetchTrips()}
                   onNewTrip={openCreateModal}
                   onTripUpdate={onTripMutated}
                   emptyLabel={
@@ -599,6 +624,8 @@ export default function DashboardPage() {
 function TripGrid({
   trips,
   isLoading,
+  loadError = false,
+  onRetry,
   onNewTrip,
   onTripUpdate,
   emptyLabel,
@@ -606,6 +633,8 @@ function TripGrid({
 }: {
   trips: any[];
   isLoading: boolean;
+  loadError?: boolean;
+  onRetry?: () => void;
   onNewTrip: () => void;
   onTripUpdate?: () => void;
   emptyLabel?: string;
@@ -656,9 +685,12 @@ function TripGrid({
       });
       if (res.ok || res.status === 204) {
         onTripUpdate?.();
+      } else {
+        toastBus("Couldn't delete trip — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally {
+    } catch {
+      toastBus('Network error — could not delete trip', { kind: 'error' });
+    } finally {
       setDeleteLoading(false);
       setDeleteConfirm(null);
     }
@@ -673,9 +705,14 @@ function TripGrid({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: editingNameVal.trim() }),
       });
-      if (res.ok) onTripUpdate?.();
-    } catch { /* ignore */ }
-    finally { setEditingNameId(null); }
+      if (res.ok) {
+        onTripUpdate?.();
+      } else {
+        toastBus("Couldn't rename trip", { kind: 'error' });
+      }
+    } catch {
+      toastBus('Network error — name not updated', { kind: 'error' });
+    } finally { setEditingNameId(null); }
   }, [editingNameVal, onTripUpdate]);
 
   const handleSaveDate = useCallback(async (tripId: number) => {
@@ -687,15 +724,43 @@ function TripGrid({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ start_date: `${editingDateVal}T00:00:00` }),
       });
-      if (res.ok) onTripUpdate?.();
-    } catch { /* ignore */ }
-    finally { setEditingDateId(null); }
+      if (res.ok) {
+        onTripUpdate?.();
+      } else {
+        toastBus("Couldn't update start date", { kind: 'error' });
+      }
+    } catch {
+      toastBus('Network error — date not updated', { kind: 'error' });
+    } finally { setEditingDateId(null); }
   }, [editingDateVal, onTripUpdate]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-44 rounded-2xl bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 animate-pulse border border-slate-200/60"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <AlertTriangle className="w-10 h-10 text-rose-500 mb-3" />
+        <p className="text-sm font-black text-slate-800 mb-1">Couldn&apos;t load your trips</p>
+        <p className="text-xs text-slate-500 mb-4">Check your connection and try again.</p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors"
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }

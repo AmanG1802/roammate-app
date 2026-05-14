@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTripStore } from '@/lib/store';
 import { getToken } from '@/lib/auth';
+import { toastBus } from '@/lib/toast-bus';
 import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check } from 'lucide-react';
 import ConciergeChatDrawer from './ConciergeChatDrawer';
 
@@ -12,6 +13,14 @@ export default function ConciergeActionBar() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showLateMenu, setShowLateMenu] = useState(false);
   const [rippleToast, setRippleToast] = useState<string | null>(null);
+  const rippleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rippleTimerRef.current) clearTimeout(rippleTimerRef.current);
+    };
+  }, []);
+
   const {
     activeTripId, events, setEvents, loadEvents,
     conciergeOpen, conciergePreAction, openConcierge, closeConcierge,
@@ -47,17 +56,13 @@ export default function ConciergeActionBar() {
           ? `Shifted ${updated.length} event${updated.length > 1 ? 's' : ''} by +${minutes} min`
           : 'No events needed adjustment';
         setRippleToast(msg);
-        setTimeout(() => setRippleToast(null), 3000);
+        if (rippleTimerRef.current) clearTimeout(rippleTimerRef.current);
+        rippleTimerRef.current = setTimeout(() => setRippleToast(null), 3000);
+      } else {
+        toastBus("Couldn't shift schedule — please try again", { kind: 'error' });
       }
     } catch {
-      // Fallback: optimistic local shift
-      setEvents(
-        events.map((e) => ({
-          ...e,
-          start_time: e.start_time ? new Date(e.start_time.getTime() + minutes * 60_000) : null,
-          end_time: e.end_time ? new Date(e.end_time.getTime() + minutes * 60_000) : null,
-        }))
-      );
+      toastBus('Network error — schedule not updated', { kind: 'error' });
     } finally {
       setIsProcessing(false);
     }

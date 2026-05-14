@@ -19,6 +19,7 @@ import GoogleMap from '@/components/map/GoogleMap';
 import ConciergeActionBar from '@/components/trip/ConciergeActionBar';
 import { useTripStore, TripDay } from '@/lib/store';
 import { getToken } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { addDays, format, isToday, parseISO } from 'date-fns';
 
 type Mode = 'brainstorm' | 'plan' | 'concierge' | 'people';
@@ -36,6 +37,7 @@ function roleMeta(role: string) {
 function TripPlannerPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const toast = useToast();
   const tripId = searchParams.get('id');
   const rawMode = searchParams.get('mode') as Mode | null;
   const initialMode: Mode =
@@ -67,18 +69,27 @@ function TripPlannerPageContent() {
   const [removeLoading, setRemoveLoading] = useState(false);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [membersError, setMembersError] = useState(false);
   const fetchMembers = useCallback(async () => {
     if (!tripId) return;
     const token = getToken();
     if (!token) return;
     setMembersLoading(true);
+    setMembersError(false);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setMembers(await res.json());
-    } catch { /* keep current */ }
-    finally { setMembersLoading(false); }
+      if (res.ok) {
+        setMembers(await res.json());
+      } else {
+        setMembersError(true);
+      }
+    } catch {
+      setMembersError(true);
+    } finally {
+      setMembersLoading(false);
+    }
   }, [tripId]);
 
   useEffect(() => {
@@ -137,14 +148,18 @@ function TripPlannerPageContent() {
       });
       if (res.ok) {
         fetchMembers();
+        toast.show('Role updated', { kind: 'success' });
+      } else {
+        toast.show("Couldn't update role — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally {
+    } catch {
+      toast.show('Network error — role not updated', { kind: 'error' });
+    } finally {
       setRoleUpdateLoading(false);
       setEditingRoleFor(null);
       setPendingRole('');
     }
-  }, [tripId, fetchMembers]);
+  }, [tripId, fetchMembers, toast]);
 
   const handleRemoveMember = useCallback(async (memberId: number) => {
     if (!tripId) return;
@@ -157,13 +172,17 @@ function TripPlannerPageContent() {
       });
       if (res.ok || res.status === 204) {
         fetchMembers();
+        toast.show('Member removed', { kind: 'success' });
+      } else {
+        toast.show("Couldn't remove member — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally {
+    } catch {
+      toast.show('Network error — member not removed', { kind: 'error' });
+    } finally {
       setRemoveLoading(false);
       setRemoveConfirm(null);
     }
-  }, [tripId, fetchMembers]);
+  }, [tripId, fetchMembers, toast]);
 
   const refreshTripData = useCallback(async () => {
     if (!tripId) return;

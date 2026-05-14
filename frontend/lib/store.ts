@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getToken } from '@/lib/auth';
+import { toastBus } from '@/lib/toast-bus';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -294,14 +295,16 @@ export const useTripStore = create<TripState>((set, get) => ({
               headers: { Authorization: `Bearer ${token}` },
             });
           } catch {
-            // Deletion failed; idea may reappear on reload but event is safe.
+            toastBus("Saved to your timeline, but couldn't clear it from the bin", { kind: 'info' });
           }
         }
       } else {
         set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events, dayDate ?? null)]) }));
+        toastBus("Couldn't save to the server — kept locally", { kind: 'error' });
       }
     } catch {
       set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events, dayDate ?? null)]) }));
+      toastBus("Network error — saved locally only", { kind: 'error' });
     }
   },
 
@@ -352,16 +355,18 @@ export const useTripStore = create<TripState>((set, get) => ({
                 : i
             ),
           }));
-          // Increment timestamp so IdeaBin re-fetches to hydrate enrichment fields
           set((s) => ({ ideasLastUpdated: s.ideasLastUpdated + 1 }));
+        } else {
+          toastBus("Couldn't move event back to the bin", { kind: 'error' });
         }
       } catch {
-        // Optimistic state still reflects user intent
+        toastBus('Network error — change may not be saved', { kind: 'error' });
       }
     }
   },
 
   updateEventTime: async (eventId, startTime, endTime, token) => {
+    const prev = get().events.find((e) => e.id === eventId);
     set((s) => ({
       events: sortEvents(
         s.events.map((e) =>
@@ -372,7 +377,7 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     if (token) {
       try {
-        await fetch(`${API}/events/${eventId}`, {
+        const res = await fetch(`${API}/events/${eventId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
@@ -380,8 +385,18 @@ export const useTripStore = create<TripState>((set, get) => ({
             end_time: endTime ? endTime.toISOString() : null,
           }),
         });
+        if (!res.ok) throw new Error(`status ${res.status}`);
       } catch {
-        // Silently fail; local state is already updated
+        if (prev) {
+          set((s) => ({
+            events: sortEvents(
+              s.events.map((e) =>
+                e.id === eventId ? { ...e, start_time: prev.start_time, end_time: prev.end_time } : e
+              )
+            ),
+          }));
+        }
+        toastBus("Couldn't update event time — reverted", { kind: 'error' });
       }
     }
   },
@@ -400,37 +415,44 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     if (token) {
       try {
-        await fetch(`${API}/events/${eventId}`, {
+        const res = await fetch(`${API}/events/${eventId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ is_skipped: newSkipped }),
         });
+        if (!res.ok) throw new Error(`status ${res.status}`);
       } catch {
-        // Revert on failure
         set((s) => ({
           events: s.events.map((e) =>
             e.id === eventId ? { ...e, is_skipped: !newSkipped } : e
           ),
         }));
+        toastBus(newSkipped ? "Couldn't skip event — reverted" : "Couldn't restore event — reverted", { kind: 'error' });
       }
     }
   },
 
   reorderEvent: async (eventId, newSortOrder, token) => {
-    // Update sort_order without re-sorting — manual drag order must be preserved.
+    const prevOrder = get().events.find((e) => e.id === eventId)?.sort_order;
     set((s) => ({
       events: s.events.map((e) => (e.id === eventId ? { ...e, sort_order: newSortOrder } : e)),
     }));
 
     if (token) {
       try {
-        await fetch(`${API}/events/${eventId}`, {
+        const res = await fetch(`${API}/events/${eventId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ sort_order: newSortOrder }),
         });
+        if (!res.ok) throw new Error(`status ${res.status}`);
       } catch {
-        // Silently fail
+        if (typeof prevOrder === 'number') {
+          set((s) => ({
+            events: s.events.map((e) => (e.id === eventId ? { ...e, sort_order: prevOrder } : e)),
+          }));
+        }
+        toastBus("Couldn't save the new order — reverted", { kind: 'error' });
       }
     }
   },
@@ -492,6 +514,7 @@ export const useTripStore = create<TripState>((set, get) => ({
   },
 
   deleteTripDay: async (tripId, dayId, token, itemsAction = 'bin') => {
+    let success = false;
     try {
       const dayDate = get().tripDays.find((d) => d.id === dayId)?.date;
       const res = await fetch(`${API}/trips/${tripId}/days/${dayId}?items_action=${itemsAction}`, {
@@ -499,6 +522,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok || res.status === 204) {
+        success = true;
         if (dayDate) {
           set((s) => {
             const nextLegs = { ...s.legsByDay };
@@ -524,7 +548,10 @@ export const useTripStore = create<TripState>((set, get) => ({
         }
       }
     } catch {
-      // keep current state
+      // handled below
+    }
+    if (!success) {
+      toastBus("Couldn't delete that day — please try again", { kind: 'error' });
     }
   },
 
