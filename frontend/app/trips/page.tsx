@@ -18,6 +18,7 @@ import GoogleMap from '@/components/map/GoogleMap';
 // Collaborators header removed — invite flow lives in People tab now
 import ConciergeActionBar from '@/components/trip/ConciergeActionBar';
 import { useTripStore, TripDay } from '@/lib/store';
+import { getToken } from '@/lib/auth';
 import { addDays, format, isToday, parseISO } from 'date-fns';
 
 type Mode = 'brainstorm' | 'plan' | 'concierge' | 'people';
@@ -68,7 +69,7 @@ function TripPlannerPageContent() {
 
   const fetchMembers = useCallback(async () => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     setMembersLoading(true);
     try {
@@ -100,7 +101,7 @@ function TripPlannerPageContent() {
     if (!inviteEmail.trim() || !inviteRole || !tripId) return;
     setInviteStatus('loading');
     setInviteError('');
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/invite`, {
         method: 'POST',
@@ -127,7 +128,7 @@ function TripPlannerPageContent() {
   const handleRoleChange = useCallback(async (memberId: number, newRole: string) => {
     if (!tripId) return;
     setRoleUpdateLoading(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members/${memberId}/role`, {
         method: 'PATCH',
@@ -148,7 +149,7 @@ function TripPlannerPageContent() {
   const handleRemoveMember = useCallback(async (memberId: number) => {
     if (!tripId) return;
     setRemoveLoading(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members/${memberId}`, {
         method: 'DELETE',
@@ -164,22 +165,23 @@ function TripPlannerPageContent() {
     }
   }, [tripId, fetchMembers]);
 
-  const refreshTripData = useCallback(() => {
+  const refreshTripData = useCallback(async () => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data) setTrip(data); })
-      .catch(() => {});
-
-    loadTripDays(tripId, token);
-    loadEvents(tripId, token);
-    fetchMembers();
+    await Promise.all([
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => { if (data) setTrip(data); })
+        .catch(() => {}),
+      loadTripDays(tripId, token),
+      loadEvents(tripId, token),
+      fetchMembers(),
+    ]);
   }, [tripId, loadTripDays, loadEvents, fetchMembers]);
 
   useEffect(() => {
@@ -219,7 +221,7 @@ function TripPlannerPageContent() {
 
   const handleAddDay = useCallback(async () => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
 
     let nextDate: Date;
@@ -251,7 +253,7 @@ function TripPlannerPageContent() {
 
     const dayHasEvents = events.some((e) => e.day_date === dayToDelete.date);
     if (!dayHasEvents) {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) return;
       mutatingRef.current = true;
       try {
@@ -273,7 +275,7 @@ function TripPlannerPageContent() {
 
   const executeDeleteDay = useCallback(async (itemsAction: 'bin' | 'delete') => {
     if (!tripId || !deleteConfirm) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
 
     mutatingRef.current = true;
@@ -302,6 +304,11 @@ function TripPlannerPageContent() {
               up: r.up ?? 0,
               down: r.down ?? 0,
               my_vote: r.my_vote ?? 0,
+              category: r.category ?? null,
+              photo_url: r.photo_url ?? null,
+              rating: r.rating ?? null,
+              address: r.address ?? null,
+              description: r.description ?? null,
             })));
           }
         } catch { /* ignore */ }

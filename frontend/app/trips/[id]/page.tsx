@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
+import { getToken } from '@/lib/auth';
 
 // ── Framer Motion variants ────────────────────────────────────────────────────
 // "Slight cinematic": elements fade-up with a snappy stagger (~600ms total),
@@ -108,7 +109,7 @@ function TripHubContent() {
   // ── Fetch trip + members ────────────────────────────────────────────────────
   useEffect(() => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) { router.push('/login'); return; }
 
     const fetchData = async () => {
@@ -154,7 +155,7 @@ function TripHubContent() {
     if (!inviteEmail.trim() || !inviteRole) return;
     setInviteStatus('loading');
     setInviteError('');
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/invite`,
@@ -185,7 +186,7 @@ function TripHubContent() {
   // ── Save start date ────────────────────────────────────────────────────────
   const handleSaveDate = async () => {
     if (!dateValue) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`,

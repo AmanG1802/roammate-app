@@ -5,6 +5,7 @@ import { Lightbulb, Trash2, Loader2, MapPin, Info, Star, Clock, X, PackagePlus }
 import { categoryAccent } from '@/lib/categoryColors';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 import { reEnrichItem } from '@/lib/store';
+import { getToken } from '@/lib/auth';
 
 export type BrainstormItem = {
   id: number;
@@ -19,7 +20,7 @@ export type BrainstormItem = {
 };
 
 function authHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

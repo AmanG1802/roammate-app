@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardR
 import { useRouter } from 'next/navigation';
 import { Bell, Check, Loader2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getToken } from '@/lib/auth';
 
 type NotificationItem = {
   id: number;
@@ -22,7 +23,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 const POLL_MS = 30_000;
 
 function auth(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

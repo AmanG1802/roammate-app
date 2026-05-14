@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, Loader2, Rocket, X, Compass, AlertTriangle } from 'lucide-react';
+import { getToken } from '@/lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Witty messages shown while the AI is planning. Cycled every ~1.8s so the
@@ -35,7 +36,7 @@ type Preview = {
 };
 
 function authHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

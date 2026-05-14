@@ -8,13 +8,14 @@ import {
   ArrowRight, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { useTripStore } from '@/lib/store';
+import { getToken } from '@/lib/auth';
 import clsx from 'clsx';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 function authHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token
     ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
     : { 'Content-Type': 'application/json' };
@@ -239,7 +240,7 @@ export default function ConciergeChatDrawer({
 
   const refreshEvents = async () => {
     if (activeTripId) {
-      const token = localStorage.getItem('token') || '';
+      const token = getToken() ?? '';
       await loadEvents(activeTripId, token);
     }
   };

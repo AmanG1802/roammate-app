@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { getToken } from '@/lib/auth';
 import Link from 'next/link';
 import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -61,7 +62,7 @@ export default function DashboardPage() {
   }, [user]);
 
   const handlePersonaComplete = async (personas: string[]) => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const API = process.env.NEXT_PUBLIC_API_URL ?? '';
     try {
       await fetch(`${API}/users/me/personas`, {
@@ -79,7 +80,7 @@ export default function DashboardPage() {
   };
 
   const handlePersonaSkip = async () => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const API = process.env.NEXT_PUBLIC_API_URL ?? '';
     try {
       await fetch(`${API}/users/me/personas`, {
@@ -107,20 +108,30 @@ export default function DashboardPage() {
 
 
   const onTripMutated = useCallback(() => {
-    fetchTrips();
+    fetchTrips(); // no signal — fire-and-forget after user action
     refreshDashboard();
   }, [refreshDashboard]);
 
   useEffect(() => {
-    fetchTrips();
-    fetchInvitations();
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const init = async () => {
+      await Promise.all([
+        fetchTrips(signal),
+        fetchInvitations(signal),
+      ]);
+    };
+    init();
+    return () => controller.abort();
   }, []);
 
-  const fetchTrips = async () => {
+  const fetchTrips = async (signal?: AbortSignal) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal,
       });
       if (response.status === 401) {
         localStorage.removeItem('token');
@@ -130,28 +141,33 @@ export default function DashboardPage() {
       }
       if (response.ok) setTrips(await response.json());
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       console.error(err);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
   };
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = async (signal?: AbortSignal) => {
     setInvitationsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/pending`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal,
       });
       if (res.ok) setInvitations(await res.json());
-    } catch { /* keep current */ }
-    finally { setInvitationsLoading(false); }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+    } finally {
+      if (!signal?.aborted) setInvitationsLoading(false);
+    }
   };
 
   const handleAcceptInvite = async (memberId: number) => {
     setRespondingTo(memberId);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/accept`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -167,7 +183,7 @@ export default function DashboardPage() {
   const handleDeclineInvite = async (memberId: number) => {
     setRespondingTo(memberId);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/decline`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -183,7 +199,7 @@ export default function DashboardPage() {
     setIsCreating(true);
     setCreateError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const body: Record<string, unknown> = { name: newTripName };
       body.start_date = `${newTripStartDate}T00:00:00`;
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
@@ -621,7 +637,7 @@ function TripGrid({
     if (warmedRef.current.has(tripId)) return;
     warmedRef.current.add(tripId);
     try { router.prefetch(`/trips/${tripId}`); } catch { /* ignore */ }
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = getToken();
     if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
     const base = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -633,7 +649,7 @@ function TripGrid({
   const handleDeleteTrip = useCallback(async (tripId: number) => {
     setDeleteLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -651,7 +667,7 @@ function TripGrid({
   const handleSaveName = useCallback(async (tripId: number) => {
     if (!editingNameVal.trim()) { setEditingNameId(null); return; }
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -665,7 +681,7 @@ function TripGrid({
   const handleSaveDate = useCallback(async (tripId: number) => {
     if (!editingDateVal) { setEditingDateId(null); return; }
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

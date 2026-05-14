@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, RotateCcw, Send, Sparkles, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { getToken } from '@/lib/auth';
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string; created_at: string };
 
 function authHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -26,13 +27,16 @@ export default function BrainstormChat({
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/messages`, {
       headers: authHeaders(),
       cache: 'no-store',
+      signal: controller.signal,
     })
       .then((r) => (r.ok ? r.json() : []))
       .then((data: Msg[]) => setMessages(data))
-      .catch(() => {});
+      .catch((err) => { if (err?.name !== 'AbortError') {} });
+    return () => controller.abort();
   }, [tripId]);
 
   useEffect(() => {
@@ -61,7 +65,25 @@ export default function BrainstormChat({
       });
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.history);
+        const history: Msg[] = data.history;
+        if (retryMsg) {
+          // Retry had no optimistic message; use full history to restore state
+          setMessages(history);
+        } else {
+          // Normal send: optimistic user message already in state.
+          // Swap it for the server's real user message + append the assistant reply.
+          const assistantMsg = history[history.length - 1];
+          const realUserMsg = history[history.length - 2];
+          if (assistantMsg?.role === 'assistant') {
+            setMessages((prev) => [
+              ...prev.slice(0, -1),
+              ...(realUserMsg?.role === 'user' ? [realUserMsg] : []),
+              assistantMsg,
+            ]);
+          } else {
+            setMessages(history);
+          }
+        }
       } else {
         setFailedMessage(msg);
       }

@@ -10,6 +10,7 @@ import {
 import { useTripStore, Event } from '@/lib/store';
 import type { RouteLeg } from '@/lib/store';
 import { categoryPinColor, categoryAccent } from '@/lib/categoryColors';
+import { getToken } from '@/lib/auth';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { format } from 'date-fns';
 
@@ -266,7 +267,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
   // ── Auto-fetch persisted route on mount / day switch ─────────────────
   useEffect(() => {
     if (!tripId || !currentDayKey) return;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = getToken();
     if (!token) return;
 
     let cancelled = false;
@@ -714,7 +715,7 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
       return;
     }
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = getToken();
     if (!token) {
       setToast({ kind: 'error', message: 'Sign in required.' });
       return;

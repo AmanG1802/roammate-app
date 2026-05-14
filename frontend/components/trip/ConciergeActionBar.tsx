@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTripStore } from '@/lib/store';
+import { getToken } from '@/lib/auth';
 import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check } from 'lucide-react';
 import ConciergeChatDrawer from './ConciergeChatDrawer';
 
@@ -21,7 +22,7 @@ export default function ConciergeActionBar() {
     if (!activeTripId || events.length === 0) return;
     setIsProcessing(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/events/ripple/${activeTripId}`,
         {

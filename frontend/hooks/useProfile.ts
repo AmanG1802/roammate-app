@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { getToken } from '@/lib/auth';
 
 export type ProfileData = {
   id: number;
@@ -30,8 +31,6 @@ export function useProfile() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const getToken = () => (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
 
   const fetchProfile = useCallback(async () => {
     const token = getToken();

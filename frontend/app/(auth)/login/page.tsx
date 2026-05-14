@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, User, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { setToken } from '@/lib/auth';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -43,6 +44,7 @@ function LoginPageContent() {
         setPassword('');
       } else {
         localStorage.setItem('token', data.access_token);
+        setToken(data.access_token);
         const userRes = await fetch(`${API}/users/me`, {
           headers: { Authorization: `Bearer ${data.access_token}` },
         });

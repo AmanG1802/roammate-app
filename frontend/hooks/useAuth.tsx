@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { setToken } from '@/lib/auth';
 
 function clearSession() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  setToken(null);
 }
 
 export default function useAuth(requireAuth: boolean = true) {

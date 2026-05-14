@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getToken } from '@/lib/auth';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -58,6 +59,11 @@ export interface Idea {
   up?: number;
   down?: number;
   my_vote?: number;
+  category?: string | null;
+  photo_url?: string | null;
+  rating?: number | null;
+  address?: string | null;
+  description?: string | null;
 }
 
 export interface TripDay {
@@ -139,6 +145,9 @@ interface TripState {
   setRouteMeta: (tripId: string, dayDate: string, meta: { fingerprint: string; computedAt: string; isStale: boolean }) => void;
   clearRouteMetaForDay: (tripId: string, dayDate: string) => void;
 
+  /** Timestamp incremented whenever the idea list should be re-fetched. */
+  ideasLastUpdated: number;
+
   /** Map-Timeline bidirectional highlight. */
   hoveredEventId: string | null;
   selectedEventId: string | null;
@@ -199,7 +208,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     { id: '2', name: 'Sarah', color: '#ec4899' },
   ],
 
-  setActiveTrip: (id) => set({ activeTripId: id }),
+  setActiveTrip: (id) => set({ activeTripId: id, events: [], ideas: [], tripDays: [] }),
   setIdeas: (ideas) => set({ ideas }),
   setEvents: (events) => set({ events: sortEvents(events) }),
   setEventsRaw: (events) => set({ events }),
@@ -343,10 +352,8 @@ export const useTripStore = create<TripState>((set, get) => ({
                 : i
             ),
           }));
-          // Nudge IdeaBin to re-fetch so enrichment (photo, description, category, etc.) hydrates
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('idea-bin:refresh'));
-          }
+          // Increment timestamp so IdeaBin re-fetches to hydrate enrichment fields
+          set((s) => ({ ideasLastUpdated: s.ideasLastUpdated + 1 }));
         }
       } catch {
         // Optimistic state still reflects user intent
@@ -541,6 +548,8 @@ export const useTripStore = create<TripState>((set, get) => ({
       return { routeMetaByDay: next };
     }),
 
+  ideasLastUpdated: 0,
+
   hoveredEventId: null,
   selectedEventId: null,
   setHoveredEventId: (id) => set({ hoveredEventId: id }),
@@ -567,7 +576,7 @@ export interface ReEnrichResult {
 }
 
 export async function reEnrichItem(kind: ReEnrichKind, itemId: number): Promise<ReEnrichResult> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   const res = await fetch(`${API}/trips/enrich`, {
     method: 'POST',
     headers: {

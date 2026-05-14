@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
+import { getToken } from '@/lib/auth';
 
 type Kind = 'idea' | 'event';
 
@@ -11,7 +12,7 @@ type VoterList = { up_voters: { name: string; avatar_url?: string | null }[]; do
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 function authHeaders(): Record<string, string> {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const t = getToken();
   return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTripStore, Event, Idea, legsKey, RouteLeg, reEnrichItem } from '@/lib/store';
+import { getToken } from '@/lib/auth';
 import { format } from 'date-fns';
 import { Clock, MapPin, MoreVertical, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -250,6 +251,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [tooltipId, setTooltipId] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
 
   const handleRetry = useCallback(async (eventId: string) => {
     setRetryingIds((prev) => new Set(prev).add(eventId));
@@ -280,9 +282,10 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
 
   useEffect(() => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
-    loadEvents(tripId, token);
+    setIsLoadingEvents(true);
+    loadEvents(tripId, token).finally(() => setIsLoadingEvents(false));
   }, [tripId, loadEvents]);
 
   // Scroll the matching card into view when a marker is clicked on the map
@@ -319,7 +322,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     const ideaId = e.dataTransfer.getData('ideaId');
     if (!ideaId) return;
     if (noDaysExist) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const idea = ideas.find((i: Idea) => i.id === ideaId);
     const startTime = pinTimeToDay(idea?.start_time, filterDay);
     moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
@@ -339,7 +342,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     e.preventDefault();
     e.stopPropagation();
 
-    const token = localStorage.getItem('token');
+    const token = getToken();
 
     const ideaId = e.dataTransfer.getData('ideaId');
     if (ideaId) {
@@ -397,7 +400,23 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
         </button>
       </div>
 
-      {visibleEvents.length === 0 ? (
+      {visibleEvents.length === 0 && isLoadingEvents ? (
+        <div className="space-y-3 relative before:absolute before:left-[17px] before:top-4 before:bottom-4 before:w-0.5 before:bg-indigo-100/40">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="ml-10 p-3 bg-white border border-slate-100 rounded-2xl animate-pulse flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="h-3 bg-slate-200 rounded w-2/3" />
+                <div className="h-5 bg-slate-100 rounded-md w-16" />
+              </div>
+              <div className="h-2.5 bg-slate-100 rounded w-1/3" />
+              <div className="flex items-center gap-2 mt-1">
+                <div className="h-4 bg-slate-100 rounded-md w-12" />
+                <div className="h-4 bg-slate-100 rounded-md w-20" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : visibleEvents.length === 0 ? (
         <div
           data-testid="empty-drop-zone"
           className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 rounded-[2rem] opacity-60"
@@ -530,7 +549,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                               title="Restore this event"
                               data-testid={`unskip-${event.id}`}
                               onClick={() => {
-                                const token = localStorage.getItem('token');
+                                const token = getToken();
                                 toggleEventSkip(event.id, token);
                               }}
                               className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 uppercase tracking-tighter transition-colors"
@@ -543,7 +562,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                               title="Send back to Idea Bin"
                               data-testid={`move-to-bin-${event.id}`}
                               onClick={() => {
-                                const token = localStorage.getItem('token');
+                                const token = getToken();
                                 moveEventToIdea(event.id, tripId, token);
                               }}
                               className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
@@ -560,7 +579,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                         <TimeEditor
                           event={event}
                           onConfirm={(start, end) => {
-                            const token = localStorage.getItem('token');
+                            const token = getToken();
                             updateEventTime(event.id, start, end, token);
                             setEditingId(null);
                           }}

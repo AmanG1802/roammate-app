@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTripStore, reEnrichItem } from '@/lib/store';
+import { getToken } from '@/lib/auth';
 import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
@@ -64,11 +65,11 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   const [isIngesting, setIsIngesting] = useState(false);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [editingTimeVal, setEditingTimeVal] = useState('');
-  const [extras, setExtras] = useState<Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null; address?: string | null; category?: string | null }>>({});
   const [openId, setOpenId] = useState<string | null>(null);
+  const [isLoadingIdeas, setIsLoadingIdeas] = useState(true);
   const [popoverTop, setPopoverTop] = useState<number>(0);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const { ideas, addIdea, setIdeas, removeIdea } = useTripStore();
+  const { ideas, addIdea, setIdeas, removeIdea, ideasLastUpdated } = useTripStore();
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
 
   const handleRetry = useCallback(async (ideaId: string) => {
@@ -82,6 +83,11 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
           place_id: enriched.place_id ?? it.place_id,
           lat: enriched.lat ?? it.lat,
           lng: enriched.lng ?? it.lng,
+          address: enriched.address ?? it.address,
+          photo_url: enriched.photo_url ?? it.photo_url,
+          rating: enriched.rating ?? it.rating,
+          description: enriched.description ?? it.description,
+          category: enriched.category ?? it.category,
         };
       }));
     } catch {
@@ -91,14 +97,16 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
     }
   }, [ideas, setIdeas]);
 
-  const loadIdeas = useCallback(() => {
+  const loadIdeas = useCallback((signal?: AbortSignal) => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
+    setIsLoadingIdeas(true);
 
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
+      signal,
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: any[]) => {
@@ -122,38 +130,31 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
               up: item.up ?? 0,
               down: item.down ?? 0,
               my_vote: item.my_vote ?? 0,
+              category: item.category ?? null,
+              photo_url: item.photo_url ?? null,
+              rating: item.rating ?? null,
+              address: item.address ?? null,
+              description: item.description ?? null,
             };
           })
         );
-        const extraMap: Record<string, { description?: string | null; photo_url?: string | null; rating?: number | null; address?: string | null; category?: string | null }> = {};
-        for (const item of data) {
-          extraMap[item.id.toString()] = {
-            description: item.description ?? null,
-            photo_url: item.photo_url ?? null,
-            rating: item.rating ?? null,
-            address: item.address ?? null,
-            category: item.category ?? null,
-          };
-        }
-        setExtras(extraMap);
+        setIsLoadingIdeas(false);
       })
-      .catch(() => {});
+      .catch((err) => { if (err?.name !== 'AbortError') setIsLoadingIdeas(false); });
   }, [tripId, setIdeas]);
 
-  useEffect(() => { loadIdeas(); }, [loadIdeas]);
-
   useEffect(() => {
-    const handler = () => loadIdeas();
-    window.addEventListener('idea-bin:refresh', handler);
-    return () => window.removeEventListener('idea-bin:refresh', handler);
-  }, [loadIdeas]);
+    const controller = new AbortController();
+    loadIdeas(controller.signal);
+    return () => controller.abort();
+  }, [loadIdeas, ideasLastUpdated]);
 
   const handleIngest = async () => {
     if (!inputText.trim()) return;
     setIsIngesting(true);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
 
       if (tripId && token) {
         const response = await fetch(
@@ -205,7 +206,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   const handleDeleteIdea = async (ideaId: string) => {
     removeIdea(ideaId);
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     const numericId = parseInt(ideaId, 10);
     if (isNaN(numericId)) return;
@@ -224,7 +225,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
     setEditingTimeId(null);
 
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     const numericId = parseInt(ideaId, 10);
     if (isNaN(numericId)) return;
@@ -277,7 +278,26 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
 
       <div className="flex-1 overflow-y-auto p-5 space-y-3 relative">
         <AnimatePresence initial={false}>
-          {ideas.length === 0 ? (
+          {ideas.length === 0 && isLoadingIdeas ? (
+            <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="p-3 pl-4 bg-white border border-slate-100 rounded-2xl animate-pulse flex flex-col gap-2">
+                  <div className="flex items-start gap-1.5">
+                    <div className="w-3 h-3 bg-slate-200 rounded-full shrink-0 mt-0.5" />
+                    <div className="h-3 bg-slate-200 rounded w-3/4" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 bg-slate-100 rounded-full shrink-0" />
+                    <div className="h-2.5 bg-slate-100 rounded w-1/3" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3.5 shrink-0" />
+                    <div className="h-4 bg-slate-100 rounded w-1/4" />
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          ) : ideas.length === 0 ? (
             <motion.div
               key="empty"
               initial={{ opacity: 0 }}
@@ -292,7 +312,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
           ) : (
             ideas.map((idea) => {
               const isOpen = openId === idea.id;
-              const accent = categoryAccent(extras[idea.id]?.category);
+              const accent = categoryAccent(idea.category);
               return (
               <motion.div
                 key={idea.id}
@@ -350,9 +370,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                     </button>
                   </div>
                   {!idea.place_id && <EnrichmentBadge size={3.5} onRetry={() => handleRetry(idea.id)} retrying={retryingIds.has(idea.id)} />}
-                  {SHOW_RATING && extras[idea.id]?.rating != null && (
+                  {SHOW_RATING && idea.rating != null && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-500 shrink-0">
-                      <Star className="w-2.5 h-2.5 text-amber-400" /> {extras[idea.id]!.rating}
+                      <Star className="w-2.5 h-2.5 text-amber-400" /> {idea.rating}
                     </span>
                   )}
                   {!readOnly && editingTimeId === idea.id ? (
@@ -405,9 +425,9 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                 <div className="flex items-center gap-1.5 min-w-0">
                   <div className="w-3.5 shrink-0" />
                   <div className="min-w-0">
-                    {extras[idea.id]?.category ? (
+                    {idea.category ? (
                       <span className={`inline-block text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md truncate max-w-full ${accent.badge}`}>
-                        {extras[idea.id]!.category}
+                        {idea.category}
                       </span>
                     ) : (
                       <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">—</span>
@@ -439,8 +459,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
         {openId != null && (() => {
           const idea = ideas.find((i) => i.id === openId);
           if (!idea) return null;
-          const ex = extras[idea.id] ?? {};
-          const accent = categoryAccent(ex.category);
+          const accent = categoryAccent(idea.category);
           return (
             <div
               className="absolute left-5 right-5 z-20"
@@ -452,8 +471,8 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                     <div className={`w-1 self-stretch rounded-full shrink-0 ${accent.bar}`} />
                     <div className="min-w-0">
                       <p className="text-xs font-black text-slate-900 leading-tight truncate">{idea.title}</p>
-                      {ex.address && (
-                        <p className="text-[10px] font-medium text-slate-500 truncate mt-0.5">{ex.address}</p>
+                      {idea.address && (
+                        <p className="text-[10px] font-medium text-slate-500 truncate mt-0.5">{idea.address}</p>
                       )}
                     </div>
                   </div>
@@ -466,18 +485,18 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {SHOW_PHOTOS && ex.photo_url && (
+                  {SHOW_PHOTOS && idea.photo_url && (
                     <img
-                      src={ex.photo_url}
+                      src={idea.photo_url}
                       alt=""
                       className="w-full h-24 object-cover rounded-lg border border-slate-100"
                     />
                   )}
-                  {((SHOW_RATING && ex.rating != null) || !!idea.start_time || !!ex.category) && (
+                  {((SHOW_RATING && idea.rating != null) || !!idea.start_time || !!idea.category) && (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {SHOW_RATING && ex.rating != null && (
+                      {SHOW_RATING && idea.rating != null && (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold border border-amber-100">
-                          <Star className="w-2.5 h-2.5 text-amber-400" /> {ex.rating}
+                          <Star className="w-2.5 h-2.5 text-amber-400" /> {idea.rating}
                         </span>
                       )}
                       {idea.start_time && (
@@ -485,17 +504,17 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                           <Clock className="w-2.5 h-2.5 text-slate-500" /> {formatTime(idea.start_time)}
                         </span>
                       )}
-                      {ex.category && (
+                      {idea.category && (
                         <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${accent.badge}`}>
-                          {ex.category}
+                          {idea.category}
                         </span>
                       )}
                     </div>
                   )}
-                  {ex.description && (
-                    <p className="text-[11px] font-medium text-slate-500 leading-relaxed">{ex.description}</p>
+                  {idea.description && (
+                    <p className="text-[11px] font-medium text-slate-500 leading-relaxed">{idea.description}</p>
                   )}
-                  {(!SHOW_PHOTOS || !ex.photo_url) && !ex.description && !ex.address && (
+                  {(!SHOW_PHOTOS || !idea.photo_url) && !idea.description && !idea.address && (
                     <p className="text-[11px] font-medium text-slate-400 italic">No additional details available.</p>
                   )}
                 </div>
