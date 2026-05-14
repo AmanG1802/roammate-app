@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Loader } from '@googlemaps/js-api-loader';
 import {
   RefreshCw, AlertTriangle, Map as MapIcon, Maximize2, Minimize2,
-  Locate, Layers, Info, MapPin,
+  Locate, Layers, Info, MapPin, MoreVertical,
 } from 'lucide-react';
 import { useTripStore, Event } from '@/lib/store';
 import type { RouteLeg } from '@/lib/store';
@@ -13,6 +13,7 @@ import { categoryPinColor, categoryAccent } from '@/lib/categoryColors';
 import { getToken } from '@/lib/auth';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { format } from 'date-fns';
+import MapOverlayLayer, { useMapBreakpoint } from './MapOverlayLayer';
 
 const MOCK_MODE =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MOCK ?? 'false').toLowerCase() === 'true';
@@ -883,83 +884,80 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
         </div>
       )}
 
-      <RefreshButton
-        onClick={handleRefresh}
-        loading={refreshing}
-        disabled={refreshDisabled}
-        stale={stale}
-        tooltip={disabledTooltip}
-        gateMessage={gateMessage}
-      />
-      <DayBadge filterDay={filterDay} />
+      <MapOverlayLayer>
+        <MapOverlayLayer.TopLeft>
+          <DayBadge filterDay={filterDay} />
+        </MapOverlayLayer.TopLeft>
 
-      {/* Map controls: fit all, map style, fullscreen, legend */}
-      <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
-        <MapControlButton
-          onClick={handleFitAll}
-          title="Fit all markers"
-          icon={<Locate className="w-4 h-4" />}
-        />
-        <MapControlButton
-          onClick={cycleMapType}
-          title={`Switch to ${MAP_TYPE_LABELS[(mapTypeIdx + 1) % MAP_TYPES.length]}`}
-          icon={<Layers className="w-4 h-4" />}
-        />
-        <MapControlButton
-          onClick={toggleFullscreen}
-          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-          icon={isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        />
-        <MapControlButton
-          onClick={() => setShowLegend(!showLegend)}
-          title="Legend"
-          icon={<Info className="w-4 h-4" />}
-          active={showLegend}
-        />
-      </div>
+        <MapOverlayLayer.TopCenter>
+          <RefreshButton
+            onClick={handleRefresh}
+            loading={refreshing}
+            disabled={refreshDisabled}
+            stale={stale}
+            tooltip={disabledTooltip}
+            gateMessage={gateMessage}
+          />
+        </MapOverlayLayer.TopCenter>
 
-      {/* Legend overlay */}
-      <AnimatePresence>
-        {showLegend && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2 }}
-            className="absolute bottom-6 left-4 z-20 bg-white/95 backdrop-blur border border-slate-200 rounded-xl shadow-lg p-3 min-w-[160px]"
-          >
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Legend</p>
-            <div className="space-y-1.5">
-              <LegendItem color="#4f46e5" label="Planned events" />
-              <LegendItem color="#94a3b8" label="Ideas (unscheduled)" />
-              {lastRouteData && lastRouteData.legs.length > 0 ? (
-                <>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-300 mt-2 mb-1">Route legs (click to inspect)</p>
-                  {lastRouteData.legs.map((leg, i) => {
-                    const from = dayEvents.find((e) => e.id === leg.from_event_id);
-                    const to = dayEvents.find((e) => e.id === leg.to_event_id);
-                    return (
-                      <div key={i} className="flex items-center gap-2">
-                        <div className="w-5 h-1 rounded-full" style={{ backgroundColor: LEG_COLORS[i % LEG_COLORS.length] }} />
-                        <span className="text-[10px] font-bold text-slate-600 truncate max-w-[120px]">
-                          {from?.title ?? `Stop ${i + 1}`} → {to?.title ?? `Stop ${i + 2}`}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-0.5 bg-indigo-500 rounded-full" />
-                  <span className="text-[10px] font-bold text-slate-600">Route path</span>
+        <MapOverlayLayer.TopRight>
+          <MapControls
+            onFitAll={handleFitAll}
+            onCycleMap={cycleMapType}
+            mapTypeLabel={MAP_TYPE_LABELS[(mapTypeIdx + 1) % MAP_TYPES.length]}
+            onToggleFullscreen={toggleFullscreen}
+            isFullscreen={isFullscreen}
+            showLegend={showLegend}
+            onToggleLegend={() => setShowLegend(!showLegend)}
+          />
+        </MapOverlayLayer.TopRight>
+
+        <MapOverlayLayer.BottomLeft>
+          <AnimatePresence>
+            {showLegend && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.2 }}
+                className="bg-white/95 backdrop-blur border border-slate-200 rounded-xl shadow-lg p-3 min-w-[160px] max-w-[calc(100vw-2rem)]"
+              >
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Legend</p>
+                <div className="space-y-1.5">
+                  <LegendItem color="#4f46e5" label="Planned events" />
+                  <LegendItem color="#94a3b8" label="Ideas (unscheduled)" />
+                  {lastRouteData && lastRouteData.legs.length > 0 ? (
+                    <>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-300 mt-2 mb-1">Route legs (click to inspect)</p>
+                      {lastRouteData.legs.map((leg, i) => {
+                        const from = dayEvents.find((e) => e.id === leg.from_event_id);
+                        const to = dayEvents.find((e) => e.id === leg.to_event_id);
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <div className="w-5 h-1 rounded-full" style={{ backgroundColor: LEG_COLORS[i % LEG_COLORS.length] }} />
+                            <span className="text-[10px] font-bold text-slate-600 truncate max-w-[120px]">
+                              {from?.title ?? `Stop ${i + 1}`} → {to?.title ?? `Stop ${i + 2}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-0.5 bg-indigo-500 rounded-full" />
+                      <span className="text-[10px] font-bold text-slate-600">Route path</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </MapOverlayLayer.BottomLeft>
 
-      <ToastView toast={toast} />
+        <MapOverlayLayer.TopBanner>
+          <ToastView toast={toast} />
+        </MapOverlayLayer.TopBanner>
+      </MapOverlayLayer>
     </div>
   );
 }
@@ -1047,14 +1045,18 @@ function RefreshButton({
       ? 'Timeline changed \u2014 refresh to update route'
       : null;
 
+  const bp = useMapBreakpoint();
+  const compact = bp === 'sm';
+
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
+    <div className="flex flex-col items-center gap-1.5">
       <div className="flex items-center gap-2">
         <button
           onClick={onClick}
           aria-disabled={disabled || loading}
           title={tooltip}
-          className={`flex items-center gap-2 px-4 py-2.5 bg-white/95 backdrop-blur rounded-full shadow-md border transition-all cursor-pointer active:scale-95 ${borderClass}`}
+          aria-label={loading ? 'Routing' : 'Refresh Route'}
+          className={`flex items-center gap-2 ${compact ? 'px-3 py-2' : 'px-4 py-2.5'} bg-white/95 backdrop-blur rounded-full shadow-md border transition-all cursor-pointer active:scale-95 ${borderClass}`}
         >
           {stale && !disabled && !loading && (
             <span className="relative flex h-2 w-2">
@@ -1063,9 +1065,11 @@ function RefreshButton({
             </span>
           )}
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          {!compact && (
           <span className="text-xs font-black uppercase tracking-widest">
             {loading ? 'Routing\u2026' : 'Refresh Route'}
           </span>
+          )}
         </button>
       </div>
       <AnimatePresence>
@@ -1074,7 +1078,7 @@ function RefreshButton({
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            className={`text-[10px] font-bold px-3 py-1 rounded-full border backdrop-blur ${
+            className={`text-[10px] font-bold px-3 py-1 rounded-full border backdrop-blur max-w-[80vw] truncate ${
               hasGate
                 ? 'bg-rose-50/90 border-rose-200 text-rose-500'
                 : 'bg-amber-50/90 border-amber-200 text-amber-600'
@@ -1090,8 +1094,8 @@ function RefreshButton({
 
 function DayBadge({ filterDay }: { filterDay?: Date }) {
   return (
-    <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur p-2 rounded-lg shadow-md border border-slate-200">
-      <span className="text-xs font-bold text-slate-600 uppercase tracking-wider px-2">
+    <div className="bg-white/90 backdrop-blur p-2 rounded-lg shadow-md border border-slate-200 max-w-[55vw] sm:max-w-none">
+      <span className="block text-xs font-bold text-slate-600 uppercase tracking-wider px-2 truncate">
         {filterDay
           ? `Day · ${filterDay.toLocaleDateString(undefined, {
               weekday: 'short',
@@ -1101,6 +1105,79 @@ function DayBadge({ filterDay }: { filterDay?: Date }) {
           : 'Live Route View'}
       </span>
     </div>
+  );
+}
+
+function MapControls({
+  onFitAll,
+  onCycleMap,
+  mapTypeLabel,
+  onToggleFullscreen,
+  isFullscreen,
+  showLegend,
+  onToggleLegend,
+}: {
+  onFitAll: () => void;
+  onCycleMap: () => void;
+  mapTypeLabel: string;
+  onToggleFullscreen: () => void;
+  isFullscreen: boolean;
+  showLegend: boolean;
+  onToggleLegend: () => void;
+}) {
+  const bp = useMapBreakpoint();
+  const [overflowOpen, setOverflowOpen] = useState(false);
+
+  if (bp === 'sm') {
+    return (
+      <div className="flex flex-row items-center gap-1.5">
+        <MapControlButton onClick={onFitAll} title="Fit all markers" icon={<Locate className="w-4 h-4" />} />
+        <MapControlButton
+          onClick={onToggleFullscreen}
+          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          icon={isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        />
+        <div className="relative">
+          <MapControlButton
+            onClick={() => setOverflowOpen((v) => !v)}
+            title="More options"
+            icon={<MoreVertical className="w-4 h-4" />}
+            active={overflowOpen || showLegend}
+          />
+          {overflowOpen && (
+            <div className="absolute top-full mt-1.5 right-0 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 flex flex-col gap-1 min-w-[160px]">
+              <button
+                onClick={() => { onCycleMap(); setOverflowOpen(false); }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 text-left"
+              >
+                <Layers className="w-3.5 h-3.5" /> {mapTypeLabel}
+              </button>
+              <button
+                onClick={() => { onToggleLegend(); setOverflowOpen(false); }}
+                className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-left ${
+                  showLegend ? 'bg-indigo-50 text-indigo-600' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Info className="w-3.5 h-3.5" /> Legend
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <MapControlButton onClick={onFitAll} title="Fit all markers" icon={<Locate className="w-4 h-4" />} />
+      <MapControlButton onClick={onCycleMap} title={`Switch to ${mapTypeLabel}`} icon={<Layers className="w-4 h-4" />} />
+      <MapControlButton
+        onClick={onToggleFullscreen}
+        title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        icon={isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+      />
+      <MapControlButton onClick={onToggleLegend} title="Legend" icon={<Info className="w-4 h-4" />} active={showLegend} />
+    </>
   );
 }
 
@@ -1116,10 +1193,10 @@ function ToastView({ toast }: { toast: Toast }) {
     <AnimatePresence>
       {toast && (
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 16 }}
-          className="absolute top-20 left-1/2 -translate-x-1/2 z-30 max-w-md"
+          exit={{ opacity: 0, y: -8 }}
+          className="w-full"
         >
           <div
             className={`flex items-start gap-2 px-4 py-3 rounded-xl border shadow-lg ${palette}`}

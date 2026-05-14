@@ -50,6 +50,8 @@ function TripPlannerPageContent() {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [planDayIdx, setPlanDayIdx] = useState(0);
   const [liveDayIdx, setLiveDayIdx] = useState(0);
+  const [planSubTab, setPlanSubTab] = useState<'timeline' | 'map' | 'ideas'>('timeline');
+  const [conciergeMobileView, setConciergeMobileView] = useState<'timeline' | 'map'>('map');
 
   const { setActiveTrip, loadEvents, events, tripDays, loadTripDays, addTripDay, deleteTripDay } = useTripStore();
   const [deleteConfirm, setDeleteConfirm] = useState<{ dayId: string; dayNumber: number; date: string } | null>(null);
@@ -468,9 +470,25 @@ function TripPlannerPageContent() {
 
           {/* ── Plan Mode ─────────────────────────────────────────────────── */}
           {mode === 'plan' && (
-            <div className="flex-1 flex overflow-hidden bg-slate-50">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-slate-50">
+              {/* Mobile sub-tabs */}
+              <div className="lg:hidden flex border-b border-slate-100 bg-white shrink-0">
+                {(['timeline', 'map', 'ideas'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setPlanSubTab(t)}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
+                      planSubTab === t
+                        ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                        : 'text-slate-400 border-b-2 border-transparent'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
               {/* Timeline with day navigation */}
-              <div className="w-[420px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex flex-col">
+              <div className={`${planSubTab === 'timeline' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[420px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex-col`}>
                 {/* Day navigation header */}
                 <div className="px-5 pt-4 pb-3 border-b border-slate-100 shrink-0">
                   <div className="flex items-center justify-between mb-2">
@@ -540,11 +558,11 @@ function TripPlannerPageContent() {
                 <Timeline tripId={tripId} filterDay={planDay ?? undefined} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
               {/* Map */}
-              <div className="flex-1 relative">
+              <div className={`${planSubTab === 'map' ? 'flex' : 'hidden'} lg:flex flex-1 relative`}>
                 <GoogleMap filterDay={planDay ?? undefined} tripId={tripId} />
               </div>
               {/* Idea Bin */}
-              <div className="w-80 shrink-0 border-l border-slate-100 bg-white overflow-hidden flex flex-col">
+              <div className={`${planSubTab === 'ideas' ? 'flex' : 'hidden'} lg:flex w-full lg:w-80 shrink-0 border-l border-slate-100 bg-white overflow-hidden flex-col`}>
                 <IdeaBin tripId={tripId} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
             </div>
@@ -552,9 +570,24 @@ function TripPlannerPageContent() {
 
           {/* ── Concierge / Live Mode ──────────────────────────────────────── */}
           {mode === 'concierge' && (
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+              <div className="lg:hidden flex border-b border-slate-100 bg-white shrink-0">
+                {(['timeline', 'map'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setConciergeMobileView(t)}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
+                      conciergeMobileView === t
+                        ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                        : 'text-slate-400 border-b-2 border-transparent'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
               {/* Day Timeline */}
-              <div className="w-[380px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex flex-col">
+              <div className={`${conciergeMobileView === 'timeline' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex-col`}>
                 {/* Day selector header — only shows days added in Plan mode */}
                 <div className="px-6 pt-5 pb-4 border-b border-slate-50 shrink-0">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Select Day</p>
@@ -586,14 +619,14 @@ function TripPlannerPageContent() {
               </div>
 
               {/* Map + optional concierge overlay */}
-              <div className="flex-1 relative">
+              <div className={`${conciergeMobileView === 'map' ? 'flex' : 'hidden'} lg:flex flex-1 relative`}>
                 <GoogleMap filterDay={liveDay ?? undefined} tripId={tripId} />
                 {isCurrentDay && currentUserIsAdmin && (
                   <ConciergeActionBar />
                 )}
                 {!isCurrentDay && liveDay && (
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 px-5 py-3 bg-white/80 backdrop-blur border border-slate-200 rounded-2xl shadow-lg">
-                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                  <div className="absolute bottom-4 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-20 px-5 py-3 bg-white/80 backdrop-blur border border-slate-200 rounded-2xl shadow-lg flex justify-center">
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest text-center">
                       Concierge activates on {format(liveDay, 'EEE, MMM d')}
                     </p>
                   </div>

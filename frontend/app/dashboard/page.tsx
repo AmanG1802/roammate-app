@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getToken } from '@/lib/auth';
 import Link from 'next/link';
-import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket } from 'lucide-react';
+import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [groupInvitesCount, setGroupInvitesCount] = useState(0);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showSkipToast, setShowSkipToast] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const widgetRef = useRef<TodayWidgetHandle>(null);
   const bellRef = useRef<NotificationBellHandle>(null);
@@ -286,7 +287,7 @@ export default function DashboardPage() {
 
   const navItem = (id: Section, icon: React.ReactNode, label: string) => (
     <button
-      onClick={() => setSection(id)}
+      onClick={() => { setSection(id); setMobileNavOpen(false); }}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-black text-sm transition-colors ${
         section === id
           ? 'bg-indigo-50 text-indigo-600'
@@ -301,8 +302,24 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <div className="flex h-screen bg-slate-50 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-60 bg-white border-r border-slate-100 flex flex-col p-5 z-20 shrink-0">
+        {/* Mobile sidebar backdrop */}
+        <AnimatePresence>
+          {mobileNavOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileNavOpen(false)}
+              className="fixed inset-0 bg-slate-900/40 z-30 md:hidden"
+            />
+          )}
+        </AnimatePresence>
+        {/* Sidebar — drawer on mobile, fixed column on md+ */}
+        <aside
+          className={`fixed md:static z-40 inset-y-0 left-0 w-60 bg-white border-r border-slate-100 flex flex-col p-5 shrink-0 transform transition-transform duration-200 ease-out ${
+            mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
+        >
           <Link href="/" className="flex items-center gap-2 mb-10">
             <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-white">R</div>
             <span className="text-xl font-black text-slate-900 tracking-tight">Roammate</span>
@@ -341,8 +358,15 @@ export default function DashboardPage() {
         {/* Main */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <header className="h-16 border-b border-slate-100 bg-white px-8 flex items-center justify-between shrink-0">
-            <div className="relative w-80">
+          <header className="h-16 border-b border-slate-100 bg-white px-4 sm:px-8 flex items-center gap-3 sm:justify-between shrink-0">
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open menu"
+              className="md:hidden p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="relative flex-1 sm:flex-none sm:w-80">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
@@ -363,15 +387,15 @@ export default function DashboardPage() {
                 onClick={openCreateModal}
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+                className="flex items-center gap-2 px-3 sm:px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
               >
                 <Plus className="w-4 h-4" />
-                New Trip
+                <span className="hidden sm:inline">New Trip</span>
               </motion.button>
             </div>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-8">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8">
             {/* Dashboard overview */}
             {section === 'dashboard' && (
               <>
@@ -544,7 +568,7 @@ export default function DashboardPage() {
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl relative"
+                className="bg-white rounded-3xl sm:rounded-[2.5rem] w-full max-w-[calc(100vw-2rem)] sm:max-w-lg p-6 sm:p-10 shadow-2xl relative"
               >
                 <button
                   onClick={() => setIsModalOpen(false)}

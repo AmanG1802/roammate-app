@@ -369,7 +369,7 @@ function TripHubContent() {
             variants={heroItem}
             className="font-black text-white tracking-tighter leading-[0.88] mb-8 break-words"
             style={{
-              fontSize: 'clamp(3rem, 7vw, 7.5rem)',
+              fontSize: 'clamp(2.25rem, 8vw, 7.5rem)',
               viewTransitionName: `trip-title-${tripId}`,
             } as React.CSSProperties}
           >
@@ -504,7 +504,7 @@ function TripHubContent() {
             {/* Invite form — admin only */}
             {isAdmin && showInvite && (
               <div className="mt-4 space-y-2">
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     autoFocus
                     type="email"
@@ -516,9 +516,9 @@ function TripHubContent() {
                       setInviteError('');
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-                    className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-medium placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 transition-all"
+                    className="flex-1 min-w-0 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-medium placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 transition-all"
                   />
-                  <div className="relative w-[150px] shrink-0">
+                  <div className="relative w-full sm:w-[150px] shrink-0">
                     <select
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
@@ -536,7 +536,7 @@ function TripHubContent() {
                   <button
                     onClick={handleInvite}
                     disabled={inviteStatus === 'loading' || !inviteEmail.trim() || !inviteRole}
-                    className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-500 transition-all disabled:opacity-50 min-w-[80px] flex items-center justify-center gap-2"
+                    className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-500 transition-all disabled:opacity-50 sm:min-w-[80px] flex items-center justify-center gap-2"
                   >
                     {inviteStatus === 'loading' ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
