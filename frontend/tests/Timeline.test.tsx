@@ -62,6 +62,7 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     id: 'ev-1',
     trip_id: '1',
     title: 'Louvre Museum',
+    day_date: null,
     start_time: new Date('2026-05-01T10:00:00'),
     end_time:   new Date('2026-05-01T12:00:00'),
     lat: 48.86,

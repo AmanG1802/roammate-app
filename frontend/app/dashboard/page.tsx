@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { getToken } from '@/lib/auth';
 import Link from 'next/link';
-import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket } from 'lucide-react';
+import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -13,6 +14,8 @@ import DashboardTripPlanner from '@/components/dashboard/DashboardTripPlanner';
 import UserMenu from '@/components/UserMenu';
 import PersonaSoftPrompt from '@/components/PersonaSoftPrompt';
 import OnboardingPersonaModal from '@/components/OnboardingPersonaModal';
+import { useToast } from '@/components/ui/Toast';
+import { toastBus } from '@/lib/toast-bus';
 
 type Section = 'dashboard' | 'trips' | 'invitations' | 'groups';
 
@@ -23,6 +26,8 @@ function getInitials(name: string): string {
 export default function DashboardPage() {
   const { user } = useAuth(true);
   const router = useRouter();
+  const toast = useToast();
+  const [tripsError, setTripsError] = useState(false);
   const [section, setSection] = useState<Section>('dashboard');
   const [trips, setTrips] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,6 +44,7 @@ export default function DashboardPage() {
   const [groupInvitesCount, setGroupInvitesCount] = useState(0);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showSkipToast, setShowSkipToast] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const widgetRef = useRef<TodayWidgetHandle>(null);
   const bellRef = useRef<NotificationBellHandle>(null);
@@ -60,42 +66,40 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  const handlePersonaComplete = async (personas: string[]) => {
-    const token = localStorage.getItem('token');
+  const savePersonas = async (personas: string[]): Promise<boolean> => {
+    const token = getToken();
     const API = process.env.NEXT_PUBLIC_API_URL ?? '';
     try {
-      await fetch(`${API}/users/me/personas`, {
+      const res = await fetch(`${API}/users/me/personas`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ personas }),
       });
+      if (!res.ok) throw new Error(`status ${res.status}`);
       const saved = localStorage.getItem('user');
       if (saved) {
         const u = JSON.parse(saved);
         localStorage.setItem('user', JSON.stringify({ ...u, personas }));
       }
-    } catch {}
-    setShowPersonaModal(false);
+      return true;
+    } catch {
+      toast.show("Couldn't save your preferences — please try again", { kind: 'error' });
+      return false;
+    }
+  };
+
+  const handlePersonaComplete = async (personas: string[]) => {
+    const ok = await savePersonas(personas);
+    if (ok) setShowPersonaModal(false);
   };
 
   const handlePersonaSkip = async () => {
-    const token = localStorage.getItem('token');
-    const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-    try {
-      await fetch(`${API}/users/me/personas`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personas: [] }),
-      });
-      const saved = localStorage.getItem('user');
-      if (saved) {
-        const u = JSON.parse(saved);
-        localStorage.setItem('user', JSON.stringify({ ...u, personas: [] }));
-      }
-    } catch {}
-    setShowPersonaModal(false);
-    setShowSkipToast(true);
-    setTimeout(() => setShowSkipToast(false), 4000);
+    const ok = await savePersonas([]);
+    if (ok) {
+      setShowPersonaModal(false);
+      setShowSkipToast(true);
+      setTimeout(() => setShowSkipToast(false), 4000);
+    }
   };
 
   const openCreateModal = () => {
@@ -107,20 +111,31 @@ export default function DashboardPage() {
 
 
   const onTripMutated = useCallback(() => {
-    fetchTrips();
+    fetchTrips(); // no signal — fire-and-forget after user action
     refreshDashboard();
   }, [refreshDashboard]);
 
   useEffect(() => {
-    fetchTrips();
-    fetchInvitations();
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const init = async () => {
+      await Promise.all([
+        fetchTrips(signal),
+        fetchInvitations(signal),
+      ]);
+    };
+    init();
+    return () => controller.abort();
   }, []);
 
-  const fetchTrips = async () => {
+  const fetchTrips = async (signal?: AbortSignal) => {
+    setTripsError(false);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal,
       });
       if (response.status === 401) {
         localStorage.removeItem('token');
@@ -128,30 +143,40 @@ export default function DashboardPage() {
         router.push('/login');
         return;
       }
-      if (response.ok) setTrips(await response.json());
+      if (response.ok) {
+        setTrips(await response.json());
+      } else {
+        setTripsError(true);
+      }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       console.error(err);
+      setTripsError(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = async (signal?: AbortSignal) => {
     setInvitationsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/pending`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal,
       });
       if (res.ok) setInvitations(await res.json());
-    } catch { /* keep current */ }
-    finally { setInvitationsLoading(false); }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+    } finally {
+      if (!signal?.aborted) setInvitationsLoading(false);
+    }
   };
 
   const handleAcceptInvite = async (memberId: number) => {
     setRespondingTo(memberId);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/accept`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -159,22 +184,35 @@ export default function DashboardPage() {
       if (res.ok) {
         setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
         onTripMutated();
+        toast.show('Invitation accepted', { kind: 'success' });
+      } else {
+        toast.show("Couldn't accept invitation — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally { setRespondingTo(null); }
+    } catch {
+      toast.show('Network error — could not accept invitation', { kind: 'error' });
+    } finally {
+      setRespondingTo(null);
+    }
   };
 
   const handleDeclineInvite = async (memberId: number) => {
     setRespondingTo(memberId);
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/decline`, {
+      const token = getToken();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/decline`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
-      setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
-    } catch { /* ignore */ }
-    finally { setRespondingTo(null); }
+      if (res.ok || res.status === 204) {
+        setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
+      } else {
+        toast.show("Couldn't decline invitation — please try again", { kind: 'error' });
+      }
+    } catch {
+      toast.show('Network error — could not decline invitation', { kind: 'error' });
+    } finally {
+      setRespondingTo(null);
+    }
   };
 
   const handleCreateTrip = async (e: React.FormEvent) => {
@@ -183,7 +221,7 @@ export default function DashboardPage() {
     setIsCreating(true);
     setCreateError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const body: Record<string, unknown> = { name: newTripName };
       body.start_date = `${newTripStartDate}T00:00:00`;
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
@@ -249,7 +287,7 @@ export default function DashboardPage() {
 
   const navItem = (id: Section, icon: React.ReactNode, label: string) => (
     <button
-      onClick={() => setSection(id)}
+      onClick={() => { setSection(id); setMobileNavOpen(false); }}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-black text-sm transition-colors ${
         section === id
           ? 'bg-indigo-50 text-indigo-600'
@@ -264,8 +302,24 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <div className="flex h-screen bg-slate-50 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-60 bg-white border-r border-slate-100 flex flex-col p-5 z-20 shrink-0">
+        {/* Mobile sidebar backdrop */}
+        <AnimatePresence>
+          {mobileNavOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileNavOpen(false)}
+              className="fixed inset-0 bg-slate-900/40 z-30 md:hidden"
+            />
+          )}
+        </AnimatePresence>
+        {/* Sidebar — drawer on mobile, fixed column on md+ */}
+        <aside
+          className={`fixed md:static z-40 inset-y-0 left-0 w-60 bg-white border-r border-slate-100 flex flex-col p-5 shrink-0 transform transition-transform duration-200 ease-out ${
+            mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
+        >
           <Link href="/" className="flex items-center gap-2 mb-10">
             <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-white">R</div>
             <span className="text-xl font-black text-slate-900 tracking-tight">Roammate</span>
@@ -304,8 +358,15 @@ export default function DashboardPage() {
         {/* Main */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <header className="h-16 border-b border-slate-100 bg-white px-8 flex items-center justify-between shrink-0">
-            <div className="relative w-80">
+          <header className="h-16 border-b border-slate-100 bg-white px-4 sm:px-8 flex items-center gap-3 sm:justify-between shrink-0">
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open menu"
+              className="md:hidden p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="relative flex-1 sm:flex-none sm:w-80">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
@@ -326,15 +387,15 @@ export default function DashboardPage() {
                 onClick={openCreateModal}
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+                className="flex items-center gap-2 px-3 sm:px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
               >
                 <Plus className="w-4 h-4" />
-                New Trip
+                <span className="hidden sm:inline">New Trip</span>
               </motion.button>
             </div>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-8">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8">
             {/* Dashboard overview */}
             {section === 'dashboard' && (
               <>
@@ -351,6 +412,8 @@ export default function DashboardPage() {
                 <TripGrid
                   trips={currentAndUpcoming.slice(0, 6)}
                   isLoading={isLoading}
+                  loadError={tripsError}
+                  onRetry={() => fetchTrips()}
                   onNewTrip={openCreateModal}
                   onTripUpdate={onTripMutated}
                 />
@@ -395,6 +458,8 @@ export default function DashboardPage() {
                 <TripGrid
                   trips={filteredTrips}
                   isLoading={isLoading}
+                  loadError={tripsError}
+                  onRetry={() => fetchTrips()}
                   onNewTrip={openCreateModal}
                   onTripUpdate={onTripMutated}
                   emptyLabel={
@@ -500,18 +565,22 @@ export default function DashboardPage() {
           {isModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
               <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="new-trip-title"
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl relative"
+                className="bg-white rounded-3xl sm:rounded-[2.5rem] w-full max-w-[calc(100vw-2rem)] sm:max-w-lg p-6 sm:p-10 shadow-2xl relative"
               >
                 <button
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Close create trip dialog"
                   className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600"
                 >
                   <X className="w-6 h-6" />
                 </button>
-                <h3 className="text-3xl font-black text-slate-900 mb-2">New Adventure.</h3>
+                <h3 id="new-trip-title" className="text-3xl font-black text-slate-900 mb-2">New Adventure.</h3>
                 <p className="text-slate-500 font-medium mb-8">Where are we heading next?</p>
                 <form onSubmit={handleCreateTrip} className="space-y-5">
                   <input
@@ -583,6 +652,8 @@ export default function DashboardPage() {
 function TripGrid({
   trips,
   isLoading,
+  loadError = false,
+  onRetry,
   onNewTrip,
   onTripUpdate,
   emptyLabel,
@@ -590,6 +661,8 @@ function TripGrid({
 }: {
   trips: any[];
   isLoading: boolean;
+  loadError?: boolean;
+  onRetry?: () => void;
   onNewTrip: () => void;
   onTripUpdate?: () => void;
   emptyLabel?: string;
@@ -621,7 +694,7 @@ function TripGrid({
     if (warmedRef.current.has(tripId)) return;
     warmedRef.current.add(tripId);
     try { router.prefetch(`/trips/${tripId}`); } catch { /* ignore */ }
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = getToken();
     if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
     const base = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -633,16 +706,19 @@ function TripGrid({
   const handleDeleteTrip = useCallback(async (tripId: number) => {
     setDeleteLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok || res.status === 204) {
         onTripUpdate?.();
+      } else {
+        toastBus("Couldn't delete trip — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally {
+    } catch {
+      toastBus('Network error — could not delete trip', { kind: 'error' });
+    } finally {
       setDeleteLoading(false);
       setDeleteConfirm(null);
     }
@@ -651,35 +727,68 @@ function TripGrid({
   const handleSaveName = useCallback(async (tripId: number) => {
     if (!editingNameVal.trim()) { setEditingNameId(null); return; }
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: editingNameVal.trim() }),
       });
-      if (res.ok) onTripUpdate?.();
-    } catch { /* ignore */ }
-    finally { setEditingNameId(null); }
+      if (res.ok) {
+        onTripUpdate?.();
+      } else {
+        toastBus("Couldn't rename trip", { kind: 'error' });
+      }
+    } catch {
+      toastBus('Network error — name not updated', { kind: 'error' });
+    } finally { setEditingNameId(null); }
   }, [editingNameVal, onTripUpdate]);
 
   const handleSaveDate = useCallback(async (tripId: number) => {
     if (!editingDateVal) { setEditingDateId(null); return; }
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ start_date: `${editingDateVal}T00:00:00` }),
       });
-      if (res.ok) onTripUpdate?.();
-    } catch { /* ignore */ }
-    finally { setEditingDateId(null); }
+      if (res.ok) {
+        onTripUpdate?.();
+      } else {
+        toastBus("Couldn't update start date", { kind: 'error' });
+      }
+    } catch {
+      toastBus('Network error — date not updated', { kind: 'error' });
+    } finally { setEditingDateId(null); }
   }, [editingDateVal, onTripUpdate]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-44 rounded-2xl bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 animate-pulse border border-slate-200/60"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <AlertTriangle className="w-10 h-10 text-rose-500 mb-3" />
+        <p className="text-sm font-black text-slate-800 mb-1">Couldn&apos;t load your trips</p>
+        <p className="text-xs text-slate-500 mb-4">Check your connection and try again.</p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors"
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }
@@ -871,14 +980,19 @@ function TripGrid({
 
       {/* Delete Trip Confirmation Dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-trip-title"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
             <div className="px-6 pt-6 pb-4 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-rose-500" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">Delete &ldquo;{deleteConfirm.name}&rdquo;?</h3>
+                <h3 id="delete-trip-title" className="text-base font-black text-slate-900">Delete &ldquo;{deleteConfirm.name}&rdquo;?</h3>
                 <p className="text-sm text-slate-500 mt-1">
                   This will permanently delete the trip, all its itinerary, ideas, and remove all members. This cannot be undone.
                 </p>

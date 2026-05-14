@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
+import { getToken } from '@/lib/auth';
 
 type Kind = 'idea' | 'event';
 
@@ -11,7 +12,7 @@ type VoterList = { up_voters: { name: string; avatar_url?: string | null }[]; do
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 function authHeaders(): Record<string, string> {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const t = getToken();
   return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 }
 
@@ -54,7 +55,7 @@ function VoterPopup({ voters }: { voters: { name: string; avatar_url?: string | 
   const shown = voters.length <= 4 ? voters : voters.slice(0, 3);
   const extra = voters.length <= 4 ? 0 : voters.length - 3;
   return (
-    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 pointer-events-none">
+    <div role="tooltip" aria-hidden="true" className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 pointer-events-none">
       <div className="bg-white border border-slate-200 rounded-full shadow-lg px-1.5 py-1 flex items-center gap-1">
         {shown.map((v, i) => (
           <div
@@ -122,6 +123,11 @@ function VoteControl({
   useEffect(() => {
     if (!initial) fetchTally();
   }, [initial, fetchTally]);
+
+  useEffect(() => {
+    votersFetched.current = false;
+    setVoters(null);
+  }, [path]);
 
   // Sync from parent only when the actual values change (not just object reference).
   // Prevents hover-driven re-renders in Timeline from resetting the optimistic update.

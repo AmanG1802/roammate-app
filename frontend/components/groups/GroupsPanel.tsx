@@ -6,8 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
+import { getToken } from '@/lib/auth';
+
 function auth(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

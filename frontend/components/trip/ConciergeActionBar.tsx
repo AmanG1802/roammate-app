@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTripStore } from '@/lib/store';
+import { getToken } from '@/lib/auth';
+import { toastBus } from '@/lib/toast-bus';
 import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check } from 'lucide-react';
-import ConciergeChatDrawer from './ConciergeChatDrawer';
+import dynamic from 'next/dynamic';
+const ConciergeChatDrawer = dynamic(() => import('./ConciergeChatDrawer'), { ssr: false });
 
 const LATE_OPTIONS = [15, 30, 60];
 
@@ -11,6 +14,14 @@ export default function ConciergeActionBar() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showLateMenu, setShowLateMenu] = useState(false);
   const [rippleToast, setRippleToast] = useState<string | null>(null);
+  const rippleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rippleTimerRef.current) clearTimeout(rippleTimerRef.current);
+    };
+  }, []);
+
   const {
     activeTripId, events, setEvents, loadEvents,
     conciergeOpen, conciergePreAction, openConcierge, closeConcierge,
@@ -21,7 +32,7 @@ export default function ConciergeActionBar() {
     if (!activeTripId || events.length === 0) return;
     setIsProcessing(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/events/ripple/${activeTripId}`,
         {
@@ -46,17 +57,13 @@ export default function ConciergeActionBar() {
           ? `Shifted ${updated.length} event${updated.length > 1 ? 's' : ''} by +${minutes} min`
           : 'No events needed adjustment';
         setRippleToast(msg);
-        setTimeout(() => setRippleToast(null), 3000);
+        if (rippleTimerRef.current) clearTimeout(rippleTimerRef.current);
+        rippleTimerRef.current = setTimeout(() => setRippleToast(null), 3000);
+      } else {
+        toastBus("Couldn't shift schedule — please try again", { kind: 'error' });
       }
     } catch {
-      // Fallback: optimistic local shift
-      setEvents(
-        events.map((e) => ({
-          ...e,
-          start_time: e.start_time ? new Date(e.start_time.getTime() + minutes * 60_000) : null,
-          end_time: e.end_time ? new Date(e.end_time.getTime() + minutes * 60_000) : null,
-        }))
-      );
+      toastBus('Network error — schedule not updated', { kind: 'error' });
     } finally {
       setIsProcessing(false);
     }
@@ -97,7 +104,7 @@ export default function ConciergeActionBar() {
           <button
             onClick={() => setShowLateMenu((v) => !v)}
             disabled={isProcessing || events.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 rounded-xl font-bold text-sm hover:bg-rose-100 transition-colors disabled:opacity-40"
+            className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 rounded-xl font-bold text-sm hover:bg-rose-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {isProcessing ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -126,17 +133,19 @@ export default function ConciergeActionBar() {
 
         <button
           title="Skip Next"
+          aria-label="Skip next event"
           onClick={handleSkipNext}
           disabled={!events.some((e) => e.start_time && !e.is_skipped && (e.start_time > new Date() || (e.end_time && e.end_time > new Date())))}
-          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30"
+          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
         >
           <SkipForward className="w-4 h-4" />
         </button>
 
         <button
           title="Find Coffee"
+          aria-label="Find coffee nearby"
           onClick={handleFindCoffee}
-          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors active:scale-95"
         >
           <Coffee className="w-4 h-4" />
         </button>

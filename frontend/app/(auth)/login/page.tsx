@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, User, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { setToken } from '@/lib/auth';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -12,7 +13,7 @@ function LoginPageContent() {
 
   const [isSignup, setIsSignup] = useState(isSignupParam);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [status, setStatus] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -22,7 +23,7 @@ function LoginPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
+    setStatus(null);
 
     try {
       const endpoint = isSignup ? '/users/register' : '/users/login';
@@ -39,10 +40,11 @@ function LoginPageContent() {
 
       if (isSignup) {
         setIsSignup(false);
-        setError('Account created! Please sign in.');
+        setStatus({ type: 'success', message: 'Account created! Please sign in.' });
         setPassword('');
       } else {
         localStorage.setItem('token', data.access_token);
+        setToken(data.access_token);
         const userRes = await fetch(`${API}/users/me`, {
           headers: { Authorization: `Bearer ${data.access_token}` },
         });
@@ -50,11 +52,10 @@ function LoginPageContent() {
           const userData = await userRes.json();
           localStorage.setItem('user', JSON.stringify(userData));
         }
-        // Always go to dashboard — it handles the persona onboarding modal
         router.push('/dashboard');
       }
     } catch (err: any) {
-      setError(err.message);
+      setStatus({ type: 'error', message: err.message });
     } finally {
       setIsLoading(false);
     }
@@ -77,13 +78,16 @@ function LoginPageContent() {
             {isSignup ? 'Join thousands of travelers planning with AI.' : 'Sign in to access your itineraries and concierge.'}
           </p>
 
-          {error && (
-            <div className={`mb-6 p-4 rounded-2xl text-sm font-bold border ${
-              error.startsWith('Account created')
-                ? 'bg-green-50 border-green-100 text-green-700'
-                : 'bg-rose-50 border-rose-100 text-rose-600'
-            }`}>
-              {error}
+          {status && (
+            <div
+              role={status.type === 'error' ? 'alert' : 'status'}
+              className={`mb-6 p-4 rounded-2xl text-sm font-bold border ${
+                status.type === 'success'
+                  ? 'bg-green-50 border-green-100 text-green-700'
+                  : 'bg-rose-50 border-rose-100 text-rose-600'
+              }`}
+            >
+              {status.message}
             </div>
           )}
 
@@ -185,9 +189,29 @@ function LoginPageContent() {
   );
 }
 
+function LoginPageSkeleton() {
+  return (
+    <div className="flex h-screen bg-white">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 md:px-20 lg:px-32">
+        <div className="w-full max-w-md animate-pulse">
+          <div className="h-8 w-32 bg-slate-100 rounded-lg mb-12" />
+          <div className="h-12 w-3/4 bg-slate-100 rounded-xl mb-3" />
+          <div className="h-4 w-2/3 bg-slate-100 rounded mb-10" />
+          <div className="space-y-4">
+            <div className="h-14 bg-slate-100 rounded-2xl" />
+            <div className="h-14 bg-slate-100 rounded-2xl" />
+            <div className="h-14 bg-indigo-100 rounded-2xl" />
+          </div>
+        </div>
+      </div>
+      <div className="hidden lg:flex flex-1 bg-indigo-600" />
+    </div>
+  );
+}
+
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<LoginPageSkeleton />}>
       <LoginPageContent />
     </Suspense>
   );

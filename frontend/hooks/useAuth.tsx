@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { setToken } from '@/lib/auth';
+import { toastBus } from '@/lib/toast-bus';
 
 function clearSession() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  setToken(null);
 }
 
 export default function useAuth(requireAuth: boolean = true) {
@@ -48,7 +51,10 @@ export default function useAuth(requireAuth: boolean = true) {
         // Network error — use cached user data if available
         const savedUser = localStorage.getItem('user');
         if (savedUser) {
-          try { setUser(JSON.parse(savedUser)); } catch { /* ignore */ }
+          try {
+            setUser(JSON.parse(savedUser));
+            toastBus('Offline — showing cached profile', { kind: 'info' });
+          } catch { /* ignore */ }
         }
         setIsLoading(false);
       });

@@ -14,10 +14,20 @@ import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import Timeline from '@/components/trip/Timeline';
 import IdeaBin from '@/components/trip/IdeaBin';
 import BrainstormSection from '@/components/trip/BrainstormSection';
-import GoogleMap from '@/components/map/GoogleMap';
+import dynamic from 'next/dynamic';
+const GoogleMap = dynamic(() => import('@/components/map/GoogleMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full bg-slate-100 animate-pulse flex items-center justify-center">
+      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading map…</span>
+    </div>
+  ),
+});
 // Collaborators header removed — invite flow lives in People tab now
 import ConciergeActionBar from '@/components/trip/ConciergeActionBar';
 import { useTripStore, TripDay } from '@/lib/store';
+import { getToken } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { addDays, format, isToday, parseISO } from 'date-fns';
 
 type Mode = 'brainstorm' | 'plan' | 'concierge' | 'people';
@@ -35,6 +45,7 @@ function roleMeta(role: string) {
 function TripPlannerPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const toast = useToast();
   const tripId = searchParams.get('id');
   const rawMode = searchParams.get('mode') as Mode | null;
   const initialMode: Mode =
@@ -47,6 +58,8 @@ function TripPlannerPageContent() {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [planDayIdx, setPlanDayIdx] = useState(0);
   const [liveDayIdx, setLiveDayIdx] = useState(0);
+  const [planSubTab, setPlanSubTab] = useState<'timeline' | 'map' | 'ideas'>('timeline');
+  const [conciergeMobileView, setConciergeMobileView] = useState<'timeline' | 'map'>('map');
 
   const { setActiveTrip, loadEvents, events, tripDays, loadTripDays, addTripDay, deleteTripDay } = useTripStore();
   const [deleteConfirm, setDeleteConfirm] = useState<{ dayId: string; dayNumber: number; date: string } | null>(null);
@@ -66,18 +79,27 @@ function TripPlannerPageContent() {
   const [removeLoading, setRemoveLoading] = useState(false);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [membersError, setMembersError] = useState(false);
   const fetchMembers = useCallback(async () => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     setMembersLoading(true);
+    setMembersError(false);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setMembers(await res.json());
-    } catch { /* keep current */ }
-    finally { setMembersLoading(false); }
+      if (res.ok) {
+        setMembers(await res.json());
+      } else {
+        setMembersError(true);
+      }
+    } catch {
+      setMembersError(true);
+    } finally {
+      setMembersLoading(false);
+    }
   }, [tripId]);
 
   useEffect(() => {
@@ -100,7 +122,7 @@ function TripPlannerPageContent() {
     if (!inviteEmail.trim() || !inviteRole || !tripId) return;
     setInviteStatus('loading');
     setInviteError('');
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/invite`, {
         method: 'POST',
@@ -127,7 +149,7 @@ function TripPlannerPageContent() {
   const handleRoleChange = useCallback(async (memberId: number, newRole: string) => {
     if (!tripId) return;
     setRoleUpdateLoading(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members/${memberId}/role`, {
         method: 'PATCH',
@@ -136,19 +158,23 @@ function TripPlannerPageContent() {
       });
       if (res.ok) {
         fetchMembers();
+        toast.show('Role updated', { kind: 'success' });
+      } else {
+        toast.show("Couldn't update role — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally {
+    } catch {
+      toast.show('Network error — role not updated', { kind: 'error' });
+    } finally {
       setRoleUpdateLoading(false);
       setEditingRoleFor(null);
       setPendingRole('');
     }
-  }, [tripId, fetchMembers]);
+  }, [tripId, fetchMembers, toast]);
 
   const handleRemoveMember = useCallback(async (memberId: number) => {
     if (!tripId) return;
     setRemoveLoading(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members/${memberId}`, {
         method: 'DELETE',
@@ -156,30 +182,35 @@ function TripPlannerPageContent() {
       });
       if (res.ok || res.status === 204) {
         fetchMembers();
+        toast.show('Member removed', { kind: 'success' });
+      } else {
+        toast.show("Couldn't remove member — please try again", { kind: 'error' });
       }
-    } catch { /* ignore */ }
-    finally {
+    } catch {
+      toast.show('Network error — member not removed', { kind: 'error' });
+    } finally {
       setRemoveLoading(false);
       setRemoveConfirm(null);
     }
-  }, [tripId, fetchMembers]);
+  }, [tripId, fetchMembers, toast]);
 
-  const refreshTripData = useCallback(() => {
+  const refreshTripData = useCallback(async () => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data) setTrip(data); })
-      .catch(() => {});
-
-    loadTripDays(tripId, token);
-    loadEvents(tripId, token);
-    fetchMembers();
+    await Promise.all([
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => { if (data) setTrip(data); })
+        .catch(() => {}),
+      loadTripDays(tripId, token),
+      loadEvents(tripId, token),
+      fetchMembers(),
+    ]);
   }, [tripId, loadTripDays, loadEvents, fetchMembers]);
 
   useEffect(() => {
@@ -219,7 +250,7 @@ function TripPlannerPageContent() {
 
   const handleAddDay = useCallback(async () => {
     if (!tripId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
 
     let nextDate: Date;
@@ -251,7 +282,7 @@ function TripPlannerPageContent() {
 
     const dayHasEvents = events.some((e) => e.day_date === dayToDelete.date);
     if (!dayHasEvents) {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) return;
       mutatingRef.current = true;
       try {
@@ -273,7 +304,7 @@ function TripPlannerPageContent() {
 
   const executeDeleteDay = useCallback(async (itemsAction: 'bin' | 'delete') => {
     if (!tripId || !deleteConfirm) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
 
     mutatingRef.current = true;
@@ -302,6 +333,11 @@ function TripPlannerPageContent() {
               up: r.up ?? 0,
               down: r.down ?? 0,
               my_vote: r.my_vote ?? 0,
+              category: r.category ?? null,
+              photo_url: r.photo_url ?? null,
+              rating: r.rating ?? null,
+              address: r.address ?? null,
+              description: r.description ?? null,
             })));
           }
         } catch { /* ignore */ }
@@ -442,9 +478,25 @@ function TripPlannerPageContent() {
 
           {/* ── Plan Mode ─────────────────────────────────────────────────── */}
           {mode === 'plan' && (
-            <div className="flex-1 flex overflow-hidden bg-slate-50">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-slate-50">
+              {/* Mobile sub-tabs */}
+              <div className="lg:hidden flex border-b border-slate-100 bg-white shrink-0">
+                {(['timeline', 'map', 'ideas'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setPlanSubTab(t)}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
+                      planSubTab === t
+                        ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                        : 'text-slate-400 border-b-2 border-transparent'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
               {/* Timeline with day navigation */}
-              <div className="w-[420px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex flex-col">
+              <div className={`${planSubTab === 'timeline' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[420px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex-col`}>
                 {/* Day navigation header */}
                 <div className="px-5 pt-4 pb-3 border-b border-slate-100 shrink-0">
                   <div className="flex items-center justify-between mb-2">
@@ -514,11 +566,11 @@ function TripPlannerPageContent() {
                 <Timeline tripId={tripId} filterDay={planDay ?? undefined} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
               {/* Map */}
-              <div className="flex-1 relative">
+              <div className={`${planSubTab === 'map' ? 'flex' : 'hidden'} lg:flex flex-1 relative`}>
                 <GoogleMap filterDay={planDay ?? undefined} tripId={tripId} />
               </div>
               {/* Idea Bin */}
-              <div className="w-80 shrink-0 border-l border-slate-100 bg-white overflow-hidden flex flex-col">
+              <div className={`${planSubTab === 'ideas' ? 'flex' : 'hidden'} lg:flex w-full lg:w-80 shrink-0 border-l border-slate-100 bg-white overflow-hidden flex-col`}>
                 <IdeaBin tripId={tripId} readOnly={!currentUserIsAdmin} canVote={currentUserCanVote} />
               </div>
             </div>
@@ -526,9 +578,24 @@ function TripPlannerPageContent() {
 
           {/* ── Concierge / Live Mode ──────────────────────────────────────── */}
           {mode === 'concierge' && (
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+              <div className="lg:hidden flex border-b border-slate-100 bg-white shrink-0">
+                {(['timeline', 'map'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setConciergeMobileView(t)}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
+                      conciergeMobileView === t
+                        ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                        : 'text-slate-400 border-b-2 border-transparent'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
               {/* Day Timeline */}
-              <div className="w-[380px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex flex-col">
+              <div className={`${conciergeMobileView === 'timeline' ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] shrink-0 border-r border-slate-100 bg-white overflow-hidden flex-col`}>
                 {/* Day selector header — only shows days added in Plan mode */}
                 <div className="px-6 pt-5 pb-4 border-b border-slate-50 shrink-0">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Select Day</p>
@@ -560,14 +627,14 @@ function TripPlannerPageContent() {
               </div>
 
               {/* Map + optional concierge overlay */}
-              <div className="flex-1 relative">
+              <div className={`${conciergeMobileView === 'map' ? 'flex' : 'hidden'} lg:flex flex-1 relative`}>
                 <GoogleMap filterDay={liveDay ?? undefined} tripId={tripId} />
                 {isCurrentDay && currentUserIsAdmin && (
                   <ConciergeActionBar />
                 )}
                 {!isCurrentDay && liveDay && (
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 px-5 py-3 bg-white/80 backdrop-blur border border-slate-200 rounded-2xl shadow-lg">
-                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                  <div className="absolute bottom-4 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-20 px-5 py-3 bg-white/80 backdrop-blur border border-slate-200 rounded-2xl shadow-lg flex justify-center">
+                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest text-center">
                       Concierge activates on {format(liveDay, 'EEE, MMM d')}
                     </p>
                   </div>
@@ -798,14 +865,19 @@ function TripPlannerPageContent() {
 
       {/* Remove Member Confirmation Dialog */}
       {removeConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="remove-member-title"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
             <div className="px-6 pt-6 pb-4 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-rose-500" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">Remove {removeConfirm.name}?</h3>
+                <h3 id="remove-member-title" className="text-base font-black text-slate-900">Remove {removeConfirm.name}?</h3>
                 <p className="text-sm text-slate-500 mt-1">
                   They will lose access to this trip and it will no longer appear on their dashboard.
                 </p>
@@ -833,14 +905,19 @@ function TripPlannerPageContent() {
 
       {/* Delete Day Confirmation Dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-day-title"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
             <div className="px-6 pt-6 pb-4 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">
+                <h3 id="delete-day-title" className="text-base font-black text-slate-900">
                   Delete Day {deleteConfirm.dayNumber}?
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">

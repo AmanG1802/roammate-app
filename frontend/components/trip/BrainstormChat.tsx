@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, RotateCcw, Send, Sparkles, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { AnimatePresence, motion } from 'framer-motion';
+import { getToken } from '@/lib/auth';
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string; created_at: string };
 
 function authHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -23,17 +25,29 @@ export default function BrainstormChat({
   const [sending, setSending] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [loadTick, setLoadTick] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setLoadError(false);
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/messages`, {
       headers: authHeaders(),
       cache: 'no-store',
+      signal: controller.signal,
     })
-      .then((r) => (r.ok ? r.json() : []))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`status ${r.status}`);
+        return r.json();
+      })
       .then((data: Msg[]) => setMessages(data))
-      .catch(() => {});
-  }, [tripId]);
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        setLoadError(true);
+      });
+    return () => controller.abort();
+  }, [tripId, loadTick]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -61,7 +75,25 @@ export default function BrainstormChat({
       });
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.history);
+        const history: Msg[] = data.history;
+        if (retryMsg) {
+          // Retry had no optimistic message; use full history to restore state
+          setMessages(history);
+        } else {
+          // Normal send: optimistic user message already in state.
+          // Swap it for the server's real user message + append the assistant reply.
+          const assistantMsg = history[history.length - 1];
+          const realUserMsg = history[history.length - 2];
+          if (assistantMsg?.role === 'assistant') {
+            setMessages((prev) => [
+              ...prev.slice(0, -1),
+              ...(realUserMsg?.role === 'user' ? [realUserMsg] : []),
+              assistantMsg,
+            ]);
+          } else {
+            setMessages(history);
+          }
+        }
       } else {
         setFailedMessage(msg);
       }
@@ -113,7 +145,21 @@ export default function BrainstormChat({
 
       {/* Messages */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-5 py-6 space-y-4">
-        {messages.length === 0 && !sending && (
+        {loadError && (
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs font-bold leading-relaxed">
+              Couldn&apos;t load chat history.
+              <button
+                onClick={() => setLoadTick((t) => t + 1)}
+                className="ml-2 underline underline-offset-2 hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+        {messages.length === 0 && !sending && !loadError && (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <div className="w-14 h-14 bg-white border border-indigo-100 rounded-2xl flex items-center justify-center shadow-sm shadow-indigo-50">
               <MessageSquare className="w-7 h-7 text-indigo-300" />
@@ -161,7 +207,7 @@ export default function BrainstormChat({
 
         {/* Typing indicator while waiting for AI response */}
         {sending && (
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2" aria-live="polite" aria-label="Assistant is responding">
             <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0 shadow-sm shadow-indigo-200/60">
               <Sparkles className="w-3 h-3 text-white" />
             </div>
@@ -196,16 +242,24 @@ export default function BrainstormChat({
 
       {/* Input area */}
       <div className="border-t border-slate-100 p-4 space-y-2.5 shrink-0 bg-white">
-        {hasAssistant && (
-          <button
-            onClick={extract}
-            disabled={extracting}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-black hover:from-indigo-600 hover:to-violet-600 transition-all shadow-sm shadow-indigo-200/40 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            Create items from chat
-          </button>
-        )}
+        <AnimatePresence>
+          {hasAssistant && (
+            <motion.button
+              key="extract"
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              onClick={extract}
+              disabled={extracting}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-black hover:from-indigo-600 hover:to-violet-600 transition-colors shadow-sm shadow-indigo-200/40 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Create items from chat
+            </motion.button>
+          )}
+        </AnimatePresence>
         <div className="flex items-end gap-2">
           <textarea
             rows={2}
@@ -223,7 +277,8 @@ export default function BrainstormChat({
           <button
             onClick={() => send()}
             disabled={sending || !input.trim()}
-            className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
+            aria-label="Send message"
+            className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer active:scale-95"
           >
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>

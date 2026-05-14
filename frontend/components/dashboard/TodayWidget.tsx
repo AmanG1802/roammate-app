@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useEffect, useState, useCallback, useImperativeHandle, useRef, forwardRef } from 'react';
 import Link from 'next/link';
 import { Calendar, Clock, MapPin, ChevronRight, ChevronLeft, Sparkles, Plane, History, Loader2 } from 'lucide-react';
+import { getToken } from '@/lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type TodayEvent = {
@@ -44,7 +45,7 @@ export type TodayWidgetHandle = { refresh: () => void };
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 function authHeaders(): Record<string, string> {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const t = getToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
@@ -60,17 +61,27 @@ const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
     const [loading, setLoading] = useState(true);
     const [pageIdx, setPageIdx] = useState(0);
     const [direction, setDirection] = useState(0);
+    const controllerRef = useRef<AbortController | null>(null);
 
     const load = useCallback(async () => {
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
       try {
-        const res = await fetch(`${API}/dashboard/today`, { headers: authHeaders() });
+        const res = await fetch(`${API}/dashboard/today`, {
+          headers: authHeaders(),
+          signal: controller.signal,
+        });
         if (res.ok) {
           const d: WidgetData = await res.json();
           setData(d);
           setPageIdx(d.default_index);
         }
-      } catch { /* ignore */ }
-      finally { setLoading(false); }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }, []);
 
     useImperativeHandle(ref, () => ({ refresh: load }), [load]);
@@ -79,7 +90,10 @@ const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
       load();
       const onFocus = () => load();
       window.addEventListener('focus', onFocus);
-      return () => window.removeEventListener('focus', onFocus);
+      return () => {
+        window.removeEventListener('focus', onFocus);
+        controllerRef.current?.abort();
+      };
     }, [load]);
 
     const goPrev = useCallback(() => {

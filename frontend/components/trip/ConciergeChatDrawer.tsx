@@ -8,13 +8,14 @@ import {
   ArrowRight, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { useTripStore } from '@/lib/store';
+import { getToken } from '@/lib/auth';
 import clsx from 'clsx';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 function authHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getToken();
   return token
     ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
     : { 'Content-Type': 'application/json' };
@@ -198,6 +199,16 @@ export default function ConciergeChatDrawer({
   const inputRef = useRef<HTMLInputElement>(null);
   const { activeTripId, loadEvents } = useTripStore();
   const processedPreActionRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const nearbyAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      nearbyAbortRef.current?.abort();
+    };
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -215,10 +226,23 @@ export default function ConciergeChatDrawer({
     }
   }, [isOpen]);
 
-  // Handle pre-composed actions from action bar buttons
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
+
+  // Handle pre-composed actions from action bar buttons.
+  // Use a stable id field if present, falling back to a content hash, to avoid
+  // re-processing the same action when the parent re-renders.
   useEffect(() => {
     if (!isOpen || !preAction || !activeTripId) return;
-    const actionKey = JSON.stringify(preAction);
+    const actionKey =
+      (preAction as { id?: string }).id ??
+      `${preAction.type}:${preAction.payload?.eventId ?? ''}`;
     if (processedPreActionRef.current === actionKey) return;
     processedPreActionRef.current = actionKey;
 
@@ -234,12 +258,13 @@ export default function ConciergeChatDrawer({
   };
 
   const updateMessage = (id: string, updates: Partial<ChatMessage>) => {
+    if (!mountedRef.current) return;
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
   };
 
   const refreshEvents = async () => {
     if (activeTripId) {
-      const token = localStorage.getItem('token') || '';
+      const token = getToken() ?? '';
       await loadEvents(activeTripId, token);
     }
   };
@@ -409,6 +434,11 @@ export default function ConciergeChatDrawer({
 
   const doNearbySearch = async (query: string, lat: number, lng: number, replaceId: string, category?: string) => {
     if (!activeTripId) return;
+    // Cancel any in-flight nearby search so a rapid second click doesn't get
+    // overwritten by a stale first response.
+    nearbyAbortRef.current?.abort();
+    const controller = new AbortController();
+    nearbyAbortRef.current = controller;
     try {
       const payload: Record<string, unknown> = { query, lat, lng, limit: 3 };
       if (category) payload.category = category;
@@ -416,6 +446,7 @@ export default function ConciergeChatDrawer({
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
@@ -425,7 +456,9 @@ export default function ConciergeChatDrawer({
         type: 'place_card',
         places: data.places,
       });
-    } catch {
+    } catch (err) {
+      // Ignore abort errors — they happen when a newer search supersedes this one.
+      if ((err as { name?: string } | null)?.name === 'AbortError') return;
       updateMessage(replaceId, {
         content: 'Failed to search nearby places. Please try again.',
         type: 'error',
@@ -526,6 +559,9 @@ export default function ConciergeChatDrawer({
             onClick={onClose}
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Concierge chat"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
