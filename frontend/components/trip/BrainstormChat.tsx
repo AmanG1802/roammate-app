@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, RotateCcw, Send, Sparkles, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { AnimatePresence, motion } from 'framer-motion';
 import { getToken } from '@/lib/auth';
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string; created_at: string };
@@ -206,7 +207,7 @@ export default function BrainstormChat({
 
         {/* Typing indicator while waiting for AI response */}
         {sending && (
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2" aria-live="polite" aria-label="Assistant is responding">
             <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0 shadow-sm shadow-indigo-200/60">
               <Sparkles className="w-3 h-3 text-white" />
             </div>
@@ -241,16 +242,24 @@ export default function BrainstormChat({
 
       {/* Input area */}
       <div className="border-t border-slate-100 p-4 space-y-2.5 shrink-0 bg-white">
-        {hasAssistant && (
-          <button
-            onClick={extract}
-            disabled={extracting}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-black hover:from-indigo-600 hover:to-violet-600 transition-all shadow-sm shadow-indigo-200/40 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            Create items from chat
-          </button>
-        )}
+        <AnimatePresence>
+          {hasAssistant && (
+            <motion.button
+              key="extract"
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              onClick={extract}
+              disabled={extracting}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white rounded-xl text-xs font-black hover:from-indigo-600 hover:to-violet-600 transition-colors shadow-sm shadow-indigo-200/40 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Create items from chat
+            </motion.button>
+          )}
+        </AnimatePresence>
         <div className="flex items-end gap-2">
           <textarea
             rows={2}
@@ -268,7 +277,8 @@ export default function BrainstormChat({
           <button
             onClick={() => send()}
             disabled={sending || !input.trim()}
-            className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
+            aria-label="Send message"
+            className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer active:scale-95"
           >
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>

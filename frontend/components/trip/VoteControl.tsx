@@ -55,7 +55,7 @@ function VoterPopup({ voters }: { voters: { name: string; avatar_url?: string | 
   const shown = voters.length <= 4 ? voters : voters.slice(0, 3);
   const extra = voters.length <= 4 ? 0 : voters.length - 3;
   return (
-    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 pointer-events-none">
+    <div role="tooltip" aria-hidden="true" className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-50 pointer-events-none">
       <div className="bg-white border border-slate-200 rounded-full shadow-lg px-1.5 py-1 flex items-center gap-1">
         {shown.map((v, i) => (
           <div

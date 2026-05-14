@@ -103,7 +103,7 @@ export default function ConciergeActionBar() {
           <button
             onClick={() => setShowLateMenu((v) => !v)}
             disabled={isProcessing || events.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 rounded-xl font-bold text-sm hover:bg-rose-100 transition-colors disabled:opacity-40"
+            className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 rounded-xl font-bold text-sm hover:bg-rose-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {isProcessing ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -132,17 +132,19 @@ export default function ConciergeActionBar() {
 
         <button
           title="Skip Next"
+          aria-label="Skip next event"
           onClick={handleSkipNext}
           disabled={!events.some((e) => e.start_time && !e.is_skipped && (e.start_time > new Date() || (e.end_time && e.end_time > new Date())))}
-          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30"
+          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
         >
           <SkipForward className="w-4 h-4" />
         </button>
 
         <button
           title="Find Coffee"
+          aria-label="Find coffee nearby"
           onClick={handleFindCoffee}
-          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors active:scale-95"
         >
           <Coffee className="w-4 h-4" />
         </button>

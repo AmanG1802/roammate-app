@@ -226,6 +226,15 @@ export default function ConciergeChatDrawer({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
+
   // Handle pre-composed actions from action bar buttons.
   // Use a stable id field if present, falling back to a content hash, to avoid
   // re-processing the same action when the parent re-renders.
@@ -550,6 +559,9 @@ export default function ConciergeChatDrawer({
             onClick={onClose}
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Concierge chat"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}

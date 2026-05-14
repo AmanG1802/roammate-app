@@ -123,7 +123,16 @@ const NotificationBell = forwardRef<NotificationBellHandle>(
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [shakeTick, setShakeTick] = useState(0);
+  const prevUnreadRef = useRef(0);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (unread > prevUnreadRef.current && prevUnreadRef.current !== 0) {
+      setShakeTick((t) => t + 1);
+    }
+    prevUnreadRef.current = unread;
+  }, [unread]);
 
   const fetchUnread = useCallback(async () => {
     try {
@@ -208,14 +217,30 @@ const NotificationBell = forwardRef<NotificationBellHandle>(
       <button
         onClick={() => setOpen((v) => !v)}
         className="relative p-2.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors"
-        aria-label="Notifications"
+        aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
       >
-        <Bell className="w-5 h-5" />
-        {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-black text-white bg-rose-500 rounded-full ring-2 ring-white">
-            {unread > 99 ? '99+' : unread}
-          </span>
-        )}
+        <motion.span
+          key={shakeTick}
+          animate={shakeTick > 0 ? { rotate: [0, -12, 12, -8, 8, 0] } : undefined}
+          transition={{ duration: 0.6, ease: 'easeInOut' }}
+          className="inline-flex"
+        >
+          <Bell className="w-5 h-5" />
+        </motion.span>
+        <AnimatePresence>
+          {unread > 0 && (
+            <motion.span
+              key="unread-badge"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+              className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-black text-white bg-rose-500 rounded-full ring-2 ring-white"
+            >
+              {unread > 99 ? '99+' : unread}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </button>
 
       <AnimatePresence>

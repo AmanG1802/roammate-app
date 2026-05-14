@@ -485,12 +485,12 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                     isSkipped
                       ? 'bg-slate-50 border-slate-200 border-dashed'
                       : isConflict
-                        ? 'bg-white border-red-200 hover:shadow-md'
+                        ? 'bg-white border-slate-100 ring-2 ring-red-200 ring-offset-0 hover:shadow-md'
                         : 'bg-white border-slate-100 hover:border-indigo-100 hover:shadow-md'
                   }`}>
                     {/* Row 1: grip + title (full width) */}
                     <div className="flex items-start gap-2">
-                      {!readOnly && !isSkipped && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-400 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing" />}
+                      {!readOnly && !isSkipped && <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 group-hover:scale-110 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing transition-transform" />}
                       <h4 className={`font-black leading-tight flex-1 min-w-0 ${isSkipped ? 'line-through text-slate-400' : 'text-slate-900'}`}>
                         {event.title}
                       </h4>
