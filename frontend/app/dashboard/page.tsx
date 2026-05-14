@@ -565,6 +565,9 @@ export default function DashboardPage() {
           {isModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
               <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="new-trip-title"
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -572,11 +575,12 @@ export default function DashboardPage() {
               >
                 <button
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Close create trip dialog"
                   className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600"
                 >
                   <X className="w-6 h-6" />
                 </button>
-                <h3 className="text-3xl font-black text-slate-900 mb-2">New Adventure.</h3>
+                <h3 id="new-trip-title" className="text-3xl font-black text-slate-900 mb-2">New Adventure.</h3>
                 <p className="text-slate-500 font-medium mb-8">Where are we heading next?</p>
                 <form onSubmit={handleCreateTrip} className="space-y-5">
                   <input
@@ -976,14 +980,19 @@ function TripGrid({
 
       {/* Delete Trip Confirmation Dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-trip-title"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
             <div className="px-6 pt-6 pb-4 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-rose-500" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">Delete &ldquo;{deleteConfirm.name}&rdquo;?</h3>
+                <h3 id="delete-trip-title" className="text-base font-black text-slate-900">Delete &ldquo;{deleteConfirm.name}&rdquo;?</h3>
                 <p className="text-sm text-slate-500 mt-1">
                   This will permanently delete the trip, all its itinerary, ideas, and remove all members. This cannot be undone.
                 </p>

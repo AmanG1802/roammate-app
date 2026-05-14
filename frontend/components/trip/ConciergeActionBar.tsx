@@ -5,7 +5,8 @@ import { useTripStore } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { toastBus } from '@/lib/toast-bus';
 import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check } from 'lucide-react';
-import ConciergeChatDrawer from './ConciergeChatDrawer';
+import dynamic from 'next/dynamic';
+const ConciergeChatDrawer = dynamic(() => import('./ConciergeChatDrawer'), { ssr: false });
 
 const LATE_OPTIONS = [15, 30, 60];
 

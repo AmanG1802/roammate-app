@@ -14,7 +14,15 @@ import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
 import Timeline from '@/components/trip/Timeline';
 import IdeaBin from '@/components/trip/IdeaBin';
 import BrainstormSection from '@/components/trip/BrainstormSection';
-import GoogleMap from '@/components/map/GoogleMap';
+import dynamic from 'next/dynamic';
+const GoogleMap = dynamic(() => import('@/components/map/GoogleMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full bg-slate-100 animate-pulse flex items-center justify-center">
+      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading map…</span>
+    </div>
+  ),
+});
 // Collaborators header removed — invite flow lives in People tab now
 import ConciergeActionBar from '@/components/trip/ConciergeActionBar';
 import { useTripStore, TripDay } from '@/lib/store';
@@ -857,14 +865,19 @@ function TripPlannerPageContent() {
 
       {/* Remove Member Confirmation Dialog */}
       {removeConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="remove-member-title"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
             <div className="px-6 pt-6 pb-4 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-rose-500" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">Remove {removeConfirm.name}?</h3>
+                <h3 id="remove-member-title" className="text-base font-black text-slate-900">Remove {removeConfirm.name}?</h3>
                 <p className="text-sm text-slate-500 mt-1">
                   They will lose access to this trip and it will no longer appear on their dashboard.
                 </p>
@@ -892,14 +905,19 @@ function TripPlannerPageContent() {
 
       {/* Delete Day Confirmation Dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-day-title"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
             <div className="px-6 pt-6 pb-4 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">
+                <h3 id="delete-day-title" className="text-base font-black text-slate-900">
                   Delete Day {deleteConfirm.dayNumber}?
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">
