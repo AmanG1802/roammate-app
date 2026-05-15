@@ -29,7 +29,7 @@ import logging
 from datetime import datetime
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +47,20 @@ from app.models.all_models import (
 from app.schemas.place import PlaceFields
 from app.schemas.route import RouteLeg, RouteResponse, UnroutableEvent
 from app.services.google_maps import RoutePoint, get_google_maps_service
+from app.services.google_maps.base import BaseMapService
 from app.services.roles import require_trip_member
+
+
+def get_enrichment_service(
+    x_client_platform: Optional[str] = Header(None),
+) -> BaseMapService:
+    """Return Apple Maps service for iOS clients when enabled, else Google."""
+    if x_client_platform and x_client_platform.lower() == "ios":
+        from app.services.apple_maps import get_apple_maps_service
+        apple_svc = get_apple_maps_service()
+        if apple_svc is not None:
+            return apple_svc
+    return get_google_maps_service()
 
 log = logging.getLogger(__name__)
 
@@ -341,8 +354,9 @@ async def re_enrich_item(
     body: ReEnrichRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    svc: BaseMapService = Depends(get_enrichment_service),
 ) -> ReEnrichResponse:
-    """Re-attempt Google Maps enrichment for a single item."""
+    """Re-attempt Maps enrichment for a single item (Google or Apple)."""
     model_cls = _KIND_MODEL[body.kind]
     row = (await db.execute(
         select(model_cls).where(model_cls.id == body.item_id)
@@ -357,7 +371,6 @@ async def re_enrich_item(
     # Clear cached place_id so enrich_item actually re-fetches
     item_dict["place_id"] = None
 
-    svc = get_google_maps_service()
     enriched = await svc.enrich_item(item_dict)
 
     if not enriched.get("place_id"):
@@ -377,3 +390,91 @@ async def re_enrich_item(
     data = {f: getattr(row, f) for f in PLACE_FIELDS}
     data["id"] = row.id
     return ReEnrichResponse.model_validate(data)
+
+
+# ── Client-computed route persistence (iOS MKDirections) ──────────────────
+
+class RouteSaveRequest(BaseModel):
+    day_date: str
+    encoded_polyline: Optional[str] = None
+    legs: list[RouteLeg] = []
+    total_duration_s: int = 0
+    total_distance_m: int = 0
+    ordered_event_ids: list[str] = []
+    unroutable: list[UnroutableEvent] = []
+    waypoint_fingerprint: Optional[str] = None
+
+
+@router.post("/{trip_id}/route/save", response_model=RouteResponse)
+async def save_client_route(
+    trip_id: int,
+    body: RouteSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RouteResponse:
+    """Persist a route computed client-side (e.g. iOS MKDirections).
+
+    No Google/Apple API call is made — this is pure storage.  Accepts the
+    same shape as ``RouteResponse`` so the iOS app can round-trip the data
+    it built from ``MKRoute`` objects.
+    """
+    await require_trip_member(db, trip_id, current_user.id)
+
+    now = datetime.utcnow()
+    legs_dicts = [l.model_dump() for l in body.legs]
+    unroutable_dicts = [u.model_dump() for u in body.unroutable]
+
+    # Compute fingerprint from current events if client didn't supply one
+    fingerprint = body.waypoint_fingerprint
+    if not fingerprint:
+        stmt = select(EventModel).where(
+            EventModel.trip_id == trip_id,
+            EventModel.day_date == body.day_date,
+            EventModel.is_skipped == False,
+        )
+        events: list[EventModel] = list((await db.execute(stmt)).scalars().all())
+        fingerprint = compute_waypoint_fingerprint(events)
+
+    existing_route = (await db.execute(
+        select(DayRoute).where(
+            DayRoute.trip_id == trip_id,
+            DayRoute.day_date == body.day_date,
+        )
+    )).scalar_one_or_none()
+
+    if existing_route:
+        existing_route.encoded_polyline = body.encoded_polyline
+        existing_route.legs = legs_dicts
+        existing_route.total_duration_s = body.total_duration_s
+        existing_route.total_distance_m = body.total_distance_m
+        existing_route.ordered_event_ids = body.ordered_event_ids
+        existing_route.unroutable = unroutable_dicts
+        existing_route.waypoint_fingerprint = fingerprint
+        existing_route.computed_at = now
+    else:
+        db.add(DayRoute(
+            trip_id=trip_id,
+            day_date=body.day_date,
+            encoded_polyline=body.encoded_polyline,
+            legs=legs_dicts,
+            total_duration_s=body.total_duration_s,
+            total_distance_m=body.total_distance_m,
+            ordered_event_ids=body.ordered_event_ids,
+            unroutable=unroutable_dicts,
+            waypoint_fingerprint=fingerprint,
+            computed_at=now,
+        ))
+    await db.commit()
+
+    return RouteResponse(
+        encoded_polyline=body.encoded_polyline,
+        legs=body.legs,
+        total_duration_s=body.total_duration_s,
+        total_distance_m=body.total_distance_m,
+        ordered_event_ids=body.ordered_event_ids,
+        unroutable=body.unroutable,
+        reason=None,
+        waypoint_fingerprint=fingerprint,
+        computed_at=now,
+        is_stale=False,
+    )

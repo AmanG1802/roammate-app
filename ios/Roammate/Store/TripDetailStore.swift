@@ -12,6 +12,13 @@ final class TripDetailStore: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
+    // Route state
+    @Published var routeOverlays: [RouteOverlay] = []
+    @Published var routeResponse: RouteResponseDTO?
+    @Published var isRouteLoading = false
+    @Published var isRouteStale = false
+    @Published var routeFingerprint: String?
+
     init(tripId: Int) {
         self.tripId = tripId
         loadFromCache()
@@ -259,6 +266,65 @@ final class TripDetailStore: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    // MARK: - Route
+
+    func loadStoredRoute(dayDate: String) async {
+        do {
+            let stored = try await RouteService.fetchStoredRoute(tripId: tripId, dayDate: dayDate)
+            guard let stored else {
+                routeOverlays = []
+                routeResponse = nil
+                isRouteStale = false
+                return
+            }
+
+            routeResponse = stored
+            isRouteStale = stored.isStale
+            routeFingerprint = stored.waypointFingerprint
+
+            let allEvents = eventsByDay.values.flatMap { $0 }
+            routeOverlays = RouteService.decodeStoredRoute(response: stored, events: allEvents)
+        } catch {
+            routeOverlays = []
+            routeResponse = nil
+        }
+    }
+
+    func refreshRoute(dayDate: String) async {
+        let events = eventsByDay[dayDate] ?? []
+        isRouteLoading = true
+        defer { isRouteLoading = false }
+
+        let (overlays, saveRequest) = await RouteService.computeRoute(events: events)
+        routeOverlays = overlays
+
+        guard let saveRequest, !saveRequest.legs.isEmpty else { return }
+
+        do {
+            let saved = try await RouteService.saveRoute(tripId: tripId, request: saveRequest)
+            routeResponse = saved
+            isRouteStale = false
+            routeFingerprint = saved.waypointFingerprint
+        } catch {
+            // Route was computed locally but save failed; still show overlays
+        }
+    }
+
+    func checkRouteStaleness(dayDate: String) {
+        let events = eventsByDay[dayDate] ?? []
+        let currentFp = RouteService.computeFingerprint(events: events)
+        if let stored = routeFingerprint, stored != currentFp {
+            isRouteStale = true
+        }
+    }
+
+    func clearRoute() {
+        routeOverlays = []
+        routeResponse = nil
+        isRouteStale = false
+        routeFingerprint = nil
     }
 
     // MARK: - Members

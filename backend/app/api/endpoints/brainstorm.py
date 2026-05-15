@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, time as dt_time, timezone as dt_tz
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -71,6 +71,7 @@ from app.services.roles import require_trip_member
 from app.services import notification_service
 from app.services.llm.registry import get_brainstorm_client
 from app.services.google_maps import get_google_maps_service
+from app.services.google_maps.base import BaseMapService
 from app.services.llm.dedup import deduplicate
 from app.schemas.notification import NotificationType
 
@@ -178,11 +179,24 @@ async def chat(
     )
 
 
+def _get_enrichment_service(
+    x_client_platform: Optional[str] = Header(None),
+) -> BaseMapService:
+    """Return Apple Maps service for iOS clients when enabled, else Google."""
+    if x_client_platform and x_client_platform.lower() == "ios":
+        from app.services.apple_maps import get_apple_maps_service
+        apple_svc = get_apple_maps_service()
+        if apple_svc is not None:
+            return apple_svc
+    return get_google_maps_service()
+
+
 @router.post("/{trip_id}/brainstorm/extract", response_model=BrainstormExtractResponse)
 async def extract(
     trip_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    maps_svc: BaseMapService = Depends(_get_enrichment_service),
 ):
     await require_trip_member(db, trip_id, current_user.id)
 
@@ -207,7 +221,6 @@ async def extract(
             detail="AI extraction is temporarily unavailable. Please try again.",
         ) from exc
 
-    maps_svc = get_google_maps_service()
     raw_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
         raw_items, user_id=current_user.id, trip_id=trip_id,
     )

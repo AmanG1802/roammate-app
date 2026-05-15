@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_FETCH_RATING: bool = True
     GOOGLE_MAPS_USE_NEARBY_API: bool = False  # True = Nearby Search API, False = Text Search with locationBias
 
+    # Apple Maps Server API (used for iOS enrichment when enabled)
+    APPLE_MAPS_ENABLED: bool = False
+    APPLE_MAPS_TEAM_ID: Optional[str] = None
+    APPLE_MAPS_KEY_ID: Optional[str] = None
+    APPLE_MAPS_PRIVATE_KEY_PATH: Optional[str] = None  # path to .p8 file
+
     LLM_ENABLED: bool = False
     LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"
     LLM_MODEL: str = "gpt-4o-mini"     # model name within the chosen provider

@@ -133,6 +133,7 @@ final class APIClient {
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("ios", forHTTPHeaderField: "X-Client-Platform")
 
         if requiresAuth, let token = KeychainHelper.loadToken() {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
