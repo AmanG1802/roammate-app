@@ -69,7 +69,7 @@ def _event_dict_for_response(e: EventModel) -> dict:
         "location_name": e.location_name,
         "lat": e.lat,
         "lng": e.lng,
-        "day_date": e.day_date.isoformat() if e.day_date else None,
+        "day_date": e.day_date,
         "start_time": e.start_time.isoformat() if e.start_time else None,
         "end_time": e.end_time.isoformat() if e.end_time else None,
         "is_locked": e.is_locked,
@@ -90,7 +90,7 @@ def _event_dict_for_response(e: EventModel) -> dict:
 async def _load_today_events(
     db: AsyncSession, trip_id: int, trip_tz: str,
 ) -> list[EventModel]:
-    today = today_in_tz(trip_tz)
+    today = today_in_tz(trip_tz).isoformat()
     stmt = (
         select(EventModel)
         .where(

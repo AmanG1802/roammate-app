@@ -2,11 +2,10 @@ import Foundation
 
 enum EventService {
     /// Fetch events for a trip, optionally scoped to a single day.
-    static func getEvents(tripId: Int, dayDate: Date? = nil) async throws -> [Event] {
-        let dateString = dayDate.map { isoDate($0) }
+    static func getEvents(tripId: Int, dayDate: String? = nil) async throws -> [Event] {
         return try await APIClient.shared.request(
             "/events/",
-            query: ["trip_id": String(tripId), "day_date": dateString]
+            query: ["trip_id": String(tripId), "day_date": dayDate]
         )
     }
 
@@ -38,7 +37,7 @@ enum EventService {
 
     // MARK: - Helpers
 
-    private static func isoDate(_ date: Date) -> String {
+    static func isoDateString(from date: Date) -> String {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .iso8601)
         f.timeZone = TimeZone(identifier: "UTC")

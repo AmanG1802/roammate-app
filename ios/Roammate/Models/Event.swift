@@ -23,8 +23,8 @@ struct Event: Codable, Identifiable, Hashable {
 
     // Event-specific
     let locationName: String?
-    let dayDate: Date?
-    let startTime: Date?      // full ISO-8601 datetime in UTC
+    let dayDate: String?       // "YYYY-MM-DD" — plain ISO date string
+    let startTime: Date?       // full ISO-8601 datetime in UTC
     let endTime: Date?
     let isLocked: Bool
     let eventType: String?
@@ -72,7 +72,7 @@ struct EventCreate: Encodable {
     let timeCategory: String?
     let addedBy: String?
     let locationName: String?
-    let dayDate: Date?
+    let dayDate: String?
     let startTime: Date?
     let endTime: Date?
     let isLocked: Bool
@@ -99,49 +99,11 @@ struct EventCreate: Encodable {
         case isSkipped = "is_skipped"
         case sourceIdeaId = "source_idea_id"
     }
-
-    private static let dayDateFormatter: DateFormatter = {
-        let fmt = DateFormatter()
-        fmt.calendar = Calendar(identifier: .iso8601)
-        fmt.timeZone = TimeZone(identifier: "UTC")
-        fmt.dateFormat = "yyyy-MM-dd"
-        return fmt
-    }()
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(tripId, forKey: .tripId)
-        try container.encode(title, forKey: .title)
-        try container.encodeIfPresent(description, forKey: .description)
-        try container.encodeIfPresent(category, forKey: .category)
-        try container.encodeIfPresent(placeId, forKey: .placeId)
-        try container.encodeIfPresent(lat, forKey: .lat)
-        try container.encodeIfPresent(lng, forKey: .lng)
-        try container.encodeIfPresent(address, forKey: .address)
-        try container.encodeIfPresent(photoUrl, forKey: .photoUrl)
-        try container.encodeIfPresent(rating, forKey: .rating)
-        try container.encodeIfPresent(priceLevel, forKey: .priceLevel)
-        try container.encodeIfPresent(types, forKey: .types)
-        try container.encodeIfPresent(timeCategory, forKey: .timeCategory)
-        try container.encodeIfPresent(addedBy, forKey: .addedBy)
-        try container.encodeIfPresent(locationName, forKey: .locationName)
-        // Encode dayDate as "YYYY-MM-DD" string to match backend's date type
-        if let dayDate {
-            try container.encode(Self.dayDateFormatter.string(from: dayDate), forKey: .dayDate)
-        }
-        try container.encodeIfPresent(startTime, forKey: .startTime)
-        try container.encodeIfPresent(endTime, forKey: .endTime)
-        try container.encode(isLocked, forKey: .isLocked)
-        try container.encodeIfPresent(eventType, forKey: .eventType)
-        try container.encode(sortOrder, forKey: .sortOrder)
-        try container.encode(isSkipped, forKey: .isSkipped)
-        try container.encodeIfPresent(sourceIdeaId, forKey: .sourceIdeaId)
-    }
 }
 
 struct EventUpdate: Encodable {
     let title: String?
-    let dayDate: Date?
+    let dayDate: String?
     let startTime: Date?
     let endTime: Date?
     let sortOrder: Int?

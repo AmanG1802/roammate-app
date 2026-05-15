@@ -30,8 +30,10 @@ struct DashboardView: View {
                         }
                         .padding(.horizontal, RoammateSpacing.md)
 
-                        TodayWidget(trips: tripStore.trips, activeTripEvents: activeTripEvents)
-                            .padding(.horizontal, RoammateSpacing.md)
+                        TodayWidget(trips: tripStore.trips, activeTripEvents: activeTripEvents) { trip in
+                            path.append(trip)
+                        }
+                        .padding(.horizontal, RoammateSpacing.md)
 
                         tripListSection
                     }

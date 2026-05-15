@@ -3,7 +3,7 @@ import SwiftUI
 struct DayTabsBar: View {
     let days: [TripDay]
     @Binding var selectedIndex: Int
-    var eventCounts: [Date: Int] = [:]
+    var eventCounts: [String: Int] = [:]
     var onAddDay: (() -> Void)?
 
     var body: some View {

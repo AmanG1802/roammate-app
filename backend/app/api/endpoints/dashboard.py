@@ -120,7 +120,7 @@ async def get_today_widget(
         sd = _to_date(t.start_date)
         ev_stmt = (
             select(TimelineItem)
-            .where(TimelineItem.trip_id == t.id, TimelineItem.day_date == trip_today)
+            .where(TimelineItem.trip_id == t.id, TimelineItem.day_date == trip_today.isoformat())
             .order_by(TimelineItem.start_time.nulls_last(), TimelineItem.sort_order)
         )
         events = list((await db.execute(ev_stmt)).scalars().all())

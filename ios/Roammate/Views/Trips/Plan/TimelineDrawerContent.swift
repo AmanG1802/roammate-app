@@ -1,15 +1,25 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TimelineDrawerContent: View {
     @EnvironmentObject var store: TripDetailStore
     @Binding var selectedDayIndex: Int
     @State private var dayToDelete: TripDay?
+    @State private var draggingEventId: Int?
+    @State private var reorderedEvents: [Event]?
+
+    private var displayEvents: [Event] {
+        if draggingEventId != nil, let reorderedEvents {
+            return reorderedEvents
+        }
+        return currentEvents
+    }
 
     private var sortedDays: [TripDay] {
         store.days.sorted { $0.dayNumber < $1.dayNumber }
     }
 
-    private var eventCountsByDate: [Date: Int] {
+    private var eventCountsByDate: [String: Int] {
         store.eventsByDay.mapValues { $0.count }
     }
 
@@ -22,8 +32,23 @@ struct TimelineDrawerContent: View {
 
     private var currentEvents: [Event] {
         guard let day = currentDay else { return [] }
-        let key = TripDetailStore.normalizedDay(day.date)
+        let key = EventService.isoDateString(from: day.date)
         return (store.eventsByDay[key] ?? []).sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private var conflictIds: Set<Int> {
+        var ids = Set<Int>()
+        var maxEnd: Date?
+        for ev in displayEvents {
+            if ev.isSkipped { continue }
+            if let start = ev.startTime, let prevEnd = maxEnd, start < prevEnd {
+                ids.insert(ev.id)
+            }
+            if let end = ev.endTime, end > (maxEnd ?? .distantPast) {
+                maxEnd = end
+            }
+        }
+        return ids
     }
 
     var body: some View {
@@ -55,28 +80,49 @@ struct TimelineDrawerContent: View {
                     )
                     .padding(.top, RoammateSpacing.xl)
                 } else {
-                    List {
-                        ForEach(currentEvents) { event in
+                    let events = displayEvents
+                    LazyVStack(spacing: 0) {
+                        ForEach(events) { event in
                             VStack(spacing: 0) {
-                                TimelineRow(event: event, isExpanded: false)
+                                TimelineRow(event: event, isExpanded: false, isConflict: conflictIds.contains(event.id))
 
-                                if let index = currentEvents.firstIndex(where: { $0.id == event.id }),
-                                   index < currentEvents.count - 1 {
-                                    hourDots(from: event, to: currentEvents[index + 1])
+                                if let index = events.firstIndex(where: { $0.id == event.id }),
+                                   index < events.count - 1 {
+                                    hourDots(from: event, to: events[index + 1])
                                 }
                             }
-                            .listRowInsets(EdgeInsets(top: 4, leading: RoammateSpacing.md, bottom: 4, trailing: RoammateSpacing.md))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                        }
-                        .onMove { source, destination in
-                            Task { await handleReorder(source: source, destination: destination) }
+                            .padding(.horizontal, RoammateSpacing.md)
+                            .padding(.vertical, 4)
+                            .onDrag {
+                                draggingEventId = event.id
+                                return NSItemProvider(object: String(event.id) as NSString)
+                            }
+                            .onDrop(of: [UTType.text], delegate: TimelineDropDelegate(
+                                targetEvent: event,
+                                events: events,
+                                draggingEventId: $draggingEventId,
+                                reorderedEvents: $reorderedEvents,
+                                onDrop: { reordered in
+                                    Task { await commitReorder(reordered) }
+                                }
+                            ))
+                            .transition(.asymmetric(
+                                insertion: .opacity,
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            ))
                         }
                     }
-                    .listStyle(.plain)
-                    .environment(\.editMode, .constant(.active))
-                    .scrollContentBackground(.hidden)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: events.map(\.id))
                 }
+            }
+        }
+        .onChange(of: selectedDayIndex) { _, _ in
+            reorderedEvents = nil
+            draggingEventId = nil
+        }
+        .onChange(of: store.eventsByDay) { _, _ in
+            if draggingEventId == nil {
+                reorderedEvents = nil
             }
         }
         .confirmationDialog(
@@ -122,7 +168,7 @@ struct TimelineDrawerContent: View {
             Spacer()
 
             Button {
-                let key = TripDetailStore.normalizedDay(day.date)
+                let key = EventService.isoDateString(from: day.date)
                 let hasEvents = !(store.eventsByDay[key] ?? []).isEmpty
                 if hasEvents {
                     HapticManager.warning()
@@ -164,7 +210,7 @@ struct TimelineDrawerContent: View {
         return VStack(spacing: 6) {
             ForEach(0..<hours, id: \.self) { _ in
                 Circle()
-                    .fill(Color.roammateBorder)
+                    .fill(Color.roammateIndigo.opacity(0.25))
                     .frame(width: 6, height: 6)
             }
         }
@@ -181,14 +227,12 @@ struct TimelineDrawerContent: View {
         }
     }
 
-    private func handleReorder(source: IndexSet, destination: Int) async {
+    private func commitReorder(_ events: [Event]) async {
         guard let day = currentDay else { return }
-        var events = currentEvents
-        events.move(fromOffsets: source, toOffset: destination)
+        let key = EventService.isoDateString(from: day.date)
 
-        var updated: [Event] = []
-        for (idx, event) in events.enumerated() {
-            let newEvent = Event(
+        var updated = events.enumerated().map { idx, event in
+            Event(
                 id: event.id, tripId: event.tripId, title: event.title,
                 description: event.description, category: event.category,
                 placeId: event.placeId, lat: event.lat, lng: event.lng,
@@ -201,28 +245,118 @@ struct TimelineDrawerContent: View {
                 sortOrder: idx, isSkipped: event.isSkipped,
                 up: event.up, down: event.down, myVote: event.myVote
             )
-            updated.append(newEvent)
         }
-        store.eventsByDay[TripDetailStore.normalizedDay(day.date)] = updated
 
-        for event in updated {
-            await store.reorderEvent(eventId: event.id, newSortOrder: event.sortOrder)
+        // Auto-resolve conflicts: if any overlaps exist, sort by startTime
+        if hasConflicts(updated) {
+            updated.sort { ($0.startTime ?? .distantFuture) < ($1.startTime ?? .distantFuture) }
+            updated = updated.enumerated().map { idx, event in
+                Event(
+                    id: event.id, tripId: event.tripId, title: event.title,
+                    description: event.description, category: event.category,
+                    placeId: event.placeId, lat: event.lat, lng: event.lng,
+                    address: event.address, photoUrl: event.photoUrl, rating: event.rating,
+                    priceLevel: event.priceLevel, types: event.types,
+                    timeCategory: event.timeCategory, addedBy: event.addedBy,
+                    locationName: event.locationName, dayDate: event.dayDate,
+                    startTime: event.startTime, endTime: event.endTime,
+                    isLocked: event.isLocked, eventType: event.eventType,
+                    sortOrder: idx, isSkipped: event.isSkipped,
+                    up: event.up, down: event.down, myVote: event.myVote
+                )
+            }
+            HapticManager.success()
+        } else {
+            HapticManager.medium()
         }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            store.eventsByDay[key] = updated
+            reorderedEvents = nil
+        }
+
+        await store.batchUpdateSortOrders(events: updated)
+    }
+
+    private func hasConflicts(_ events: [Event]) -> Bool {
+        var maxEnd: Date?
+        for ev in events {
+            if ev.isSkipped { continue }
+            if let start = ev.startTime, let prevEnd = maxEnd, start < prevEnd {
+                return true
+            }
+            if let end = ev.endTime, end > (maxEnd ?? .distantPast) {
+                maxEnd = end
+            }
+        }
+        return false
     }
 
     private func addNextDay() async {
+        let cal = Calendar.current
         let nextDate: Date
+
         if let lastDay = sortedDays.last {
-            nextDate = Calendar.current.date(byAdding: .day, value: 1, to: lastDay.date) ?? Date()
+            let candidate = cal.date(byAdding: .day, value: 1, to: lastDay.date) ?? Date()
+            // If trip start is after the candidate (user moved dates forward), start from trip start + existing count
+            if let tripStart = store.trip?.startDate,
+               cal.startOfDay(for: tripStart) > cal.startOfDay(for: candidate) {
+                nextDate = cal.date(byAdding: .day, value: sortedDays.count, to: tripStart) ?? candidate
+            } else {
+                nextDate = candidate
+            }
         } else if let tripStart = store.trip?.startDate {
             nextDate = tripStart
         } else {
             nextDate = Date()
         }
+
         await store.addDay(date: nextDate)
         let updatedDays = store.days.sorted { $0.dayNumber < $1.dayNumber }
         withAnimation {
             selectedDayIndex = max(0, updatedDays.count - 1)
         }
     }
+}
+
+// MARK: - Drop Delegate
+
+struct TimelineDropDelegate: DropDelegate {
+    let targetEvent: Event
+    let events: [Event]
+    @Binding var draggingEventId: Int?
+    @Binding var reorderedEvents: [Event]?
+    let onDrop: ([Event]) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let dragId = draggingEventId,
+              dragId != targetEvent.id else { return }
+
+        let current = reorderedEvents ?? events
+        guard let fromIndex = current.firstIndex(where: { $0.id == dragId }),
+              let toIndex = current.firstIndex(where: { $0.id == targetEvent.id }),
+              fromIndex != toIndex else { return }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            var updated = current
+            updated.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+            reorderedEvents = updated
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let reordered = reorderedEvents ?? events
+        onDrop(reordered)
+        draggingEventId = nil
+        reorderedEvents = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
+
+    func validateDrop(info: DropInfo) -> Bool { true }
 }

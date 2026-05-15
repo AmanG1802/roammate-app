@@ -6,7 +6,7 @@ final class TripDetailStore: ObservableObject {
 
     @Published var trip: Trip?
     @Published var days: [TripDay] = []
-    @Published var eventsByDay: [Date: [Event]] = [:]
+    @Published var eventsByDay: [String: [Event]] = [:]
     @Published var ideas: [IdeaBinItem] = []
     @Published var members: [TripMember] = []
     @Published var isLoading = false
@@ -15,14 +15,6 @@ final class TripDetailStore: ObservableObject {
     init(tripId: Int) {
         self.tripId = tripId
         loadFromCache()
-    }
-
-    // MARK: - Date normalization
-
-    static func normalizedDay(_ date: Date) -> Date {
-        var cal = Calendar(identifier: .iso8601)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        return cal.startOfDay(for: date)
     }
 
     // MARK: - Cache
@@ -58,7 +50,7 @@ final class TripDetailStore: ObservableObject {
             self.days = days
             self.ideas = ideas
             self.members = members
-            self.eventsByDay = Dictionary(grouping: events, by: { Self.normalizedDay($0.dayDate ?? .distantPast) })
+            self.eventsByDay = Dictionary(grouping: events, by: { $0.dayDate ?? "" })
 
             DiskCache.shared.store(days, key: daysCacheKey)
             DiskCache.shared.store(ideas, key: ideasCacheKey)
@@ -71,9 +63,10 @@ final class TripDetailStore: ObservableObject {
     }
 
     func loadDay(_ date: Date) async {
+        let dayStr = EventService.isoDateString(from: date)
         do {
-            let events = try await EventService.getEvents(tripId: tripId, dayDate: date)
-            eventsByDay[Self.normalizedDay(date)] = events
+            let events = try await EventService.getEvents(tripId: tripId, dayDate: dayStr)
+            eventsByDay[dayStr] = events
         } catch let e as APIError {
             error = e.errorDescription
         } catch {
@@ -130,6 +123,18 @@ final class TripDetailStore: ObservableObject {
                 }
             }
         } catch {}
+    }
+
+    /// Persist sort orders to the backend without updating local state per-call.
+    /// Local state should already be set before calling this.
+    func batchUpdateSortOrders(events: [Event]) async {
+        for event in events {
+            let update = EventUpdate(
+                title: nil, dayDate: nil, startTime: nil, endTime: nil,
+                sortOrder: event.sortOrder, timeCategory: nil, isSkipped: nil
+            )
+            _ = try? await EventService.updateEvent(id: event.id, update: update)
+        }
     }
 
     func moveEventToBin(eventId: Int) async {

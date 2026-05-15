@@ -10,6 +10,7 @@ table, which then becomes visible to all trip members.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, time as dt_time, timezone as dt_tz
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +18,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 log = logging.getLogger(__name__)
+
+_TIME_CATEGORY_HOURS: dict[str, int] = {
+    "early morning": 7,
+    "morning": 10,
+    "midday": 12,
+    "afternoon": 14,
+    "late afternoon": 16,
+    "evening": 18,
+    "night": 20,
+    "late night": 22,
+    "all_day": 9,
+    "flexible": 10,
+}
+
+
+def _time_category_to_times(
+    tc: str | None,
+) -> tuple[datetime | None, datetime | None]:
+    """Convert a time_category hint to a (start, start+1h) pair, matching the web frontend logic."""
+    if not tc:
+        return None, None
+    hour = _TIME_CATEGORY_HOURS.get(tc.lower())
+    if hour is None:
+        return None, None
+    today = datetime.now(dt_tz.utc).date()
+    start = datetime.combine(today, dt_time(hour, 0), tzinfo=dt_tz.utc)
+    end = datetime.combine(today, dt_time(hour + 1, 0), tzinfo=dt_tz.utc)
+    return start, end
 
 from app.db.session import get_db
 from app.api.deps import get_current_user
@@ -285,8 +314,11 @@ async def promote(
     for src in sources:
         fields = {k: getattr(src, k) for k in PLACE_FIELDS}
         fields["added_by"] = promoter
+        start, end = _time_category_to_times(getattr(src, "time_category", None))
         idea = IdeaBinItem(
             trip_id=trip_id,
+            start_time=start,
+            end_time=end,
             **fields,
         )
         db.add(idea)

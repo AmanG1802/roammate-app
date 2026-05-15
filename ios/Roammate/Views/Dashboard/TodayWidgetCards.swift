@@ -158,14 +158,9 @@ struct InTripCard: View {
     }
 
     private var todayEvents: [Event] {
-        var utcCal = Calendar(identifier: .iso8601)
-        utcCal.timeZone = TimeZone(identifier: "UTC")!
-        let todayUTC = utcCal.startOfDay(for: Date())
+        let todayStr = EventService.isoDateString(from: Date())
         return events
-            .filter { event in
-                guard let dayDate = event.dayDate else { return false }
-                return utcCal.isDate(dayDate, inSameDayAs: todayUTC)
-            }
+            .filter { $0.dayDate == todayStr }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
@@ -190,14 +185,16 @@ struct InTripCard: View {
             result.append(("Now", ongoing.title, ongoing.startTime.map { shortTime($0) } ?? ""))
         }
 
-        let needed = ongoing != nil ? 2 : 3
-        for event in upcoming.prefix(needed) {
-            let label = result.isEmpty && ongoing == nil ? "Up Next" : "Next"
+        let maxUpcoming = ongoing != nil ? 2 : 3
+        for (i, event) in upcoming.prefix(maxUpcoming).enumerated() {
+            let label = i == 0 ? "Up Next" : "Next"
             result.append((label, event.title, event.startTime.map { shortTime($0) } ?? ""))
         }
 
         return result
     }
+
+    let onOpenTrip: () -> Void
 
     var body: some View {
         HeroShell(
@@ -214,33 +211,31 @@ struct InTripCard: View {
 
                 if let start = trip.startDate {
                     Text("Started \(formattedDate(start))")
-                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
                         .foregroundStyle(Color.roammateMuted)
                 }
             }
 
-            ProgressView(value: Double(dayNumber), total: Double(totalDays))
-                .tint(Color.roammateAmber)
-                .background(Color.roammateAmber.opacity(0.15))
-
             if !scheduledItems.isEmpty {
-                VStack(spacing: 4) {
+                Divider().opacity(0.4)
+
+                VStack(spacing: 8) {
                     ForEach(Array(scheduledItems.enumerated()), id: \.offset) { _, item in
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Text(item.label)
-                                .font(.system(.caption2, design: .rounded, weight: .black))
-                                .foregroundStyle(item.label == "Now" ? Color.roammateAmber : Color.roammateMuted)
-                                .frame(width: 48, alignment: .leading)
+                                .font(.system(.caption, design: .rounded, weight: .black))
+                                .foregroundStyle(item.label == "Now" ? Color.roammateAmber : item.label == "Up Next" ? Color.roammateIndigo : Color.roammateMuted)
+                                .frame(width: 56, alignment: .leading)
                             Text(item.name)
-                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
                                 .foregroundStyle(Color.roammateInk)
                                 .lineLimit(1)
                             Spacer()
-                            HStack(spacing: 2) {
+                            HStack(spacing: 3) {
                                 Image(systemName: "clock")
-                                    .font(.system(size: 9))
+                                    .font(.system(size: 10))
                                 Text(item.time)
-                                    .font(.system(.caption2, design: .rounded, weight: .medium))
+                                    .font(.system(.caption, design: .rounded, weight: .medium))
                             }
                             .foregroundStyle(Color.roammateMuted)
                         }
@@ -254,18 +249,23 @@ struct InTripCard: View {
             HStack {
                 Spacer()
 
-                HStack(spacing: 4) {
-                    Text("Open Trip")
-                        .font(.system(.caption, design: .rounded, weight: .black))
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
+                Button {
+                    onOpenTrip()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Open Trip")
+                            .font(.system(.caption, design: .rounded, weight: .black))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule().fill(Color.roammateInk)
+                    )
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule().fill(Color.roammateInk)
-                )
+                .buttonStyle(.plain)
             }
         }
     }

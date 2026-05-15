@@ -9,7 +9,7 @@ LLM params are interpreted in the trip's timezone via ``to_utc()``.
 from __future__ import annotations
 
 import logging
-from datetime import timedelta, date
+from datetime import timedelta
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -64,7 +64,7 @@ def _event_dict(e: EventModel) -> dict[str, Any]:
         "location_name": e.location_name,
         "lat": e.lat,
         "lng": e.lng,
-        "day_date": e.day_date.isoformat() if e.day_date else None,
+        "day_date": e.day_date,
         "start_time": e.start_time.isoformat() if e.start_time else None,
         "end_time": e.end_time.isoformat() if e.end_time else None,
         "is_locked": e.is_locked,
@@ -220,7 +220,7 @@ class ConciergeExecutor:
 
         new_day = params.get("new_day_date")
         if new_day:
-            event.day_date = date.fromisoformat(new_day)
+            event.day_date = new_day
 
         await db.commit()
         await db.refresh(event)
@@ -254,12 +254,12 @@ class ConciergeExecutor:
             end_time = start_time + timedelta(hours=1)
 
         if params.get("day_date"):
-            day_date_val = date.fromisoformat(params["day_date"])
+            day_date_val = params["day_date"]
         elif start_time:
             from app.utils.tz import from_utc
-            day_date_val = from_utc(start_time, trip_tz).date()
+            day_date_val = from_utc(start_time, trip_tz).date().isoformat()
         else:
-            day_date_val = today_in_tz(trip_tz)
+            day_date_val = today_in_tz(trip_tz).isoformat()
 
         event = EventModel(
             trip_id=trip_id,
@@ -310,7 +310,7 @@ class ConciergeExecutor:
         category = params.get("category") or _category_from_types(types)
 
         from app.utils.tz import from_utc
-        day_date_val = from_utc(start_time, trip_tz).date()
+        day_date_val = from_utc(start_time, trip_tz).date().isoformat()
 
         event = EventModel(
             trip_id=trip_id,

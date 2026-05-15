@@ -51,7 +51,7 @@ struct BottomDrawer<Content: View>: View {
                 ScrollView {
                     content()
                 }
-                .scrollDisabled(current != .fraction(0.9))
+                .scrollDisabled(current == .minimised(140))
             }
             .frame(height: max(0, targetH - dragOffset))
             .frame(maxWidth: .infinity)

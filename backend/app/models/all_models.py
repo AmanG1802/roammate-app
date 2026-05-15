@@ -215,7 +215,7 @@ class TimelineItem(PlaceColumnsMixin, Base):
     id = Column(Integer, primary_key=True, index=True)
     trip_id = Column(Integer, ForeignKey("trip.id"))
     location_name = Column(String, nullable=True)
-    day_date = Column(Date, nullable=True, index=True)
+    day_date = Column(String, nullable=True, index=True)
     start_time = Column(DateTime(timezone=True), nullable=True)
     end_time = Column(DateTime(timezone=True), nullable=True)
     is_locked = Column(Boolean, default=False)
@@ -269,7 +269,7 @@ class DayRoute(Base):
 
     id = Column(Integer, primary_key=True)
     trip_id = Column(Integer, ForeignKey("trip.id", ondelete="CASCADE"), nullable=False, index=True)
-    day_date = Column(Date, nullable=False)
+    day_date = Column(String, nullable=False)
     encoded_polyline = Column(Text, nullable=True)
     legs = Column(JSON, nullable=False, default=list)
     total_duration_s = Column(Integer, default=0)

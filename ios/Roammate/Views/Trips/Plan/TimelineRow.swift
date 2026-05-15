@@ -3,6 +3,7 @@ import SwiftUI
 struct TimelineRow: View {
     let event: Event
     var isExpanded: Bool = false
+    var isConflict: Bool = false
     @EnvironmentObject var store: TripDetailStore
     @State private var expanded: Bool = false
     @State private var editingTime = false
@@ -114,11 +115,11 @@ struct TimelineRow: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: RoammateRadius.small, style: .continuous)
-                .fill(Color.roammateSurface)
+                .fill(isConflict ? Color.roammateDanger.opacity(0.04) : Color.roammateSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: RoammateRadius.small, style: .continuous)
-                .stroke(Color.roammateBorder, lineWidth: 0.5)
+                .stroke(isConflict ? Color.roammateDanger : Color.roammateBorder, lineWidth: isConflict ? 1.5 : 0.5)
         )
         .contentShape(Rectangle())
         .onTapGesture {

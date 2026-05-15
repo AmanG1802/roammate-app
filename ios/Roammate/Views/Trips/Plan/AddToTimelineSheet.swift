@@ -114,7 +114,7 @@ struct AddToTimelineSheet: View {
         defer { isAdding = false }
 
         let selectedIdeas = store.ideas.filter { selectedIdeaIds.contains($0.id) }
-        let key = TripDetailStore.normalizedDay(day.date)
+        let key = EventService.isoDateString(from: day.date)
         let existingCount = (store.eventsByDay[key] ?? []).count
 
         await withTaskGroup(of: (Event?, Int).self) { group in
@@ -136,7 +136,7 @@ struct AddToTimelineSheet: View {
                         timeCategory: idea.timeCategory,
                         addedBy: idea.addedBy,
                         locationName: nil,
-                        dayDate: day.date,
+                        dayDate: EventService.isoDateString(from: day.date),
                         startTime: idea.startTime,
                         endTime: idea.endTime,
                         isLocked: false,
@@ -157,7 +157,7 @@ struct AddToTimelineSheet: View {
 
             for await (event, ideaId) in group {
                 if let event {
-                    store.eventsByDay[TripDetailStore.normalizedDay(day.date), default: []].append(event)
+                    store.eventsByDay[EventService.isoDateString(from: day.date), default: []].append(event)
                     // Delete source idea from backend so it doesn't reappear on reload
                     try? await IdeaService.deleteIdea(tripId: store.tripId, ideaId: ideaId)
                     store.ideas.removeAll { $0.id == ideaId }

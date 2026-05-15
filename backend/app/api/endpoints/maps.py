@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import date, datetime
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -79,7 +79,7 @@ def compute_waypoint_fingerprint(events: list[EventModel]) -> str:
 
 
 class RouteRequest(BaseModel):
-    day_date: date
+    day_date: str
 
 
 def _has_conflict(prev: EventModel, curr: EventModel) -> bool:
@@ -268,7 +268,7 @@ async def compute_route(
 @router.get("/{trip_id}/route", response_model=Optional[RouteResponse])
 async def get_stored_route(
     trip_id: int,
-    day_date: date = Query(...),
+    day_date: str = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Optional[RouteResponse]:

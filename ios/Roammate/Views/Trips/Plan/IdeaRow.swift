@@ -86,8 +86,10 @@ struct IdeaRow: View {
                                     .font(.system(size: 11))
                                 Text(timeText)
                                     .font(.system(.caption, design: .rounded, weight: .medium))
-                                Image(systemName: "pencil")
-                                    .font(.system(size: 10))
+                                if !isSelecting {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 10))
+                                }
                             }
                             .foregroundStyle(Color.roammateMuted)
                             .padding(.horizontal, 8)
@@ -97,6 +99,7 @@ struct IdeaRow: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .disabled(isSelecting)
 
                         Spacer()
 

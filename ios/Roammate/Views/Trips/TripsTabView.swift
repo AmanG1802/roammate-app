@@ -37,23 +37,16 @@ struct TripsTabView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ZStack(alignment: .bottom) {
-                VStack(spacing: 0) {
-                    tabPill
-                    tripsList
-                }
-                .background(Color.roammateBackground.ignoresSafeArea())
-
-                if selectedTab == .upcoming && !isDeleteMode {
-                    addTripFAB
-                }
+            VStack(spacing: 0) {
+                tripsHeader
+                tabPill
+                tripsList
             }
-            .navigationTitle("My Trips")
-            .navigationBarTitleDisplayMode(.large)
+            .background(Color.roammateBackground.ignoresSafeArea())
+            .navigationBarHidden(true)
             .navigationDestination(for: Trip.self) { trip in
                 TripLandingView(trip: trip, popToRoot: { path.removeLast(path.count) })
             }
-            .toolbar { toolbarContent }
             .refreshable { await tripStore.load() }
             .task {
                 if tripStore.trips.isEmpty { await tripStore.load() }
@@ -173,7 +166,7 @@ struct TripsTabView: View {
             }
             .padding(.horizontal, RoammateSpacing.md)
             .padding(.top, RoammateSpacing.sm)
-            .padding(.bottom, RoammateLayout.contentBottomPadding + 60)
+            .padding(.bottom, RoammateLayout.contentBottomPadding)
         }
     }
 
@@ -196,34 +189,46 @@ struct TripsTabView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Toolbar
+    // MARK: - Header
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
+    private var tripsHeader: some View {
+        HStack(alignment: .center) {
+            Text("My Trips")
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .foregroundStyle(Color.roammateInk)
+
+            Spacer()
+
             if isDeleteMode {
-                HStack(spacing: 12) {
-                    Button("Cancel") {
-                        HapticManager.light()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            isDeleteMode = false
-                            selectedForDeletion.removeAll()
-                        }
+                Button("Cancel") {
+                    HapticManager.light()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        isDeleteMode = false
+                        selectedForDeletion.removeAll()
                     }
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(Color.roammateMuted)
-
-                    Button {
-                        HapticManager.warning()
-                        showBulkDeleteConfirm = true
-                    } label: {
-                        Image(systemName: "trash.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(selectedForDeletion.isEmpty ? Color.roammateMuted : Color.roammateDanger)
-                    }
-                    .disabled(selectedForDeletion.isEmpty)
                 }
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.roammateMuted)
+
+                Button {
+                    HapticManager.warning()
+                    showBulkDeleteConfirm = true
+                } label: {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(selectedForDeletion.isEmpty ? Color.roammateMuted : Color.roammateDanger)
+                }
+                .disabled(selectedForDeletion.isEmpty)
             } else {
+                Button {
+                    HapticManager.medium()
+                    showCreate = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Color.roammateIndigo)
+                }
+
                 Menu {
                     Button {
                         HapticManager.light()
@@ -236,37 +241,14 @@ struct TripsTabView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(Color.roammateIndigo)
                 }
             }
         }
-    }
-
-    // MARK: - Add Trip FAB
-
-    private var addTripFAB: some View {
-        Button {
-            HapticManager.medium()
-            showCreate = true
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.roammateIndigo, Color.roammateIndigoDark],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                    )
-                    .shadow(color: Color.roammateIndigo.opacity(0.4), radius: 12, y: 4)
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 56, height: 56)
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, RoammateLayout.tabBarHeight + RoammateLayout.tabBarBottomInset + 4)
+        .padding(.horizontal, RoammateSpacing.md)
+        .padding(.top, RoammateSpacing.sm)
+        .padding(.bottom, RoammateSpacing.xs)
     }
 
     // MARK: - Actions

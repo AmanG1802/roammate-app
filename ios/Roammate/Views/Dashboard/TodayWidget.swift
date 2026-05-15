@@ -3,6 +3,7 @@ import SwiftUI
 struct TodayWidget: View {
     let trips: [Trip]
     var activeTripEvents: [Event] = []
+    var onOpenTrip: ((Trip) -> Void)?
 
     static func activeTrip(from trips: [Trip]) -> Trip? {
         let now = Date()
@@ -100,7 +101,7 @@ struct TodayWidget: View {
     private func cardView(for item: (kind: CardKind, trip: Trip)) -> some View {
         switch item.kind {
         case .pre:     PreTripCard(trip: item.trip)
-        case .current: InTripCard(trip: item.trip, events: activeTripEvents)
+        case .current: InTripCard(trip: item.trip, events: activeTripEvents, onOpenTrip: { onOpenTrip?(item.trip) })
         case .post:    PostTripCard(trip: item.trip)
         }
     }
