@@ -92,6 +92,14 @@ async def create_event(
             await db.commit()
             await db.refresh(event)
 
+        # Remove the source idea now that it has been promoted to a timeline event
+        src_idea_to_del = (await db.execute(
+            select(IdeaBinItemModel).where(IdeaBinItemModel.id == event_in.source_idea_id)
+        )).scalars().first()
+        if src_idea_to_del:
+            await db.delete(src_idea_to_del)
+            await db.commit()
+
     recipients = await notification_service.trip_member_ids(
         db, event.trip_id, exclude_user_id=current_user.id
     )
