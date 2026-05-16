@@ -1,0 +1,61 @@
+{
+  "identifier" : "59E60BAF-5C7E-4D67-9B69-29B5F4F2A95D",
+  "nonRenewingSubscriptions" : [
+    {
+      "displayPrice" : "200",
+      "familyShareable" : false,
+      "internalID" : "9C8D3B5F-2345-6789-ABCD-EF0123456789",
+      "localizations" : [
+        {
+          "description" : "Unlock Roammate Plus for 30 days — no auto-renewal.",
+          "displayName" : "Plus · 30 days",
+          "locale" : "en_IN"
+        }
+      ],
+      "productID" : "com.roammate.app.plus.onetime",
+      "referenceName" : "Plus One-Time 30 Days",
+      "type" : "NonRenewingSubscription"
+    }
+  ],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_IN",
+    "_storefront" : "IND",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21745869",
+      "localizations" : [],
+      "name" : "Roammate Plus",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "149",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "8B7F2A4E-1234-5678-9ABC-DEF012345678",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlimited concierge, brainstorms, and offline maps.",
+              "displayName" : "Roammate Plus",
+              "locale" : "en_IN"
+            }
+          ],
+          "productID" : "com.roammate.app.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Plus Monthly",
+          "subscriptionGroupID" : "21745869",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

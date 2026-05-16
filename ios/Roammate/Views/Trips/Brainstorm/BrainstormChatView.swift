@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BrainstormChatView: View {
     @EnvironmentObject var store: BrainstormStore
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @Binding var page: Int
 
     @State private var inputText = ""
@@ -24,6 +25,8 @@ struct BrainstormChatView: View {
             if store.messages.count >= 2 {
                 extractButton
             }
+
+            quotaPill
 
             inputBar
         }
@@ -214,6 +217,75 @@ struct BrainstormChatView: View {
         .padding(.vertical, RoammateSpacing.sm)
     }
 
+    // MARK: - Brainstorm quota pill (free tier only)
+
+    /// Small status pill above the input that shows monthly brainstorms left.
+    /// Hidden for Plus users. Tinted amber at ≤3 left, rose at 0.
+    @ViewBuilder
+    private var quotaPill: some View {
+        if let remaining = subscriptionStore.entitlement.brainstormRemaining,
+           let cap = subscriptionStore.entitlement.brainstormCap {
+            let tone: QuotaTone = {
+                if remaining == 0 { return .danger }
+                if remaining <= 3 { return .warn }
+                return .ok
+            }()
+            HStack {
+                Spacer()
+                Button {
+                    if remaining == 0 {
+                        NotificationCenter.default.post(
+                            name: .needsPlus,
+                            object: nil,
+                            userInfo: ["feature": PaywallFeature.brainstormQuota.rawValue]
+                        )
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 10, weight: .bold))
+                        Text(remaining == 0 ? "No brainstorms left" : "\(remaining) / \(cap) left")
+                            .font(.caption2.weight(.black))
+                            .tracking(0.4)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(tone.bg))
+                    .overlay(Capsule().stroke(tone.border, lineWidth: 1))
+                    .foregroundStyle(tone.fg)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, RoammateSpacing.md)
+            .padding(.bottom, 4)
+        }
+    }
+
+    private enum QuotaTone {
+        case ok, warn, danger
+        var bg: Color {
+            switch self {
+            case .ok: return Color.roammateIndigoTint
+            case .warn: return Color.roammateAmberTint
+            case .danger: return Color(red: 254/255, green: 226/255, blue: 226/255)
+            }
+        }
+        var border: Color {
+            switch self {
+            case .ok: return Color.roammateIndigo.opacity(0.18)
+            case .warn: return Color.roammateAmber.opacity(0.3)
+            case .danger: return Color.roammateDanger.opacity(0.3)
+            }
+        }
+        var fg: Color {
+            switch self {
+            case .ok: return Color.roammateIndigo
+            case .warn: return Color.roammateAmber
+            case .danger: return Color.roammateDanger
+            }
+        }
+    }
+
     // MARK: - Input Bar
 
     private var inputBar: some View {
@@ -235,7 +307,14 @@ struct BrainstormChatView: View {
             Button {
                 let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
                 inputText = ""
-                Task { await store.send(text) }
+                Task {
+                    await store.send(text)
+                    // Counter ticked up on the server — refresh entitlement so
+                    // the quota pill below reflects it. (On a 402 the APIClient
+                    // has already broadcast .needsPlus; the paywall will open
+                    // and entitlement is refreshed on subscribe success.)
+                    await subscriptionStore.refresh()
+                }
             } label: {
                 ZStack {
                     Circle()

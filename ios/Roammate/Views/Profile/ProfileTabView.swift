@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileTabView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
 
     @State private var showDeleteConfirm = false
     @State private var deleteError: String?
@@ -31,11 +32,7 @@ struct ProfileTabView: View {
                                 title: "Notifications",
                                 destination: AnyView(NotificationsSettingsView().tabBarHiding())
                             )
-                            settingsRow(
-                                icon: "sparkles.rectangle.stack",
-                                title: "Subscription",
-                                destination: AnyView(SubscriptionView().tabBarHiding())
-                            )
+                            subscriptionRow
                         }
 
                         SectionHeader(title: "About")
@@ -146,6 +143,67 @@ struct ProfileTabView: View {
     }
 
     // MARK: - Reusable rows
+
+    /// Tier-aware row that replaces the static "Subscription" entry. Free users
+    /// see an "Upgrade" amber pill (pulsing) and the gradient crest icon; Plus
+    /// users see the gradient "Plus" pill. Tapping either pushes SubscriptionView.
+    private var subscriptionRow: some View {
+        let isPlus = subscriptionStore.entitlement.isPlus
+        return NavigationLink(destination: SubscriptionView().tabBarHiding()) {
+            HStack(spacing: RoammateSpacing.md) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(RoammateGradient.plus)
+                    Image(systemName: isPlus ? "crown.fill" : "sparkles")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
+                }
+                .frame(width: 44, height: 44)
+
+                Text("Subscription")
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Color.roammateInk)
+
+                Spacer()
+
+                if isPlus {
+                    Text("PLUS")
+                        .font(.caption2.weight(.black))
+                        .tracking(0.5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().stroke(Color.roammateIndigo.opacity(0.25), lineWidth: 1)
+                        )
+                        .foregroundStyle(RoammateGradient.plus)
+                } else {
+                    Text("Upgrade")
+                        .font(.caption2.weight(.black))
+                        .tracking(0.5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.roammateAmberTint))
+                        .foregroundStyle(Color.roammateAmber)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.roammateMuted)
+            }
+            .padding(.horizontal, RoammateSpacing.md)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: RoammateRadius.button, style: .continuous)
+                    .fill(Color.roammateSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: RoammateRadius.button, style: .continuous)
+                    .stroke(Color.roammateBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(RoammateRowButtonStyle())
+    }
 
     private func settingsRow(icon: String, title: String, destination: AnyView) -> some View {
         NavigationLink(destination: destination) {

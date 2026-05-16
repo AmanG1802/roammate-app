@@ -5,6 +5,8 @@ import { AlertTriangle, Loader2, RotateCcw, Send, Sparkles, MessageSquare } from
 import ReactMarkdown from 'react-markdown';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getToken } from '@/lib/auth';
+import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
+import { BrainstormQuotaPill } from '@/components/billing/QuotaPill';
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string; created_at: string };
 
@@ -28,6 +30,7 @@ export default function BrainstormChat({
   const [loadError, setLoadError] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const { requirePlus, refresh: refreshEntitlement } = useEntitlement();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -73,6 +76,22 @@ export default function BrainstormChat({
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ message: msg }),
       });
+      if (res.status === 402) {
+        // Roll back the optimistic message and open the paywall. If the user
+        // subscribes, automatically retry the send.
+        if (!retryMsg) setMessages((prev) => prev.slice(0, -1));
+        const body = await res.json().catch(() => null);
+        const needs = isNeedsPlus(body);
+        const subscribed = await requirePlus(needs?.feature ?? 'brainstorm_quota');
+        setSending(false);
+        if (subscribed) {
+          await refreshEntitlement();
+          send(msg);
+        } else if (!retryMsg) {
+          setInput(msg);
+        }
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         const history: Msg[] = data.history;
@@ -94,6 +113,9 @@ export default function BrainstormChat({
             setMessages(history);
           }
         }
+        // Counter ticked up on the server — refresh the entitlement so the
+        // QuotaPill reflects the new remaining count immediately.
+        void refreshEntitlement();
       } else {
         setFailedMessage(msg);
       }
@@ -242,6 +264,9 @@ export default function BrainstormChat({
 
       {/* Input area */}
       <div className="border-t border-slate-100 p-4 space-y-2.5 shrink-0 bg-white">
+        <div className="flex justify-end">
+          <BrainstormQuotaPill />
+        </div>
         <AnimatePresence>
           {hasAssistant && (
             <motion.button

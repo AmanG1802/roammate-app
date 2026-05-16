@@ -43,6 +43,7 @@ from app.services.concierge_executor import concierge_executor
 from app.services.google_maps import RoutePoint, get_google_maps_service
 from app.services.llm.registry import get_concierge_client
 from app.services.roles import require_trip_member
+from app.services import entitlements
 from app.utils.tz import utc_now, from_utc, today_in_tz
 
 log = logging.getLogger(__name__)
@@ -178,6 +179,7 @@ async def concierge_chat(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     trip_tz = await _get_trip_tz(db, trip_id)
     now = utc_now()
@@ -238,6 +240,7 @@ async def concierge_execute(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     trip_tz = await _get_trip_tz(db, trip_id)
 
@@ -274,6 +277,7 @@ async def find_nearby(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     maps_service = get_google_maps_service()
     maps_service._current_user_id = current_user.id
@@ -352,6 +356,7 @@ async def skip_event(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     result = await concierge_executor.execute(
         intent="skip_event",

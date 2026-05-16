@@ -3,6 +3,7 @@ import Foundation
 enum APIError: LocalizedError {
     case invalidURL
     case unauthorized
+    case paymentRequired(feature: String)
     case serverError(Int, String)
     case decodingError(Error)
     case networkError(Error)
@@ -11,11 +12,21 @@ enum APIError: LocalizedError {
         switch self {
         case .invalidURL: return "Invalid URL"
         case .unauthorized: return "Session expired. Please log in again."
+        case .paymentRequired: return "This feature is part of Roammate Plus."
         case .serverError(_, let msg): return msg
         case .decodingError(let e): return "Failed to parse response: \(e.localizedDescription)"
         case .networkError(let e): return e.localizedDescription
         }
     }
+}
+
+/// 402 body shape: `{"detail": {"code": "needs_plus", "feature": "concierge", ...}}`.
+private struct NeedsPlusDetail: Decodable {
+    let code: String
+    let feature: String
+}
+private struct NeedsPlusBody: Decodable {
+    let detail: NeedsPlusDetail
 }
 
 /// Internal helper for decoding FastAPI's `{"detail": "..."}` error body.
@@ -159,6 +170,17 @@ final class APIClient {
         if http.statusCode == 401 {
             NotificationCenter.default.post(name: .sessionExpired, object: nil)
             throw APIError.unauthorized
+        }
+
+        if http.statusCode == 402,
+           let body = try? decoder.decode(NeedsPlusBody.self, from: data),
+           body.detail.code == "needs_plus" {
+            NotificationCenter.default.post(
+                name: .needsPlus,
+                object: nil,
+                userInfo: ["feature": body.detail.feature]
+            )
+            throw APIError.paymentRequired(feature: body.detail.feature)
         }
 
         guard (200..<300).contains(http.statusCode) else {

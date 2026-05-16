@@ -30,6 +30,15 @@ struct DashboardView: View {
                         }
                         .padding(.horizontal, RoammateSpacing.md)
 
+                        PastDueBanner()
+                            .padding(.horizontal, RoammateSpacing.md)
+
+                        OneTimeExpiryBanner()
+                            .padding(.horizontal, RoammateSpacing.md)
+
+                        FreeUsageStrip()
+                            .padding(.horizontal, RoammateSpacing.md)
+
                         TodayWidget(trips: tripStore.trips, activeTripEvents: activeTripEvents) { trip in
                             path.append(trip)
                         }

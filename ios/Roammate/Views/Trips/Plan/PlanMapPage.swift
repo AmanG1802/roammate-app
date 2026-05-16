@@ -55,6 +55,7 @@ struct PlanMapPage: View {
             if let a = $0.startTime, let b = $1.startTime { return a < b }
             return $0.sortOrder < $1.sortOrder
         }
+        guard sorted.count > 1 else { return false }
         for i in 1..<sorted.count {
             if let prevEnd = sorted[i-1].endTime, let currStart = sorted[i].startTime {
                 if prevEnd > currStart { return true }

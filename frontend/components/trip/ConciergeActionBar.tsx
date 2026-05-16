@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useTripStore } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { toastBus } from '@/lib/toast-bus';
-import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check } from 'lucide-react';
+import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check, Sparkles } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { useEntitlement } from '@/hooks/useEntitlement';
 const ConciergeChatDrawer = dynamic(() => import('./ConciergeChatDrawer'), { ssr: false });
 
 const LATE_OPTIONS = [15, 30, 60];
@@ -26,6 +27,15 @@ export default function ConciergeActionBar() {
     activeTripId, events, setEvents, loadEvents,
     conciergeOpen, conciergePreAction, openConcierge, closeConcierge,
   } = useTripStore();
+
+  const { entitlement, requirePlus } = useEntitlement();
+  const conciergeLocked = !entitlement.can_use_concierge;
+
+  const gateConcierge = async (run: () => void) => {
+    if (!conciergeLocked) { run(); return; }
+    const ok = await requirePlus('concierge');
+    if (ok) run();
+  };
 
   const handleRunningLate = async (minutes: number) => {
     setShowLateMenu(false);
@@ -76,18 +86,18 @@ export default function ConciergeActionBar() {
     );
     if (!nextEvent) return;
 
-    openConcierge({
+    gateConcierge(() => openConcierge({
       type: 'skip_next',
       payload: { eventId: Number(nextEvent.id), eventTitle: nextEvent.title },
-    });
+    }));
   };
 
   const handleFindCoffee = () => {
-    openConcierge({ type: 'find_coffee' });
+    gateConcierge(() => openConcierge({ type: 'find_coffee' }));
   };
 
   const handleChatNow = () => {
-    openConcierge(null);
+    gateConcierge(() => openConcierge(null));
   };
 
   return (
@@ -154,10 +164,22 @@ export default function ConciergeActionBar() {
 
         <button
           onClick={handleChatNow}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-[0.98]"
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-[0.98] ${
+            conciergeLocked
+              ? 'text-white shadow-lg'
+              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200'
+          }`}
+          style={
+            conciergeLocked
+              ? {
+                  backgroundImage: 'linear-gradient(135deg, #4F46E5 0%, #D946EF 55%, #F59E0B 100%)',
+                  boxShadow: '0 8px 24px -8px rgba(79, 70, 229, 0.55)',
+                }
+              : undefined
+          }
         >
-          <MessageSquare className="w-4 h-4" />
-          Chat Now
+          {conciergeLocked ? <Sparkles className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
+          {conciergeLocked ? 'Unlock Concierge' : 'Chat Now'}
         </button>
       </div>
 

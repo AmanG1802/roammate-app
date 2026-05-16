@@ -202,6 +202,37 @@ extension Color {
     }
 }
 
+// MARK: - Plus brand gradient
+
+enum RoammateGradient {
+    /// The Roammate Plus brand gradient (indigo → fuchsia → amber).
+    /// Reserved exclusively for Plus surfaces — never appears on free-tier
+    /// elements. Apply as a fill, foregroundStyle, or angular shimmer.
+    static let plus = LinearGradient(
+        colors: [
+            Color(red: 79/255, green: 70/255, blue: 229/255),   // indigo
+            Color(red: 217/255, green: 70/255, blue: 239/255),  // fuchsia
+            Color(red: 245/255, green: 158/255, blue: 11/255),  // amber
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    /// Angular version used by the crest shimmer.
+    static func plusAngular(angle: Angle) -> AngularGradient {
+        AngularGradient(
+            colors: [
+                Color(red: 79/255, green: 70/255, blue: 229/255),
+                Color(red: 217/255, green: 70/255, blue: 239/255),
+                Color(red: 245/255, green: 158/255, blue: 11/255),
+                Color(red: 79/255, green: 70/255, blue: 229/255),
+            ],
+            center: .center,
+            angle: angle
+        )
+    }
+}
+
 // MARK: - Sizing tokens
 
 enum RoammateRadius {

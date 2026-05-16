@@ -57,6 +57,32 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://redis:6379/0"
 
+    # ── Subscription / billing ───────────────────────────────────────────────
+    # Razorpay (India web/Android)
+    RAZORPAY_KEY_ID: Optional[str] = None
+    RAZORPAY_KEY_SECRET: Optional[str] = None
+    RAZORPAY_WEBHOOK_SECRET: Optional[str] = None
+    RAZORPAY_PLAN_ID_MONTHLY: Optional[str] = None  # e.g. plan_NXXXXXXXXXXXX
+
+    # Apple IAP (iOS)
+    APPLE_BUNDLE_ID: str = "com.roammate.app"
+    APPLE_IAP_PRODUCT_ID_MONTHLY: str = "com.roammate.app.plus.monthly"
+    APPLE_IAP_PRODUCT_ID_ONETIME: str = "com.roammate.app.plus.onetime"
+    APPLE_ISSUER_ID: Optional[str] = None
+    APPLE_KEY_ID: Optional[str] = None
+    APPLE_PRIVATE_KEY_PATH: Optional[str] = None  # .p8 file for App Store Server API
+    APPLE_USE_SANDBOX: bool = True
+    # Dedicated key for signing Subscription Promotional Offers (separate from API key)
+    APPLE_PROMO_OFFER_KEY_ID: Optional[str] = None
+    APPLE_PROMO_OFFER_P8_KEY: Optional[str] = None  # PEM text with \n escapes
+
+    # Roammate Plus tier limits (free-tier caps; Plus is unlimited)
+    FREE_ACTIVE_TRIPS_CAP: int = 2
+    FREE_BRAINSTORM_MONTHLY_CAP: int = 15
+    PLUS_MONTHLY_PRICE_INR: int = 149
+    PLUS_ONETIME_PRICE_INR: int = 200
+    PLUS_ONETIME_DURATION_DAYS: int = 30
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 settings = Settings()

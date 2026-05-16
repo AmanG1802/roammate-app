@@ -69,6 +69,7 @@ from app.schemas.brainstorm import (
 from app.schemas.trip import IdeaBinItem as IdeaBinItemSchema
 from app.services.roles import require_trip_member
 from app.services import notification_service
+from app.services import entitlements
 from app.services.llm.registry import get_brainstorm_client
 from app.services.google_maps import get_google_maps_service
 from app.services.google_maps.base import BaseMapService
@@ -128,6 +129,7 @@ async def chat(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_brainstorm(db, current_user)
 
     stmt = (
         select(BrainstormMessage)
@@ -167,6 +169,8 @@ async def chat(
         content=assistant_content,
     )
     db.add(assistant_msg)
+
+    await entitlements.bump_brainstorm_counter(db, current_user)
 
     await db.commit()
     await db.refresh(user_msg)

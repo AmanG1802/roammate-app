@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
+import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
+import { FreeUsageStrip, OneTimeExpiryBanner, PastDueBanner, ReEngagementBanner } from '@/components/billing/PlusBanner';
 import { useRouter } from 'next/navigation';
 import NotificationBell, { type NotificationBellHandle } from '@/components/layout/NotificationBell';
 import GroupsPanel from '@/components/groups/GroupsPanel';
@@ -14,6 +16,7 @@ import DashboardTripPlanner from '@/components/dashboard/DashboardTripPlanner';
 import UserMenu from '@/components/UserMenu';
 import PersonaSoftPrompt from '@/components/PersonaSoftPrompt';
 import OnboardingPersonaModal from '@/components/OnboardingPersonaModal';
+import { OnboardingPlusModal } from '@/components/billing/OnboardingPlusModal';
 import { useToast } from '@/components/ui/Toast';
 import { toastBus } from '@/lib/toast-bus';
 
@@ -27,6 +30,7 @@ export default function DashboardPage() {
   const { user } = useAuth(true);
   const router = useRouter();
   const toast = useToast();
+  const { requirePlus, refresh: refreshEntitlement } = useEntitlement();
   const [tripsError, setTripsError] = useState(false);
   const [section, setSection] = useState<Section>('dashboard');
   const [trips, setTrips] = useState<any[]>([]);
@@ -43,6 +47,7 @@ export default function DashboardPage() {
   const [respondingTo, setRespondingTo] = useState<number | null>(null);
   const [groupInvitesCount, setGroupInvitesCount] = useState(0);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [showPlusOnboarding, setShowPlusOnboarding] = useState(false);
   const [showSkipToast, setShowSkipToast] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -88,9 +93,17 @@ export default function DashboardPage() {
     }
   };
 
+  const maybeShowPlusOnboarding = () => {
+    if (!user) return;
+    const key = `plus_onboarding_shown_${(user as any).id}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+    setShowPlusOnboarding(true);
+  };
+
   const handlePersonaComplete = async (personas: string[]) => {
     const ok = await savePersonas(personas);
-    if (ok) setShowPersonaModal(false);
+    if (ok) { setShowPersonaModal(false); maybeShowPlusOnboarding(); }
   };
 
   const handlePersonaSkip = async () => {
@@ -99,6 +112,7 @@ export default function DashboardPage() {
       setShowPersonaModal(false);
       setShowSkipToast(true);
       setTimeout(() => setShowSkipToast(false), 4000);
+      maybeShowPlusOnboarding();
     }
   };
 
@@ -235,6 +249,30 @@ export default function DashboardPage() {
         router.push('/login');
         return;
       }
+      if (response.status === 402) {
+        const errBody = await response.json().catch(() => null);
+        const needs = isNeedsPlus(errBody);
+        setIsCreating(false);
+        const ok = await requirePlus(needs?.feature ?? 'active_trips');
+        if (ok) {
+          await refreshEntitlement();
+          // Re-submit by triggering the same handler with a fake event;
+          // simplest is to call the API again inline.
+          const retry = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body),
+          });
+          if (retry.ok) {
+            setNewTripName('');
+            setNewTripStartDate('');
+            setCreateError('');
+            setIsModalOpen(false);
+            onTripMutated();
+          }
+        }
+        return;
+      }
       if (response.ok) {
         setNewTripName('');
         setNewTripStartDate('');
@@ -243,7 +281,7 @@ export default function DashboardPage() {
         onTripMutated();
       } else {
         const err = await response.json().catch(() => null);
-        setCreateError(err?.detail ?? `Failed to create trip (${response.status})`);
+        setCreateError(typeof err?.detail === 'string' ? err.detail : `Failed to create trip (${response.status})`);
       }
     } catch (err) {
       setCreateError('Network error — please try again');
@@ -406,6 +444,12 @@ export default function DashboardPage() {
                   <p className="text-slate-500 font-medium">
                     {currentAndUpcoming.length === 0 ? "No upcoming trips — create your first one." : `You have ${currentAndUpcoming.length} ${currentAndUpcoming.length === 1 ? 'trip' : 'trips'} on the horizon.`}
                   </p>
+                </div>
+                <div className="space-y-3 mb-5">
+                  <PastDueBanner />
+                  <OneTimeExpiryBanner />
+                  <ReEngagementBanner tripCount={trips.length} />
+                  <FreeUsageStrip />
                 </div>
                 <DashboardTripPlanner onTripCreated={refreshDashboard} />
                 <TodayWidget ref={widgetRef} onNewTrip={openCreateModal} />
@@ -629,6 +673,12 @@ export default function DashboardPage() {
             />
           )}
         </AnimatePresence>
+
+        {/* Plus onboarding (free-tier explainer + soft Plus pitch) */}
+        <OnboardingPlusModal
+          open={showPlusOnboarding}
+          onClose={() => setShowPlusOnboarding(false)}
+        />
 
         {/* Skip toast */}
         <AnimatePresence>
