@@ -24,3 +24,5 @@ httpx
 aiosqlite
 email-validator
 razorpay
+resend
+google-auth

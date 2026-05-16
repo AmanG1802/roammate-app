@@ -1,3 +1,13 @@
+/**
+ * Legacy localStorage token helpers — retained as a transition shim.
+ *
+ * After the auth refactor, the canonical session is the `rm_access` cookie set
+ * by the backend (forwarded through /api/auth/*). New code should use lib/api
+ * which automatically attaches cookies and silently refreshes on 401.
+ *
+ * Existing fetch sites that still pass `Authorization: Bearer ${getToken()}`
+ * keep working because the backend accepts both transports.
+ */
 import { create } from 'zustand';
 
 interface AuthState {
@@ -10,15 +20,23 @@ const useAuthStore = create<AuthState>((set) => ({
   setToken: (token) => set({ token }),
 }));
 
-/** Read the current auth token from Zustand; falls back to localStorage for SSR/hydration. */
+/** Read the current access token (in-memory first, then localStorage). */
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return useAuthStore.getState().token ?? localStorage.getItem('token');
 }
 
-/** Persist a new token to Zustand (does NOT write localStorage — callers do that). */
+/** Persist a new access token everywhere. Pass null to clear. */
 export function setToken(token: string | null): void {
   useAuthStore.getState().setToken(token);
+  if (typeof window === 'undefined') return;
+  if (token) localStorage.setItem('token', token);
+  else localStorage.removeItem('token');
+}
+
+export function clearSession(): void {
+  setToken(null);
+  if (typeof window !== 'undefined') localStorage.removeItem('user');
 }
 
 export { useAuthStore };

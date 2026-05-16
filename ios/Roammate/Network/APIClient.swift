@@ -122,13 +122,39 @@ final class APIClient {
 
     // MARK: - Core implementation
 
+    // Serialise concurrent /auth/refresh attempts so only one fires per access-token expiry.
+    private var refreshTask: Task<Bool, Never>?
+    private let refreshLock = NSLock()
+
+    private func currentRefreshTask() -> Task<Bool, Never> {
+        refreshLock.lock(); defer { refreshLock.unlock() }
+        if let t = refreshTask { return t }
+        let t = Task<Bool, Never> {
+            defer {
+                self.refreshLock.lock(); self.refreshTask = nil; self.refreshLock.unlock()
+            }
+            guard let raw = KeychainHelper.loadRefreshToken() else { return false }
+            do {
+                let pair = try await AuthService.refresh(refreshToken: raw)
+                KeychainHelper.saveToken(pair.access_token)
+                KeychainHelper.saveRefreshToken(pair.refresh_token)
+                return true
+            } catch {
+                return false
+            }
+        }
+        refreshTask = t
+        return t
+    }
+
     private func perform<T: Decodable>(
         path: String,
         method: String,
         bodyData: Data?,
         query: [String: String?],
         requiresAuth: Bool,
-        retries: Int
+        retries: Int,
+        didRefresh: Bool = false
     ) async throws -> T {
         guard var components = URLComponents(string: Config.apiBaseURL + path) else {
             throw APIError.invalidURL
@@ -159,7 +185,8 @@ final class APIClient {
             if retries > 0 {
                 return try await perform(
                     path: path, method: method, bodyData: bodyData,
-                    query: query, requiresAuth: requiresAuth, retries: retries - 1
+                    query: query, requiresAuth: requiresAuth,
+                    retries: retries - 1, didRefresh: didRefresh
                 )
             }
             throw APIError.networkError(error)
@@ -168,6 +195,19 @@ final class APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidURL }
 
         if http.statusCode == 401 {
+            // Try a one-shot silent refresh, then retry the original request.
+            // Skip on the refresh endpoint itself and after we've already tried.
+            let isRefreshCall = path == "/auth/refresh"
+            if requiresAuth && !didRefresh && !isRefreshCall, KeychainHelper.loadRefreshToken() != nil {
+                let ok = await currentRefreshTask().value
+                if ok {
+                    return try await perform(
+                        path: path, method: method, bodyData: bodyData,
+                        query: query, requiresAuth: requiresAuth,
+                        retries: retries, didRefresh: true
+                    )
+                }
+            }
             NotificationCenter.default.post(name: .sessionExpired, object: nil)
             throw APIError.unauthorized
         }

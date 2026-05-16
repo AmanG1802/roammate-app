@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+#endif
+
 @main
 struct RoammateApp: App {
     @StateObject private var authManager = AuthManager()
@@ -7,6 +11,8 @@ struct RoammateApp: App {
     @StateObject private var groupStore = GroupStore()
     @StateObject private var notificationStore = NotificationStore()
     @StateObject private var subscriptionStore = SubscriptionStore()
+
+    @State private var pendingResetToken: String?
 
     var body: some Scene {
         WindowGroup {
@@ -35,6 +41,29 @@ struct RoammateApp: App {
                         subscriptionStore.reset()
                     }
                 }
+                .onOpenURL { url in
+                    #if canImport(GoogleSignIn)
+                    if GIDSignIn.sharedInstance.handle(url) { return }
+                    #endif
+                    _ = authManager.handleDeepLink(url)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .authResetTokenReceived)) { note in
+                    if let token = note.userInfo?["token"] as? String {
+                        pendingResetToken = token
+                    }
+                }
+                .sheet(item: Binding<ResetTokenWrapper?>(
+                    get: { pendingResetToken.map(ResetTokenWrapper.init) },
+                    set: { if $0 == nil { pendingResetToken = nil } }
+                )) { wrapper in
+                    ResetPasswordView(token: wrapper.token)
+                        .environmentObject(authManager)
+                }
         }
     }
+}
+
+private struct ResetTokenWrapper: Identifiable {
+    let token: String
+    var id: String { token }
 }

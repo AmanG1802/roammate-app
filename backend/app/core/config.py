@@ -22,6 +22,24 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = "dev-secret-key-change-in-production"
 
+    # ── Auth (access + refresh tokens, cookies) ──────────────────────────────
+    ACCESS_TOKEN_TTL_MIN: int = 15
+    REFRESH_TOKEN_TTL_DAYS: int = 30
+    COOKIE_DOMAIN: Optional[str] = None              # ".roammate.app" in prod, None locally
+    COOKIE_SECURE: bool = False                       # True in prod (HTTPS-only)
+    PUBLIC_WEB_URL: str = "http://localhost:3000"     # used to build verify/reset links
+
+    # ── Transactional email (Resend) ─────────────────────────────────────────
+    RESEND_API_KEY: Optional[str] = None
+    EMAIL_FROM: str = "Roammate <auth@roammate.app>"
+
+    # ── OAuth providers ──────────────────────────────────────────────────────
+    GOOGLE_OAUTH_CLIENT_ID_WEB: Optional[str] = None
+    GOOGLE_OAUTH_CLIENT_ID_IOS: Optional[str] = None
+    APPLE_SIGNIN_BUNDLE_ID: Optional[str] = "com.roammate.app"
+    APPLE_SIGNIN_SERVICE_ID: Optional[str] = None     # e.g. com.roammate.app.web
+    APPLE_SIGNIN_TEAM_ID: Optional[str] = None
+
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None

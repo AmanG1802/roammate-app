@@ -23,6 +23,21 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- Google Sign-In: replace REPLACE_WITH_GOOGLE_CLIENT_ID with your iOS client ID,
+	     and the URL scheme with its reversed form (e.g. com.googleusercontent.apps.123-abc). -->
+	<key>GIDClientID</key>
+	<string>REPLACE_WITH_GOOGLE_CLIENT_ID</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.REPLACE_REVERSED_CLIENT_ID</string>
+			</array>
+		</dict>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

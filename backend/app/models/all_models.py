@@ -42,6 +42,13 @@ class User(Base):
     travel_blurb = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Auth state
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    # Bumping this invalidates every outstanding access token + refresh token
+    # for this user (used on password change and "log out everywhere").
+    auth_version = Column(Integer, nullable=False, default=1, server_default="1")
+
     # Subscription (Roammate Plus)
     subscription_tier = Column(String(16), nullable=False, default="free", server_default="free")
     subscription_status = Column(String(24), nullable=False, default="none", server_default="none")
@@ -339,6 +346,58 @@ class CouponRedemption(Base):
     payment_external_id = Column(String, nullable=True)  # razorpay payment_id / apple transaction_id / None
     amount_paid_paise = Column(Integer, nullable=False, default=0, server_default="0")
     applied_at_period_start = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UserIdentity(Base):
+    """OAuth identity linked to a user (provider+subject is unique)."""
+    __tablename__ = "user_identity"
+    __table_args__ = (
+        UniqueConstraint("provider", "subject", name="uq_user_identity_provider_subject"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(16), nullable=False)        # 'google' | 'apple'
+    subject = Column(String(255), nullable=False)        # provider's stable sub
+    email_at_link = Column(String(320), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class EmailVerification(Base):
+    """Single-use token emailed to a user to verify ownership of an email address."""
+    __tablename__ = "email_verification"
+
+    token_hash = Column(String(64), primary_key=True)    # sha256 hex of raw token
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(320), nullable=False)
+    purpose = Column(String(24), nullable=False)         # 'signup' | 'change_email'
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_reset"
+
+    token_hash = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_token"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    device_label = Column(String(128), nullable=True)
+    parent_id = Column(Integer, ForeignKey("refresh_token.id", ondelete="SET NULL"), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
