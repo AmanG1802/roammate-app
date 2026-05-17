@@ -13,6 +13,7 @@ final class AuthManager: NSObject, ObservableObject {
 
     private var sessionObserver: NSObjectProtocol?
     private var appleNonce: String?
+    private var pendingPassword: String?
 
     override init() {
         super.init()
@@ -55,8 +56,18 @@ final class AuthManager: NSObject, ObservableObject {
                 self.persist(pair)
             } catch let APIError.serverError(409, _) {
                 self.pendingVerificationEmail = email
+                self.pendingPassword = password
                 self.error = "Please verify your email — check your inbox."
             }
+        }
+    }
+
+    func skipVerification() async {
+        guard let email = pendingVerificationEmail, let password = pendingPassword else { return }
+        await run {
+            let pair = try await AuthService.login(email: email, password: password, skipVerification: true)
+            self.pendingPassword = nil
+            self.persist(pair)
         }
     }
 
@@ -135,6 +146,7 @@ final class AuthManager: NSObject, ObservableObject {
         currentUser = nil
         isAuthenticated = false
         pendingVerificationEmail = nil
+        pendingPassword = nil
     }
 
     // MARK: - Deep links (universal links: /verify, /reset)

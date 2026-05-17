@@ -74,7 +74,7 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
 export const auth = {
   signup: (body: { email: string; password: string; name: string }) =>
     api<{ detail: string }>('/api/auth/signup', { method: 'POST', json: body }),
-  login: (body: { email: string; password: string }) =>
+  login: (body: { email: string; password: string; skip_verification?: boolean }) =>
     api<TokenPair>('/api/auth/login', { method: 'POST', json: body }),
   verify: (token: string) =>
     api<TokenPair>('/api/auth/verify', { method: 'POST', json: { token } }),

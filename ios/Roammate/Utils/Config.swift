@@ -5,7 +5,7 @@ enum Config {
         #if DEBUG
         return ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://localhost:8000/api"
         #else
-        return "https://api.roammate.app/api"
+        return "https://api.roammate.xyz/api"
         #endif
     }
 }

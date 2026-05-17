@@ -59,7 +59,7 @@ export default function SignupPage() {
         onError={(m) => setStatus({ type: 'error', message: m })}
       />
 
-      <Divider />
+      <Divider label="or sign up with email" />
 
       <form onSubmit={onSubmit} className="space-y-4">
         <NameField value={name} onChange={(e) => setName(e.target.value)} />

@@ -35,7 +35,8 @@ function LoginInner() {
       onLand(pair);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        router.push(`/verify/check?email=${encodeURIComponent(email)}`);
+        sessionStorage.setItem('_rv_pwd', password);
+        router.push(`/verify/check?email=${encodeURIComponent(email)}&next=${encodeURIComponent(next)}`);
         return;
       }
       setStatus({ type: 'error', message: err instanceof Error ? err.message : 'Sign in failed' });
@@ -65,7 +66,7 @@ function LoginInner() {
         onError={(m) => setStatus({ type: 'error', message: m })}
       />
 
-      <Divider />
+      <Divider label="or sign in with email" />
 
       <form onSubmit={onSubmit} className="space-y-4">
         <EmailField value={email} onChange={(e) => setEmail(e.target.value)} />

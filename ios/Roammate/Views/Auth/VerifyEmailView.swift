@@ -56,6 +56,21 @@ struct VerifyEmailView: View {
                     .buttonStyle(RoammatePrimaryButtonStyle(isLoading: authManager.isLoading))
                     .padding(.horizontal, RoammateSpacing.lg)
 
+                    Button {
+                        Task {
+                            await authManager.skipVerification()
+                            dismiss()
+                        }
+                    } label: {
+                        if authManager.isLoading {
+                            ProgressView().tint(Color.roammateMuted)
+                        } else {
+                            Text("Skip for now")
+                        }
+                    }
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Color.roammateIndigo)
+
                     Button("Use a different email") { dismiss() }
                         .font(.system(.footnote, design: .rounded, weight: .bold))
                         .foregroundStyle(Color.roammateMuted)

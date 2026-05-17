@@ -94,8 +94,8 @@ export default function PricingPage() {
 
         <p className="text-center text-xs text-slate-400 mt-10">
           Need a team plan or have a question?{' '}
-          <a href="mailto:hello@roammate.app" className="text-slate-600 underline-offset-2 hover:underline">
-            hello@roammate.app
+          <a href="mailto:hello@roammate.xyz" className="text-slate-600 underline-offset-2 hover:underline">
+            hello@roammate.xyz
           </a>
         </p>
       </main>

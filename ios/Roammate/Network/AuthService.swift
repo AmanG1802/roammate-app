@@ -5,6 +5,7 @@ import Foundation
 struct AuthEmailLoginRequest: Encodable {
     let email: String
     let password: String
+    let skip_verification: Bool?
 }
 
 struct AuthEmailSignupRequest: Encodable {
@@ -89,8 +90,11 @@ enum AuthService {
         )
     }
 
-    static func login(email: String, password: String) async throws -> AuthTokenPair {
-        let body = AuthEmailLoginRequest(email: email, password: password)
+    static func login(email: String, password: String, skipVerification: Bool = false) async throws -> AuthTokenPair {
+        let body = AuthEmailLoginRequest(
+            email: email, password: password,
+            skip_verification: skipVerification ? true : nil
+        )
         return try await APIClient.shared.request(
             "/auth/login", method: "POST", body: body, requiresAuth: false
         )

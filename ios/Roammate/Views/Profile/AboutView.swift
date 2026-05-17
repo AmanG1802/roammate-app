@@ -17,10 +17,10 @@ struct AboutView: View {
                 }
             }
             Section {
-                Link(destination: URL(string: "https://roammate.app/privacy")!) {
+                Link(destination: URL(string: "https://roammate.xyz/privacy")!) {
                     Label("Privacy Policy", systemImage: "lock")
                 }
-                Link(destination: URL(string: "https://roammate.app/terms")!) {
+                Link(destination: URL(string: "https://roammate.xyz/terms")!) {
                     Label("Terms of Service", systemImage: "doc.text")
                 }
             }

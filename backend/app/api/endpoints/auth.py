@@ -63,6 +63,7 @@ class SignupIn(BaseModel):
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
+    skip_verification: bool = False
 
 
 class VerifyIn(BaseModel):
@@ -258,8 +259,7 @@ async def login(
     user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
-    if not user.email_verified:
-        # 409 = clients route to verification flow. Quietly issue a fresh email.
+    if not user.email_verified and not body.skip_verification:
         raw = await issue_verification(db, user, email=email, purpose="signup")
         await db.commit()
         send_verify_email(email, user.name, _build_verify_url(raw))

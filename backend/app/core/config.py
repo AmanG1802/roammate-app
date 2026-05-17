@@ -25,13 +25,13 @@ class Settings(BaseSettings):
     # ── Auth (access + refresh tokens, cookies) ──────────────────────────────
     ACCESS_TOKEN_TTL_MIN: int = 15
     REFRESH_TOKEN_TTL_DAYS: int = 30
-    COOKIE_DOMAIN: Optional[str] = None              # ".roammate.app" in prod, None locally
+    COOKIE_DOMAIN: Optional[str] = None              # ".roammate.xyz" in prod, None locally
     COOKIE_SECURE: bool = False                       # True in prod (HTTPS-only)
     PUBLIC_WEB_URL: str = "http://localhost:3000"     # used to build verify/reset links
 
     # ── Transactional email (Resend) ─────────────────────────────────────────
     RESEND_API_KEY: Optional[str] = None
-    EMAIL_FROM: str = "Roammate <auth@roammate.app>"
+    EMAIL_FROM: str = "Roammate <auth@roammate.xyz>"
 
     # ── OAuth providers ──────────────────────────────────────────────────────
     GOOGLE_OAUTH_CLIENT_ID_WEB: Optional[str] = None
