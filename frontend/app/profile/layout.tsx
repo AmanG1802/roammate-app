@@ -5,17 +5,19 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { User, Sparkles, CreditCard, ArrowLeft, Loader2 } from 'lucide-react';
 import useAuth from '@/hooks/useAuth';
+import { useEntitlement } from '@/hooks/useEntitlement';
 
 const NAV_ITEMS = [
   { href: '/profile/edit', label: 'Edit Profile', icon: User },
   { href: '/profile/persona', label: 'User Persona', icon: Sparkles },
-  { href: '/profile/subscription', label: 'Subscription', icon: CreditCard, badge: 'Soon' },
+  { href: '/profile/subscription', label: 'Subscription', icon: CreditCard },
 ];
 
 export default function ProfileLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth(true);
+  const { entitlement } = useEntitlement();
 
   if (isLoading) {
     return (
@@ -55,8 +57,9 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
           </div>
 
           <nav className="flex flex-col gap-1">
-            {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
+            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || (href === '/profile/edit' && pathname === '/profile');
+              const isSubscription = href === '/profile/subscription';
               return (
                 <Link
                   key={href}
@@ -69,9 +72,21 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
                 >
                   <Icon className="w-4 h-4 shrink-0" />
                   <span className="flex-1">{label}</span>
-                  {badge && (
-                    <span className="text-[9px] font-black px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase tracking-wide">
-                      {badge}
+                  {isSubscription && entitlement.tier === 'plus' && (
+                    <span
+                      className="text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider bg-clip-text text-transparent border border-indigo-200"
+                      style={{
+                        backgroundImage: 'linear-gradient(135deg, #4F46E5 0%, #D946EF 55%, #F59E0B 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                      }}
+                    >
+                      Plus
+                    </span>
+                  )}
+                  {isSubscription && entitlement.tier === 'free' && (
+                    <span className="text-[9px] font-black px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full uppercase tracking-wider animate-pulse-soft">
+                      Upgrade
                     </span>
                   )}
                 </Link>

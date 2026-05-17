@@ -15,6 +15,7 @@ from app.schemas.trip import (
 )
 from app.services.idea_bin import idea_bin_service
 from app.services import notification_service
+from app.services import entitlements
 from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
 
@@ -71,6 +72,7 @@ async def create_trip(
     Create a new trip and add the current user as the owner.
     Auto-creates Day 1 from the start_date if provided.
     """
+    await entitlements.enforce_active_trip(db, current_user)
     trip = Trip(
         name=trip_in.name,
         start_date=trip_in.start_date,
@@ -295,11 +297,11 @@ async def update_trip(
                 new_day_date = old_day_date + delta
                 evt_stmt = select(EventModel).where(
                     EventModel.trip_id == trip_id,
-                    EventModel.day_date == old_day_date,
+                    EventModel.day_date == old_day_date.isoformat(),
                 )
                 day_events = (await db.execute(evt_stmt)).scalars().all()
                 for evt in day_events:
-                    evt.day_date = new_day_date
+                    evt.day_date = new_day_date.isoformat()
                 d.date = new_day_date
                 await db.flush()
 
@@ -904,7 +906,7 @@ async def delete_trip_day(
     # Handle events on this day
     evt_stmt = select(EventModel).where(
         EventModel.trip_id == trip_id,
-        EventModel.day_date == deleted_date,
+        EventModel.day_date == deleted_date.isoformat(),
     )
     day_events = (await db.execute(evt_stmt)).scalars().all()
 
@@ -949,11 +951,11 @@ async def delete_trip_day(
         # Shift events on this day to the new date
         evt_shift = select(EventModel).where(
             EventModel.trip_id == trip_id,
-            EventModel.day_date == old_date,
+            EventModel.day_date == old_date.isoformat(),
         )
         events_to_shift = (await db.execute(evt_shift)).scalars().all()
         for evt in events_to_shift:
-            evt.day_date = new_date
+            evt.day_date = new_date.isoformat()
         d.day_number -= 1
         d.date = new_date
         await db.flush()

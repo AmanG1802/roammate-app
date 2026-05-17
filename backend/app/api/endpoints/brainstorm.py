@@ -10,13 +10,42 @@ table, which then becomes visible to all trip members.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, time as dt_time, timezone as dt_tz
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 log = logging.getLogger(__name__)
+
+_TIME_CATEGORY_HOURS: dict[str, int] = {
+    "early morning": 7,
+    "morning": 10,
+    "midday": 12,
+    "afternoon": 14,
+    "late afternoon": 16,
+    "evening": 18,
+    "night": 20,
+    "late night": 22,
+    "all_day": 9,
+    "flexible": 10,
+}
+
+
+def _time_category_to_times(
+    tc: str | None,
+) -> tuple[datetime | None, datetime | None]:
+    """Convert a time_category hint to a (start, start+1h) pair, matching the web frontend logic."""
+    if not tc:
+        return None, None
+    hour = _TIME_CATEGORY_HOURS.get(tc.lower())
+    if hour is None:
+        return None, None
+    today = datetime.now(dt_tz.utc).date()
+    start = datetime.combine(today, dt_time(hour, 0), tzinfo=dt_tz.utc)
+    end = datetime.combine(today, dt_time(hour + 1, 0), tzinfo=dt_tz.utc)
+    return start, end
 
 from app.db.session import get_db
 from app.api.deps import get_current_user
@@ -40,8 +69,10 @@ from app.schemas.brainstorm import (
 from app.schemas.trip import IdeaBinItem as IdeaBinItemSchema
 from app.services.roles import require_trip_member
 from app.services import notification_service
+from app.services import entitlements
 from app.services.llm.registry import get_brainstorm_client
 from app.services.google_maps import get_google_maps_service
+from app.services.google_maps.base import BaseMapService
 from app.services.llm.dedup import deduplicate
 from app.schemas.notification import NotificationType
 
@@ -98,6 +129,7 @@ async def chat(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_brainstorm(db, current_user)
 
     stmt = (
         select(BrainstormMessage)
@@ -138,6 +170,8 @@ async def chat(
     )
     db.add(assistant_msg)
 
+    await entitlements.bump_brainstorm_counter(db, current_user)
+
     await db.commit()
     await db.refresh(user_msg)
     await db.refresh(assistant_msg)
@@ -149,11 +183,24 @@ async def chat(
     )
 
 
+def _get_enrichment_service(
+    x_client_platform: Optional[str] = Header(None),
+) -> BaseMapService:
+    """Return Apple Maps service for iOS clients when enabled, else Google."""
+    if x_client_platform and x_client_platform.lower() == "ios":
+        from app.services.apple_maps import get_apple_maps_service
+        apple_svc = get_apple_maps_service()
+        if apple_svc is not None:
+            return apple_svc
+    return get_google_maps_service()
+
+
 @router.post("/{trip_id}/brainstorm/extract", response_model=BrainstormExtractResponse)
 async def extract(
     trip_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    maps_svc: BaseMapService = Depends(_get_enrichment_service),
 ):
     await require_trip_member(db, trip_id, current_user.id)
 
@@ -178,7 +225,6 @@ async def extract(
             detail="AI extraction is temporarily unavailable. Please try again.",
         ) from exc
 
-    maps_svc = get_google_maps_service()
     raw_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
         raw_items, user_id=current_user.id, trip_id=trip_id,
     )
@@ -285,8 +331,11 @@ async def promote(
     for src in sources:
         fields = {k: getattr(src, k) for k in PLACE_FIELDS}
         fields["added_by"] = promoter
+        start, end = _time_category_to_times(getattr(src, "time_category", None))
         idea = IdeaBinItem(
             trip_id=trip_id,
+            start_time=start,
+            end_time=end,
             **fields,
         )
         db.add(idea)

@@ -43,6 +43,7 @@ from app.services.concierge_executor import concierge_executor
 from app.services.google_maps import RoutePoint, get_google_maps_service
 from app.services.llm.registry import get_concierge_client
 from app.services.roles import require_trip_member
+from app.services import entitlements
 from app.utils.tz import utc_now, from_utc, today_in_tz
 
 log = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def _event_dict_for_response(e: EventModel) -> dict:
         "location_name": e.location_name,
         "lat": e.lat,
         "lng": e.lng,
-        "day_date": e.day_date.isoformat() if e.day_date else None,
+        "day_date": e.day_date,
         "start_time": e.start_time.isoformat() if e.start_time else None,
         "end_time": e.end_time.isoformat() if e.end_time else None,
         "is_locked": e.is_locked,
@@ -90,7 +91,7 @@ def _event_dict_for_response(e: EventModel) -> dict:
 async def _load_today_events(
     db: AsyncSession, trip_id: int, trip_tz: str,
 ) -> list[EventModel]:
-    today = today_in_tz(trip_tz)
+    today = today_in_tz(trip_tz).isoformat()
     stmt = (
         select(EventModel)
         .where(
@@ -178,6 +179,7 @@ async def concierge_chat(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     trip_tz = await _get_trip_tz(db, trip_id)
     now = utc_now()
@@ -238,6 +240,7 @@ async def concierge_execute(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     trip_tz = await _get_trip_tz(db, trip_id)
 
@@ -274,6 +277,7 @@ async def find_nearby(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     maps_service = get_google_maps_service()
     maps_service._current_user_id = current_user.id
@@ -352,6 +356,7 @@ async def skip_event(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
+    await entitlements.enforce_concierge(db, current_user)
 
     result = await concierge_executor.execute(
         intent="skip_event",

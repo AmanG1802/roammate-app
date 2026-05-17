@@ -52,6 +52,35 @@ body {
   }
 }
 
+/* ── Roammate Plus brand animations ─────────────────────────────────────────
+   The crest shimmer is a single rotating conic gradient over the brand fill.
+   The upgrade pill on the profile nav rail uses pulse-soft so a Plus-curious
+   user notices it without being shouted at.
+*/
+@keyframes plus-crest-shimmer {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.plus-crest-shimmer {
+  animation: plus-crest-shimmer 8s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plus-crest-shimmer,
+  .animate-pulse-soft {
+    animation: none !important;
+  }
+}
+
 /* ── Reduced-motion safety net ──────────────────────────────────────────────
    Applies to any animation/transition we may have missed (CSS keyframes,
    Tailwind transition classes, third-party libs). Framer Motion and GSAP are

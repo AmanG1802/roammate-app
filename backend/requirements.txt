@@ -23,3 +23,6 @@ pytest-asyncio
 httpx
 aiosqlite
 email-validator
+razorpay
+resend
+google-auth

@@ -1,32 +1,15 @@
 from typing import Any, List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
 from app.db.session import get_db
 from app.models.all_models import User
-from app.core.security import get_password_hash, verify_password, create_access_token
+from app.core.security import get_password_hash, verify_password
 from app.api.deps import get_current_user
 from app.config.persona_catalog import Persona, get_catalog
 
 router = APIRouter()
-
-
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
-    name: str
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
 
 
 class UserOut(BaseModel):
@@ -58,38 +41,7 @@ class ProfileUpdate(BaseModel):
     current_password: Optional[str] = None
 
 
-@router.post("/register", response_model=UserOut)
-async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    stmt = select(User).where(User.email == user_in.email)
-    result = await db.execute(stmt)
-    if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    user = User(
-        email=user_in.email,
-        hashed_password=get_password_hash(user_in.password),
-        name=user_in.name,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-@router.post("/login", response_model=Token)
-async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
-    stmt = select(User).where(User.email == user_in.email)
-    result = await db.execute(stmt)
-    user = result.scalars().first()
-
-    if not user or not verify_password(user_in.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-        )
-
-    access_token = create_access_token(subject=user.id)
-    return {"access_token": access_token, "token_type": "bearer"}
+# Legacy /register and /login removed — see /api/auth/* for the replacement.
 
 
 @router.get("/me", response_model=UserOut)
@@ -106,9 +58,13 @@ async def update_me(
     if profile_in.password:
         if not profile_in.current_password:
             raise HTTPException(status_code=400, detail="Current password required to set a new password")
-        if not verify_password(profile_in.current_password, current_user.hashed_password):
+        if not current_user.hashed_password or not verify_password(profile_in.current_password, current_user.hashed_password):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         current_user.hashed_password = get_password_hash(profile_in.password)
+        # Invalidate every outstanding access + refresh token.
+        current_user.auth_version = (current_user.auth_version or 1) + 1
+        from app.services.auth.tokens import revoke_all_for_user
+        await revoke_all_for_user(db, current_user.id)
 
     if profile_in.name is not None:
         current_user.name = profile_in.name

@@ -22,6 +22,24 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = "dev-secret-key-change-in-production"
 
+    # ── Auth (access + refresh tokens, cookies) ──────────────────────────────
+    ACCESS_TOKEN_TTL_MIN: int = 15
+    REFRESH_TOKEN_TTL_DAYS: int = 30
+    COOKIE_DOMAIN: Optional[str] = None              # ".roammate.xyz" in prod, None locally
+    COOKIE_SECURE: bool = False                       # True in prod (HTTPS-only)
+    PUBLIC_WEB_URL: str = "http://localhost:3000"     # used to build verify/reset links
+
+    # ── Transactional email (Resend) ─────────────────────────────────────────
+    RESEND_API_KEY: Optional[str] = None
+    EMAIL_FROM: str = "Roammate <auth@roammate.xyz>"
+
+    # ── OAuth providers ──────────────────────────────────────────────────────
+    GOOGLE_OAUTH_CLIENT_ID_WEB: Optional[str] = None
+    GOOGLE_OAUTH_CLIENT_ID_IOS: Optional[str] = None
+    APPLE_SIGNIN_BUNDLE_ID: Optional[str] = "com.roammate.app"
+    APPLE_SIGNIN_SERVICE_ID: Optional[str] = None     # e.g. com.roammate.app.web
+    APPLE_SIGNIN_TEAM_ID: Optional[str] = None
+
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
@@ -35,6 +53,12 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_FETCH_PHOTOS: bool = True
     GOOGLE_MAPS_FETCH_RATING: bool = True
     GOOGLE_MAPS_USE_NEARBY_API: bool = False  # True = Nearby Search API, False = Text Search with locationBias
+
+    # Apple Maps Server API (used for iOS enrichment when enabled)
+    APPLE_MAPS_ENABLED: bool = False
+    APPLE_MAPS_TEAM_ID: Optional[str] = None
+    APPLE_MAPS_KEY_ID: Optional[str] = None
+    APPLE_MAPS_PRIVATE_KEY_PATH: Optional[str] = None  # path to .p8 file
 
     LLM_ENABLED: bool = False
     LLM_PROVIDER: str = "openai"       # "openai" | "claude" | "gemini"
@@ -50,6 +74,32 @@ class Settings(BaseSettings):
     ADMIN_TOKEN_EXPIRE_HOURS: int = 4
 
     REDIS_URL: str = "redis://redis:6379/0"
+
+    # ── Subscription / billing ───────────────────────────────────────────────
+    # Razorpay (India web/Android)
+    RAZORPAY_KEY_ID: Optional[str] = None
+    RAZORPAY_KEY_SECRET: Optional[str] = None
+    RAZORPAY_WEBHOOK_SECRET: Optional[str] = None
+    RAZORPAY_PLAN_ID_MONTHLY: Optional[str] = None  # e.g. plan_NXXXXXXXXXXXX
+
+    # Apple IAP (iOS)
+    APPLE_BUNDLE_ID: str = "com.roammate.app"
+    APPLE_IAP_PRODUCT_ID_MONTHLY: str = "com.roammate.app.plus.monthly"
+    APPLE_IAP_PRODUCT_ID_ONETIME: str = "com.roammate.app.plus.onetime"
+    APPLE_ISSUER_ID: Optional[str] = None
+    APPLE_KEY_ID: Optional[str] = None
+    APPLE_PRIVATE_KEY_PATH: Optional[str] = None  # .p8 file for App Store Server API
+    APPLE_USE_SANDBOX: bool = True
+    # Dedicated key for signing Subscription Promotional Offers (separate from API key)
+    APPLE_PROMO_OFFER_KEY_ID: Optional[str] = None
+    APPLE_PROMO_OFFER_P8_KEY: Optional[str] = None  # PEM text with \n escapes
+
+    # Roammate Plus tier limits (free-tier caps; Plus is unlimited)
+    FREE_ACTIVE_TRIPS_CAP: int = 2
+    FREE_BRAINSTORM_MONTHLY_CAP: int = 15
+    PLUS_MONTHLY_PRICE_INR: int = 149
+    PLUS_ONETIME_PRICE_INR: int = 200
+    PLUS_ONETIME_DURATION_DAYS: int = 30
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 

@@ -41,6 +41,24 @@ class User(Base):
     currency = Column(String(8), nullable=True)
     travel_blurb = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Auth state
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    # Bumping this invalidates every outstanding access token + refresh token
+    # for this user (used on password change and "log out everywhere").
+    auth_version = Column(Integer, nullable=False, default=1, server_default="1")
+
+    # Subscription (Roammate Plus)
+    subscription_tier = Column(String(16), nullable=False, default="free", server_default="free")
+    subscription_status = Column(String(24), nullable=False, default="none", server_default="none")
+    subscription_provider = Column(String(16), nullable=True)         # "razorpay" | "apple" | "internal_grant"
+    subscription_current_period_end = Column(DateTime(timezone=True), nullable=True)
+    subscription_external_id = Column(String, nullable=True, index=True)
+    # One-time (₹200 / 30d) plan tracking
+    last_one_time_purchase_at = Column(DateTime(timezone=True), nullable=True)
+    last_one_time_external_id = Column(String, nullable=True)
+
     trips = relationship("TripMember", back_populates="user")
 
 class Trip(Base):
@@ -215,7 +233,7 @@ class TimelineItem(PlaceColumnsMixin, Base):
     id = Column(Integer, primary_key=True, index=True)
     trip_id = Column(Integer, ForeignKey("trip.id"))
     location_name = Column(String, nullable=True)
-    day_date = Column(Date, nullable=True, index=True)
+    day_date = Column(String, nullable=True, index=True)
     start_time = Column(DateTime(timezone=True), nullable=True)
     end_time = Column(DateTime(timezone=True), nullable=True)
     is_locked = Column(Boolean, default=False)
@@ -263,13 +281,133 @@ class GoogleMapsApiUsage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
+class SubscriptionEvent(Base):
+    """Audit log of every billing webhook / IAP transaction received."""
+    __tablename__ = "subscription_event"
+    __table_args__ = (
+        Index("ix_subscription_event_user_created", "user_id", "created_at"),
+        UniqueConstraint("provider", "event_id", name="uq_subscription_event_provider_event"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    provider = Column(String(16), nullable=False)        # "razorpay" | "apple"
+    event_id = Column(String, nullable=False)            # external event id for idempotency
+    event_type = Column(String(64), nullable=False)
+    raw_payload = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UsageCounter(Base):
+    """Per-user monthly usage counters for free-tier quota enforcement."""
+    __tablename__ = "usage_counter"
+    __table_args__ = (
+        UniqueConstraint("user_id", "period", name="uq_usage_counter_user_period"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    period = Column(String(7), nullable=False)           # "YYYY-MM"
+    brainstorm_messages = Column(Integer, nullable=False, default=0, server_default="0")
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class Coupon(Base):
+    """Discount / promo codes redeemable against one-time or subscription purchases."""
+    __tablename__ = "coupon"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(64), nullable=False, unique=True, index=True)  # uppercase
+    description = Column(String, nullable=True)
+    discount_type = Column(String(16), nullable=False)   # "flat_off" | "percent_off" | "fixed_price"
+    discount_value = Column(Integer, nullable=False)     # paise for flat_off/fixed_price; basis-points for percent_off
+    applies_to = Column(String(32), nullable=False)      # "one_time" | "subscription_first_cycle" | "any"
+    valid_from = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    valid_until = Column(DateTime(timezone=True), nullable=False)
+    max_redemptions_per_user = Column(Integer, nullable=False, default=1, server_default="1")
+    razorpay_offer_id = Column(String, nullable=True)
+    apple_offer_id = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class CouponRedemption(Base):
+    __tablename__ = "coupon_redemption"
+    __table_args__ = (
+        UniqueConstraint("coupon_id", "user_id", name="uq_coupon_redemption_coupon_user"),
+        Index("ix_coupon_redemption_user", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    coupon_id = Column(Integer, ForeignKey("coupon.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    provider = Column(String(24), nullable=False)        # "razorpay" | "apple" | "internal_grant"
+    payment_external_id = Column(String, nullable=True)  # razorpay payment_id / apple transaction_id / None
+    amount_paid_paise = Column(Integer, nullable=False, default=0, server_default="0")
+    applied_at_period_start = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UserIdentity(Base):
+    """OAuth identity linked to a user (provider+subject is unique)."""
+    __tablename__ = "user_identity"
+    __table_args__ = (
+        UniqueConstraint("provider", "subject", name="uq_user_identity_provider_subject"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(16), nullable=False)        # 'google' | 'apple'
+    subject = Column(String(255), nullable=False)        # provider's stable sub
+    email_at_link = Column(String(320), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class EmailVerification(Base):
+    """Single-use token emailed to a user to verify ownership of an email address."""
+    __tablename__ = "email_verification"
+
+    token_hash = Column(String(64), primary_key=True)    # sha256 hex of raw token
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(320), nullable=False)
+    purpose = Column(String(24), nullable=False)         # 'signup' | 'change_email'
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_reset"
+
+    token_hash = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_token"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    device_label = Column(String(128), nullable=True)
+    parent_id = Column(Integer, ForeignKey("refresh_token.id", ondelete="SET NULL"), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class DayRoute(Base):
     __tablename__ = "day_route"
     __table_args__ = (UniqueConstraint("trip_id", "day_date", name="uq_day_route"),)
 
     id = Column(Integer, primary_key=True)
     trip_id = Column(Integer, ForeignKey("trip.id", ondelete="CASCADE"), nullable=False, index=True)
-    day_date = Column(Date, nullable=False)
+    day_date = Column(String, nullable=False)
     encoded_polyline = Column(Text, nullable=True)
     legs = Column(JSON, nullable=False, default=list)
     total_duration_s = Column(Integer, default=0)
