@@ -53,8 +53,22 @@ class BrainstormPromoteRequest(BaseModel):
     item_ids: Optional[List[int]] = None
 
 
+class BrainstormSeedMessage(BaseModel):
+    role: str
+    content: str
+
+
+class BrainstormSeedRequest(BaseModel):
+    messages: List[BrainstormSeedMessage]
+
+
+class BrainstormSeedResponse(BaseModel):
+    seeded: int
+
+
 class PlanTripRequest(BaseModel):
     prompt: str
+    timezone: Optional[str] = None
 
 
 class PlanTripResponse(BaseModel):
@@ -63,3 +77,4 @@ class PlanTripResponse(BaseModel):
     duration_days: int
     items: List[BrainstormItemBase]
     enrichment: Optional[EnrichmentStatus] = None
+    user_output: str = ""

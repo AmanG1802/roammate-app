@@ -5,6 +5,8 @@ struct AuthTextFieldStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .font(.system(.body, design: .rounded))
+            .foregroundStyle(Color.roammateInk)
+            .tint(Color.roammateIndigo)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(

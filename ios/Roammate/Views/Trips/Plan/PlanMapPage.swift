@@ -146,24 +146,41 @@ struct PlanMapPage: View {
 
             // Map overlay controls
             VStack(spacing: 0) {
-                // Top row
-                HStack(alignment: .top) {
-                    // Day badge (top-left)
+                // Top row: day badge (leading) + refresh button (centered/trailing) + map controls (trailing)
+                HStack(alignment: .top, spacing: 8) {
                     dayBadge
-                    Spacer()
-                    // Map controls (top-right)
+                    Spacer(minLength: 8)
+                    refreshRouteButton
+                    Spacer(minLength: 8)
                     mapControls
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
-                // Refresh button (top-center)
-                HStack {
-                    Spacer()
-                    refreshRouteButton
-                    Spacer()
+                // Route context message (stale / gated) — lives on its own row
+                // beneath the top controls so it doesn't crowd the day badge.
+                if let msg = refreshContextMessage, !store.isRouteLoading {
+                    HStack {
+                        Spacer()
+                        Text(msg)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(gateMessage != nil ? Color.roammateDanger : Color.roammateAmber)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule().fill(
+                                    gateMessage != nil
+                                        ? Color.roammateDanger.opacity(0.1)
+                                        : Color.roammateAmber.opacity(0.1)
+                                )
+                            )
+                            .lineLimit(1)
+                            .transition(.opacity)
+                        Spacer()
+                    }
+                    .padding(.top, 6)
+                    .padding(.horizontal, 16)
                 }
-                .padding(.top, 4)
 
                 Spacer()
 
@@ -281,69 +298,52 @@ struct PlanMapPage: View {
     }
 
     private var refreshRouteButton: some View {
-        VStack(spacing: 4) {
-            Button {
-                Task {
-                    guard let day = currentDayDate else { return }
-                    await store.refreshRoute(dayDate: day)
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    if store.isRouteStale && !refreshDisabled && !store.isRouteLoading {
-                        // Pulsing amber dot
-                        Circle()
-                            .fill(Color.roammateAmber)
-                            .frame(width: 6, height: 6)
-                    }
-
-                    if store.isRouteLoading {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .tint(Color.roammateIndigo)
-                    } else {
-                        Image(systemName: "arrow.trianglehead.2.clockwise")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-
-                    Text(store.isRouteLoading ? "Routing\u{2026}" : "Refresh Route")
-                        .font(.system(size: 11, weight: .black))
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                }
-                .foregroundStyle(buttonForeground)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().strokeBorder(buttonBorder, lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        Button {
+            Task {
+                guard let day = currentDayDate else { return }
+                await store.refreshRoute(dayDate: day)
             }
-            .disabled(refreshDisabled || store.isRouteLoading)
-            .opacity(refreshDisabled ? 0.5 : 1.0)
+        } label: {
+            HStack(spacing: 5) {
+                if store.isRouteStale && !refreshDisabled && !store.isRouteLoading {
+                    Circle()
+                        .fill(Color.roammateAmber)
+                        .frame(width: 5, height: 5)
+                }
 
-            // Context message
-            if let msg = contextMessage, !store.isRouteLoading {
-                Text(msg)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(gateMessage != nil ? Color.roammateDanger : Color.roammateAmber)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule().fill(
-                            gateMessage != nil
-                                ? Color.roammateDanger.opacity(0.1)
-                                : Color.roammateAmber.opacity(0.1)
-                        )
-                    )
-                    .lineLimit(1)
-                    .transition(.opacity)
+                if store.isRouteLoading {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .tint(Color.roammateIndigo)
+                } else {
+                    Image(systemName: "arrow.trianglehead.2.clockwise")
+                        .font(.system(size: 11, weight: .bold))
+                }
+
+                Text(store.isRouteLoading ? "Routing\u{2026}" : "Refresh Route")
+                    .font(.system(size: 10, weight: .black))
+                    .textCase(.uppercase)
+                    .tracking(0.6)
             }
+            .foregroundStyle(buttonForeground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().strokeBorder(buttonBorder, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
         }
+        .disabled(refreshDisabled || store.isRouteLoading)
+        .opacity(refreshDisabled ? 0.5 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: store.isRouteStale)
         .animation(.easeInOut(duration: 0.2), value: store.isRouteLoading)
     }
+
+    /// Mirrors the legacy `contextMessage` computed property; lifted out so the
+    /// top-row HStack can render it on its own line beneath the controls.
+    private var refreshContextMessage: String? { contextMessage }
 
     private var buttonForeground: Color {
         if gateMessage != nil { return Color.roammateDanger.opacity(0.6) }

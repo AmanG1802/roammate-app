@@ -8,6 +8,7 @@ struct DashboardView: View {
 
     @State private var showPlanTrip = false
     @State private var showNotifications = false
+    @State private var notifShadowVisible = false
     @State private var path = NavigationPath()
     @State private var activeTripEvents: [Event] = []
 
@@ -116,46 +117,91 @@ struct DashboardView: View {
     private var notificationBell: some View {
         Button {
             HapticManager.light()
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                showNotifications.toggle()
-            }
+            toggleNotifications()
         } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Color.roammateInk)
-                    .frame(width: 40, height: 40)
-                    .background(
-                        Circle().fill(Color.roammateSurface)
-                    )
-                    .overlay(
-                        Circle().stroke(Color.roammateBorder, lineWidth: 1)
-                    )
-
-                if notificationStore.unreadCount > 0 {
-                    Text("\(min(notificationStore.unreadCount, 99))")
-                        .font(.system(size: 10, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(minWidth: 18, minHeight: 18)
-                        .background(Circle().fill(Color.roammateDanger))
-                        .offset(x: 4, y: -4)
-                }
-            }
+            bellIconContent
         }
         .buttonStyle(.plain)
+    }
+
+    /// The actual bell artwork — extracted so we can render an identical
+    /// instance above the scrim while the panel is open (so the real bell
+    /// underneath isn't dimmed by the scrim).
+    private var bellIconContent: some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "bell.fill")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(Color.roammateInk)
+                .frame(width: 40, height: 40)
+                .background(
+                    Circle().fill(Color.roammateSurface)
+                )
+                .overlay(
+                    Circle().stroke(Color.roammateBorder, lineWidth: 1)
+                )
+
+            if notificationStore.unreadCount > 0 {
+                Text("\(min(notificationStore.unreadCount, 99))")
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 18, minHeight: 18)
+                    .background(Circle().fill(Color.roammateDanger))
+                    .offset(x: 4, y: -4)
+            }
+        }
+    }
+
+    private func toggleNotifications() {
+        if showNotifications {
+            // Closing: fade the shadow out first so the panel doesn't feel like
+            // it's collapsing under its own weight.
+            withAnimation(.easeIn(duration: 0.12)) {
+                notifShadowVisible = false
+            }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                showNotifications = false
+            }
+        } else {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                showNotifications = true
+            }
+            // Shadow eases in after the panel has nearly finished scaling.
+            withAnimation(.easeOut(duration: 0.22).delay(0.18)) {
+                notifShadowVisible = true
+            }
+        }
     }
 
     // MARK: - Notifications Overlay
 
     private var notificationsOverlay: some View {
         ZStack(alignment: .topTrailing) {
-            Color.black.opacity(0.3)
+            // Scrim: soft black with a subtle material blur for a richer dim
+            // than a flat overlay. Tap to dismiss.
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.55)
+                .overlay(Color.black.opacity(0.15))
                 .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        showNotifications = false
+                .contentShape(Rectangle())
+                .onTapGesture { toggleNotifications() }
+
+            // Keep the bell crisp above the scrim so it feels like the focal
+            // point users tapped to open the panel. Mirrors the dashboard
+            // bell's position (top-right with the same padding) and forwards
+            // the tap to the same toggle.
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: toggleNotifications) {
+                        bellIconContent
                     }
+                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, RoammateSpacing.md)
+                .padding(.top, RoammateSpacing.md)
+                Spacer()
+            }
 
             VStack(spacing: 0) {
                 HStack {
@@ -168,9 +214,7 @@ struct DashboardView: View {
                             Task {
                                 await notificationStore.markAllRead()
                                 try? await Task.sleep(nanoseconds: 600_000_000)
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    showNotifications = false
-                                }
+                                toggleNotifications()
                             }
                         } label: {
                             Text("Mark all read")
@@ -212,14 +256,23 @@ struct DashboardView: View {
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.roammateSurface)
-                    .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
+                    // Shadow opacity is driven by `notifShadowVisible`, which
+                    // ramps in after the scale-in (see toggleNotifications) so
+                    // the panel doesn't appear to land with a thud.
+                    .shadow(
+                        color: .black.opacity(notifShadowVisible ? 0.18 : 0),
+                        radius: notifShadowVisible ? 24 : 0,
+                        y: notifShadowVisible ? 10 : 0
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.roammateBorder, lineWidth: 0.5)
             )
+            // 64pt clears the 40pt bell + safe-area inset comfortably so the
+            // bell remains fully visible above the panel.
             .padding(.trailing, RoammateSpacing.md)
-            .padding(.top, 50)
+            .padding(.top, 64)
         }
         .transition(.asymmetric(
             insertion: .scale(scale: 0.01, anchor: .topTrailing).combined(with: .opacity),

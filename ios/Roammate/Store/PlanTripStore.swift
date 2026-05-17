@@ -48,6 +48,9 @@ final class PlanTripStore: ObservableObject {
         do {
             let result = try await PlanTripService.plan(prompt: p)
             preview = result
+            if let userOutput = result.userOutput, !userOutput.isEmpty {
+                messages.append(PlanTripMessage(role: "assistant", text: userOutput))
+            }
             phase = .previewing
             HapticManager.success()
         } catch let e as APIError {
@@ -76,10 +79,21 @@ final class PlanTripStore: ObservableObject {
             if !preview.items.isEmpty {
                 _ = try await PlanTripService.bulkAddBrainstormItems(tripId: trip.id, items: preview.items)
             }
+            // Backfill the planning conversation as the first Brainstorm chat.
+            // Best-effort: failure here shouldn't block trip creation.
+            if !messages.isEmpty {
+                let seeds = messages.map { BrainstormSeedMessage(role: $0.role, content: $0.text) }
+                do {
+                    _ = try await BrainstormService.seedMessages(tripId: trip.id, messages: seeds)
+                } catch {
+                    // ignore — seed is best-effort
+                }
+            }
             HapticManager.success()
             phase = .idle
             self.preview = nil
             self.prompt = ""
+            self.messages = []
             return trip
         } catch let e as APIError {
             error = e.errorDescription

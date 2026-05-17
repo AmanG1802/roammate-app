@@ -45,4 +45,28 @@ enum BrainstormService {
             "/trips/\(tripId)/brainstorm/items", method: "DELETE"
         )
     }
+
+    /// Backfill the Plan-Trip conversation as the trip's first Brainstorm history.
+    /// Idempotent on the server (returns 409 if history already exists).
+    @discardableResult
+    static func seedMessages(tripId: Int, messages: [BrainstormSeedMessage]) async throws -> BrainstormSeedResponse {
+        try await APIClient.shared.request(
+            "/trips/\(tripId)/brainstorm/messages/seed",
+            method: "POST",
+            body: BrainstormSeedRequest(messages: messages)
+        )
+    }
+}
+
+struct BrainstormSeedMessage: Encodable {
+    let role: String
+    let content: String
+}
+
+struct BrainstormSeedRequest: Encodable {
+    let messages: [BrainstormSeedMessage]
+}
+
+struct BrainstormSeedResponse: Decodable {
+    let seeded: Int
 }

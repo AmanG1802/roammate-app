@@ -114,6 +114,8 @@
 		F00FD2ECBAEA006EF7DA890F /* RoammatePlus.storekit in Resources */ = {isa = PBXBuildFile; fileRef = E82A5A46C54732AB1F60C504 /* RoammatePlus.storekit */; };
 		F20B1088F81EA01687869D73 /* TripsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141858FC42A17E80C61F7024 /* TripsTabView.swift */; };
 		F39F094E068DF78E43425506 /* EventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F442625DEF0FC29D2FECA94 /* EventService.swift */; };
+		F88D53B82FB9DA04005A84F1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = F88D53B72FB9DA04005A84F1 /* GoogleSignIn */; };
+		F88D53BA2FB9DA04005A84F1 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = F88D53B92FB9DA04005A84F1 /* GoogleSignInSwift */; };
 		F990D3D78146ECB62C50539D /* BrainstormMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5375BE5A94103912CAFD5E /* BrainstormMessageBubble.swift */; };
 		FB1FE5D9C448E4D4421D85B5 /* ConciergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C620B9A604B06410717A1416 /* ConciergeService.swift */; };
 		FC124DE0EB63D1B735A05CF9 /* VoteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25FED9E14FA9161D171A000B /* VoteService.swift */; };
@@ -241,6 +243,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F88D53B82FB9DA04005A84F1 /* GoogleSignIn in Frameworks */,
+				F88D53BA2FB9DA04005A84F1 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -927,6 +931,19 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F88D53B72FB9DA04005A84F1 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F8AFC6722FB89E2D00045095 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		F88D53B92FB9DA04005A84F1 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F8AFC6722FB89E2D00045095 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1146E0D66E048AD4D27F9EC8 /* Project object */;
 }

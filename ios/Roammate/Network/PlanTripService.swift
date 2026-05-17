@@ -6,7 +6,7 @@ enum PlanTripService {
         try await APIClient.shared.request(
             "/llm/plan-trip",
             method: "POST",
-            body: PlanTripRequest(prompt: prompt),
+            body: PlanTripRequest(prompt: prompt, timezone: TimeZone.current.identifier),
             retries: 0          // LLM calls are slow and expensive; don't auto-retry
         )
     }

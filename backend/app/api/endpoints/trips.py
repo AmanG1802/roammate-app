@@ -304,6 +304,32 @@ async def update_trip(
                     evt.day_date = new_day_date.isoformat()
                 d.date = new_day_date
                 await db.flush()
+        elif not old_start:
+            # Trip had no start_date before (legacy / Plan-Trip path that omitted
+            # one). Rebase every existing TripDay from new_start by day_number so
+            # Day 1 → new_start, Day N → new_start + (N-1)d. TimelineItems are
+            # linked by day_date string, so rewrite those too.
+            date_changed = True
+            day_stmt = (
+                select(TripDay)
+                .where(TripDay.trip_id == trip_id)
+                .order_by(TripDay.day_number.desc())
+            )
+            days = (await db.execute(day_stmt)).scalars().all()
+            for d in days:
+                old_day_date = d.date
+                new_day_date = new_start + timedelta(days=max(d.day_number, 1) - 1)
+                if old_day_date == new_day_date:
+                    continue
+                evt_stmt = select(EventModel).where(
+                    EventModel.trip_id == trip_id,
+                    EventModel.day_date == old_day_date.isoformat(),
+                )
+                day_events = (await db.execute(evt_stmt)).scalars().all()
+                for evt in day_events:
+                    evt.day_date = new_day_date.isoformat()
+                d.date = new_day_date
+                await db.flush()
 
         trip.start_date = update.start_date
         await db.flush()
