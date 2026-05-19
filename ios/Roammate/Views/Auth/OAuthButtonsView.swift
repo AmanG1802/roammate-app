@@ -81,15 +81,31 @@ struct OAuthButtonsView: View {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let root = scene.windows.first?.rootViewController else { return }
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
-            if let error = error as NSError?, error.code != GIDSignInError.canceled.rawValue {
+            if let error = error as NSError? {
+                if error.code == GIDSignInError.canceled.rawValue { return }
                 authManager.error = error.localizedDescription
                 return
             }
-            guard let idToken = result?.user.idToken?.tokenString else {
-                authManager.error = "Google sign-in failed: no ID token"
+            guard let result else {
+                authManager.error = "Google sign-in failed: no result"
                 return
             }
-            Task { await authManager.signInWithGoogle(idToken: idToken) }
+            if let idToken = result.user.idToken?.tokenString {
+                Task { await authManager.signInWithGoogle(idToken: idToken) }
+                return
+            }
+            result.user.refreshTokensIfNeeded { refreshed, refreshError in
+                if let refreshError {
+                    authManager.error = "Google sign-in failed: \(refreshError.localizedDescription)"
+                    return
+                }
+                guard let idToken = refreshed?.idToken?.tokenString else {
+                    let hasAccess = result.user.accessToken.tokenString.isEmpty == false
+                    authManager.error = "Google sign-in failed: no ID token (accessToken present: \(hasAccess))"
+                    return
+                }
+                Task { await authManager.signInWithGoogle(idToken: idToken) }
+            }
         }
     }
     #endif
