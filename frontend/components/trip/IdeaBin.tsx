@@ -3,36 +3,29 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTripStore, reEnrichItem } from '@/lib/store';
 import { getToken } from '@/lib/auth';
+import { formatTimeOfDay, parseTimeOfDay, type TimeOfDay } from '@/lib/time';
 import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
 import { categoryAccent } from '@/lib/categoryColors';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
-/** Format a Date to a compact display string, e.g. "3pm" or "3:30pm". */
-function formatTime(d: Date | null | undefined): string {
-  if (!d) return 'No time';
-  let h = d.getHours();
-  const m = d.getMinutes();
+/** Format a TimeOfDay to a compact display string, e.g. "3pm" or "3:30pm". */
+function formatTime(t: TimeOfDay | null | undefined): string {
+  if (!t) return 'No time';
+  const [hStr, mStr] = t.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
   const ampm = h >= 12 ? 'pm' : 'am';
   if (h > 12) h -= 12;
   if (h === 0) h = 12;
   return m === 0 ? `${h}${ampm}` : `${h}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
-/** Convert a Date to "HH:MM" for <input type="time">. */
-function dateToTimeValue(d: Date | null | undefined): string {
-  if (!d) return '';
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-/** Convert "HH:MM" from <input type="time"> to an ISO string (today's date). */
-function timeValueToISO(val: string): string | null {
-  if (!val) return null;
-  const [hStr, mStr] = val.split(':');
-  const d = new Date();
-  d.setHours(parseInt(hStr, 10), parseInt(mStr, 10), 0, 0);
-  return d.toISOString();
+/** Convert a TimeOfDay to "HH:MM" for <input type="time">. */
+function todToTimeValue(t: TimeOfDay | null | undefined): string {
+  if (!t) return '';
+  return t.slice(0, 5);
 }
 
 const SHOW_PHOTOS =
@@ -51,13 +44,11 @@ const TIME_CATEGORY_HOURS: Record<string, number> = {
   'late night': 22,
 };
 
-function timeCategoryToDate(cat: string | null | undefined): Date | null {
+function timeCategoryToTod(cat: string | null | undefined): TimeOfDay | null {
   if (!cat) return null;
   const hour = TIME_CATEGORY_HOURS[cat.toLowerCase()];
   if (hour == null) return null;
-  const d = new Date();
-  d.setHours(hour, 0, 0, 0);
-  return d;
+  return `${String(hour).padStart(2, '0')}:00:00`;
 }
 
 export default function IdeaBin({ tripId, readOnly = false, canVote = false }: { tripId: string | null; readOnly?: boolean; canVote?: boolean }) {
@@ -112,12 +103,12 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
       .then((data: any[]) => {
         setIdeas(
           data.map((item) => {
-            const start = item.start_time
-              ? new Date(item.start_time)
-              : timeCategoryToDate(item.time_category);
-            const end = item.end_time
-              ? new Date(item.end_time)
-              : start ? new Date(start.getTime() + 60 * 60 * 1000) : null;
+            // Backend already sends TIME-only "HH:MM:SS" strings — pass
+            // through. Fall back to a category-derived TimeOfDay if absent.
+            const start: TimeOfDay | null =
+              (item.start_time as TimeOfDay | null | undefined) ??
+              timeCategoryToTod(item.time_category);
+            const end: TimeOfDay | null = (item.end_time as TimeOfDay | null | undefined) ?? null;
             return {
               id: item.id.toString(),
               title: item.title,
@@ -178,8 +169,8 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
               lat: item.lat,
               lng: item.lng,
               place_id: item.place_id ?? null,
-              start_time: item.start_time ? new Date(item.start_time) : null,
-              end_time: item.end_time ? new Date(item.end_time) : null,
+              start_time: (item.start_time as TimeOfDay | null | undefined) ?? null,
+              end_time: (item.end_time as TimeOfDay | null | undefined) ?? null,
               added_by: item.added_by ?? null,
             });
           });
@@ -219,9 +210,8 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   };
 
   const handleSaveTime = async (ideaId: string) => {
-    const iso = timeValueToISO(editingTimeVal);
-    const newDate = iso ? new Date(iso) : null;
-    setIdeas(ideas.map((i) => i.id === ideaId ? { ...i, start_time: newDate } : i));
+    const newTod = parseTimeOfDay(editingTimeVal);
+    setIdeas(ideas.map((i) => i.id === ideaId ? { ...i, start_time: newTod } : i));
     setEditingTimeId(null);
 
     if (!tripId) return;
@@ -233,7 +223,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas/${numericId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ start_time: iso }),
+        body: JSON.stringify({ start_time: newTod }),
       });
     } catch { /* optimistic update already done */ }
   };
@@ -408,7 +398,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingTimeVal(dateToTimeValue(idea.start_time));
+                            setEditingTimeVal(todToTimeValue(idea.start_time));
                             setEditingTimeId(idea.id);
                           }}
                           className="p-0.5 text-slate-300 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100 shrink-0"

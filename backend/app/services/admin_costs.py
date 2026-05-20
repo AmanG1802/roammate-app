@@ -46,6 +46,7 @@ MAPS_PRICING: dict[str, float] = {
     "directions":            1.50,  # V1 Directions Essentials (70K free)
     "routes":                1.50,  # V2 Compute Routes Essentials (70K free)
     "photo_url":             2.10,  # Places Photo Enterprise (7K free). Only billed when FETCH_PHOTOS=True
+    "timezone":              5.00,  # Time Zone API (legacy Maps Geocoding family)
     "enrich_batch":          0.00,  # composite of find_place + place_details — don't double-count
 }
 

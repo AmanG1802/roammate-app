@@ -64,9 +64,9 @@ def _event_dict(e: EventModel) -> dict[str, Any]:
         "location_name": e.location_name,
         "lat": e.lat,
         "lng": e.lng,
-        "day_date": e.day_date,
-        "start_time": e.start_time.isoformat() if e.start_time else None,
-        "end_time": e.end_time.isoformat() if e.end_time else None,
+        "day_date": e.day_date.isoformat() if e.day_date else None,
+        "start_time": e.start_time.strftime("%H:%M:%S") if e.start_time else None,
+        "end_time": e.end_time.strftime("%H:%M:%S") if e.end_time else None,
         "is_locked": e.is_locked,
         "sort_order": e.sort_order,
         "category": e.category,
@@ -83,26 +83,27 @@ def _event_dict(e: EventModel) -> dict[str, Any]:
 
 
 def _parse_time_param(raw: str, trip_tz: str):
-    """Parse a time string from LLM params into a UTC-aware datetime.
+    """Parse a time string from LLM params into a naive ``datetime.time``
+    in the trip's local wall-clock.
 
-    Handles full ISO strings (with or without 'Z') and bare HH:MM times.
+    Handles full ISO datetimes (converted to trip-local then truncated to
+    time-of-day) and bare ``HH:MM`` / ``HH:MM:SS`` forms.
     """
-    from datetime import datetime
+    from datetime import datetime, time as _time
     try:
         dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        return ensure_utc(dt)
+        utc = ensure_utc(dt)
+        from app.utils.tz import from_utc
+        local = from_utc(utc, trip_tz)
+        return local.time().replace(tzinfo=None)
     except ValueError:
         pass
     parts = raw.split(":")
-    now_local = utc_now()
-    from app.utils.tz import from_utc
-    now_local = from_utc(now_local, trip_tz)
-    naive = now_local.replace(
+    return _time(
         hour=int(parts[0]),
         minute=int(parts[1]) if len(parts) > 1 else 0,
-        second=0, microsecond=0,
+        second=0,
     )
-    return to_utc(naive.replace(tzinfo=None), trip_tz)
 
 
 class ConciergeExecutor:
@@ -206,27 +207,28 @@ class ConciergeExecutor:
 
         new_time_str = params.get("new_start_time")
         if new_time_str and event.start_time:
+            from datetime import date as _date, datetime as _dt, time as _time
             parts = new_time_str.split(":")
             hour, minute = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-            duration = (
-                (event.end_time - event.start_time)
-                if event.end_time else timedelta(hours=1)
-            )
-            from app.utils.tz import from_utc
-            local_st = from_utc(event.start_time, trip_tz)
-            new_local = local_st.replace(hour=hour, minute=minute)
-            event.start_time = to_utc(new_local.replace(tzinfo=None), trip_tz)
-            event.end_time = event.start_time + duration
+            new_start = _time(hour=hour, minute=minute)
+            # Preserve duration: compute (end - start) by anchoring on a stub date.
+            if event.end_time:
+                anchor = _date(2000, 1, 1)
+                duration = _dt.combine(anchor, event.end_time) - _dt.combine(anchor, event.start_time)
+            else:
+                duration = timedelta(hours=1)
+            event.start_time = new_start
+            event.end_time = (_dt.combine(_date(2000, 1, 1), new_start) + duration).time()
 
         new_day = params.get("new_day_date")
         if new_day:
-            event.day_date = new_day
+            from datetime import date as _date
+            event.day_date = _date.fromisoformat(new_day) if isinstance(new_day, str) else new_day
 
         await db.commit()
         await db.refresh(event)
 
-        from app.utils.tz import from_utc
-        local_display = from_utc(event.start_time, trip_tz).strftime('%I:%M %p') if event.start_time else 'TBD'
+        local_display = event.start_time.strftime('%I:%M %p') if event.start_time else 'TBD'
         return {
             "success": True,
             "message": f"Moved **{event.title}** to {local_display}.",
@@ -241,6 +243,7 @@ class ConciergeExecutor:
         if not title:
             return {"success": False, "message": "Missing title"}
 
+        from datetime import date as _date, datetime as _dt
         start_time = None
         end_time = None
         day_date_val = None
@@ -251,15 +254,19 @@ class ConciergeExecutor:
         if params.get("end_time"):
             end_time = _parse_time_param(params["end_time"], trip_tz)
         elif start_time:
-            end_time = start_time + timedelta(hours=1)
+            # +1h respecting wall-clock, anchored on a stub date to avoid
+            # crossing midnight in the TIME arithmetic.
+            anchor = _date(2000, 1, 1)
+            end_time = (_dt.combine(anchor, start_time) + timedelta(hours=1)).time()
 
         if params.get("day_date"):
-            day_date_val = params["day_date"]
-        elif start_time:
-            from app.utils.tz import from_utc
-            day_date_val = from_utc(start_time, trip_tz).date().isoformat()
+            day_date_val = (
+                _date.fromisoformat(params["day_date"])
+                if isinstance(params["day_date"], str)
+                else params["day_date"]
+            )
         else:
-            day_date_val = today_in_tz(trip_tz).isoformat()
+            day_date_val = today_in_tz(trip_tz)
 
         event = EventModel(
             trip_id=trip_id,
@@ -298,19 +305,26 @@ class ConciergeExecutor:
         if not title:
             return {"success": False, "message": "Missing place title"}
 
+        from datetime import date as _date, datetime as _dt
+        from app.utils.tz import from_utc as _from_utc
+
         start_time = None
+        day_date_val = None
         if params.get("start_time"):
             start_time = _parse_time_param(params["start_time"], trip_tz)
         if not start_time:
-            start_time = utc_now() + timedelta(minutes=15)
+            now_local = _from_utc(utc_now() + timedelta(minutes=15), trip_tz)
+            start_time = now_local.time().replace(microsecond=0, tzinfo=None)
+            day_date_val = now_local.date()
 
-        end_time = start_time + timedelta(minutes=30)
+        anchor = _date(2000, 1, 1)
+        end_time = (_dt.combine(anchor, start_time) + timedelta(minutes=30)).time()
 
         types = params.get("types") or []
         category = params.get("category") or _category_from_types(types)
 
-        from app.utils.tz import from_utc
-        day_date_val = from_utc(start_time, trip_tz).date().isoformat()
+        if day_date_val is None:
+            day_date_val = today_in_tz(trip_tz)
 
         event = EventModel(
             trip_id=trip_id,
@@ -333,11 +347,12 @@ class ConciergeExecutor:
         await db.commit()
         await db.refresh(event)
 
+        from app.utils.tz import combine_in_tz
         shifted = await smart_ripple_engine.shift_itinerary(
             db=db,
             trip_id=trip_id,
             delta_minutes=0,
-            start_from_time=end_time,
+            start_from_time=combine_in_tz(day_date_val, end_time, trip_tz),
             user_id=user_id,
         )
 

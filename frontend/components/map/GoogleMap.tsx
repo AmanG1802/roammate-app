@@ -64,7 +64,8 @@ function computeGateFailures(events: Event[]): {
   const hasMissingPlaceIds = events.some((e) => !e.place_id);
   const sorted = [...events].sort((a, b) => {
     if (a.start_time && b.start_time) {
-      return a.start_time.getTime() - b.start_time.getTime();
+      // Lexicographic string compare on HH:MM:SS is chronological.
+      return a.start_time < b.start_time ? -1 : a.start_time > b.start_time ? 1 : 0;
     }
     if (a.start_time && !b.start_time) return -1;
     if (!a.start_time && b.start_time) return 1;

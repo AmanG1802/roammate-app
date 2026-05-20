@@ -1,5 +1,5 @@
 """Unit tests for Pydantic schemas."""
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, time, timezone, timedelta
 import pytest
 from pydantic import ValidationError
 
@@ -36,29 +36,43 @@ def test_ensure_utc_non_utc_converts():
     assert out == datetime(2026, 6, 1, 8, 30, tzinfo=timezone.utc)
 
 
-# ── Event schema ensures UTC ────────────────────────────────────────────────
+# ── Event schema TIME-only contract ─────────────────────────────────────────
 
-def test_event_create_ensures_utc_on_both_times():
+def test_event_create_accepts_naive_time():
     e = EventCreate(
         trip_id=1, title="T",
-        start_time=datetime(2026, 6, 1, 14, 0, tzinfo=timezone.utc),
-        end_time=datetime(2026, 6, 1, 15, 0, tzinfo=timezone.utc),
+        day_date=date(2026, 6, 1),
+        start_time=time(14, 0),
+        end_time=time(15, 0),
     )
-    assert e.start_time.tzinfo == timezone.utc
-    assert e.end_time.tzinfo == timezone.utc
+    assert e.start_time == time(14, 0)
+    assert e.end_time == time(15, 0)
+    assert e.day_date == date(2026, 6, 1)
 
 
-def test_event_create_naive_gets_utc():
-    e = EventCreate(
-        trip_id=1, title="T",
-        start_time=datetime(2026, 6, 1, 14, 0),
-    )
-    assert e.start_time.tzinfo == timezone.utc
+def test_event_create_parses_string_time():
+    e = EventCreate(trip_id=1, title="T", start_time="14:30:00")
+    assert e.start_time == time(14, 30, 0)
 
 
-def test_event_update_ensures_utc():
-    e = EventUpdate(start_time=datetime(2026, 6, 1, 14, 0, tzinfo=timezone.utc))
-    assert e.start_time.tzinfo == timezone.utc
+def test_event_create_rejects_overnight():
+    with pytest.raises(ValidationError):
+        EventCreate(
+            trip_id=1, title="T",
+            start_time=time(22, 0),
+            end_time=time(2, 0),
+        )
+
+
+def test_event_update_accepts_time():
+    e = EventUpdate(start_time=time(14, 0))
+    assert e.start_time == time(14, 0)
+
+
+def test_event_serializer_pins_hms():
+    e = EventCreate(trip_id=1, title="T", start_time=time(14, 0, 0, 123_000))
+    # microseconds are dropped on serialize
+    assert e.model_dump()["start_time"] == "14:00:00"
 
 
 def test_ripple_request_ensures_utc():

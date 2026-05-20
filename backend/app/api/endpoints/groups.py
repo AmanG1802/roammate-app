@@ -538,8 +538,8 @@ async def get_group_idea_library(
         results.append(LibraryIdeaOut(
             id=idea.id, trip_id=idea.trip_id, title=idea.title,
             place_id=idea.place_id, lat=idea.lat, lng=idea.lng,
-            start_time=str(idea.start_time) if idea.start_time else None,
-            end_time=str(idea.end_time) if idea.end_time else None,
+            start_time=idea.start_time.strftime("%H:%M:%S") if idea.start_time else None,
+            end_time=idea.end_time.strftime("%H:%M:%S") if idea.end_time else None,
             added_by=idea.added_by, origin_idea_id=idea.origin_idea_id,
             tags=list(tag_rows), up=up, down=down, my_vote=mine,
             trip=TripProvenance(id=trip.id, name=trip.name),

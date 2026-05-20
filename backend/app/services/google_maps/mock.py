@@ -206,6 +206,18 @@ class MockMapService(BaseMapService):
             })
         return places
 
+    async def timezone_for(
+        self,
+        lat: float,
+        lng: float,
+        *,
+        user_id: Optional[int] = None,
+        trip_id: Optional[int] = None,
+    ) -> Optional[str]:
+        del user_id, trip_id
+        await asyncio.sleep(_MOCK_NETWORK_DELAY_S)
+        return "Asia/Bangkok"
+
     async def _directions_api_call(
         self,
         waypoints: list[RoutePoint],

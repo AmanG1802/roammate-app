@@ -135,7 +135,17 @@ struct PlanTripDrawer: View {
         HStack {
             if message.role == "user" { Spacer(minLength: 48) }
 
-            Text(message.text)
+            Group {
+                if message.role == "assistant",
+                   let attributed = try? AttributedString(
+                    markdown: message.text,
+                    options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                   ) {
+                    Text(attributed)
+                } else {
+                    Text(message.text)
+                }
+            }
                 .font(.system(.body, design: .rounded))
                 .foregroundStyle(message.role == "user" ? .white : Color.roammateInk)
                 .padding(.horizontal, 14)

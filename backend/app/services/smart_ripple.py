@@ -6,7 +6,11 @@ travel durations. An event is shifted only when the gap between the previous
 event's end time and its start time is smaller than the required travel time.
 If an event has sufficient buffer, propagation stops.
 
-All datetime comparisons use UTC-aware timestamps.
+Events now store (day_date, start_time, end_time) as (DATE, TIME, TIME) in
+trip-local wall-clock. For comparisons and shifts we combine to a UTC instant
+via the trip's timezone, do the math, then split back. Shifts that would push
+an event past midnight in trip-local terms are rejected (v1 disallows
+overnight events — see docs/[27]).
 """
 from __future__ import annotations
 
@@ -17,11 +21,26 @@ from typing import Optional
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.all_models import TimelineItem as Event
+from app.models.all_models import TimelineItem as Event, Trip
 from app.services.google_maps import RoutePoint, get_google_maps_service
-from app.utils.tz import utc_now, ensure_utc
+from app.utils.tz import combine_in_tz, ensure_utc, split_in_tz, utc_now
 
 log = logging.getLogger(__name__)
+
+
+class CrossMidnightShiftError(Exception):
+    """Raised when a ripple shift would push an event to a different day_date
+    in the trip's local timezone. v1 disallows overnight; surface to the
+    endpoint so it can return a structured 422."""
+
+    def __init__(self, event_id: int, original_day, new_day):
+        super().__init__(
+            f"Shift would move event {event_id} from {original_day} to {new_day}; "
+            "overnight shifts are not supported in v1."
+        )
+        self.event_id = event_id
+        self.original_day = original_day
+        self.new_day = new_day
 
 
 class SmartRippleEngine:
@@ -40,27 +59,37 @@ class SmartRippleEngine:
             start_from_time = utc_now()
         start_from_time = ensure_utc(start_from_time)
 
+        trip = (await db.execute(select(Trip).where(Trip.id == trip_id))).scalars().first()
+        trip_tz = (trip.timezone if trip else None) or "UTC"
+
         stmt = (
             select(Event)
             .where(
                 and_(
                     Event.trip_id == trip_id,
                     Event.start_time.is_not(None),
+                    Event.day_date.is_not(None),
                     Event.is_locked == False,
                     Event.is_skipped == False,
                 )
             )
-            .order_by(Event.start_time)
+            .order_by(Event.day_date, Event.start_time)
         )
         result = await db.execute(stmt)
         all_events = list(result.scalars().all())
 
-        for e in all_events:
-            e.start_time = ensure_utc(e.start_time)
-            e.end_time = ensure_utc(e.end_time)
-
         if not all_events:
             return []
+
+        # Precompute UTC instants for ordering and comparisons.
+        starts_utc = {
+            e.id: combine_in_tz(e.day_date, e.start_time, trip_tz)
+            for e in all_events
+        }
+        ends_utc = {
+            e.id: combine_in_tz(e.day_date, e.end_time, trip_tz)
+            for e in all_events
+        }
 
         if start_from_event_id is not None:
             anchor_idx = next(
@@ -71,7 +100,7 @@ class SmartRippleEngine:
                 return []
         else:
             anchor_idx = next(
-                (i for i, e in enumerate(all_events) if e.start_time >= start_from_time),
+                (i for i, e in enumerate(all_events) if starts_utc[e.id] >= start_from_time),
                 None,
             )
             if anchor_idx is None:
@@ -81,9 +110,9 @@ class SmartRippleEngine:
         shifted: list[Event] = []
 
         anchor = all_events[anchor_idx]
-        anchor.start_time += delta
-        if anchor.end_time is not None:
-            anchor.end_time += delta
+        self._apply_shift(anchor, delta, trip_tz)
+        starts_utc[anchor.id] = combine_in_tz(anchor.day_date, anchor.start_time, trip_tz)
+        ends_utc[anchor.id] = combine_in_tz(anchor.day_date, anchor.end_time, trip_tz)
         shifted.append(anchor)
 
         maps_service = get_google_maps_service()
@@ -96,24 +125,52 @@ class SmartRippleEngine:
                 prev, curr, maps_service, user_id=user_id, trip_id=trip_id
             )
 
-            prev_end = prev.end_time or prev.start_time
-            if prev_end is None:
+            prev_end = ends_utc[prev.id] or starts_utc[prev.id]
+            curr_start = starts_utc[curr.id]
+            if prev_end is None or curr_start is None:
                 break
 
             needed_gap = timedelta(minutes=travel_minutes)
-            available_gap = curr.start_time - prev_end
+            available_gap = curr_start - prev_end
 
             if available_gap >= needed_gap:
                 break
 
             shortfall = needed_gap - available_gap
-            curr.start_time += shortfall
-            if curr.end_time is not None:
-                curr.end_time += shortfall
+            self._apply_shift(curr, shortfall, trip_tz)
+            starts_utc[curr.id] = combine_in_tz(curr.day_date, curr.start_time, trip_tz)
+            ends_utc[curr.id] = combine_in_tz(curr.day_date, curr.end_time, trip_tz)
             shifted.append(curr)
 
         await db.commit()
         return shifted
+
+    @staticmethod
+    def _apply_shift(event: Event, delta: timedelta, trip_tz: str) -> None:
+        """Add ``delta`` to an event's start/end in the trip's local tz.
+
+        Rejects the shift if the new day_date would differ — v1 has no
+        overnight events.
+        """
+        original_day = event.day_date
+        start_instant = combine_in_tz(event.day_date, event.start_time, trip_tz)
+        if start_instant is None:
+            return
+        new_start_instant = start_instant + delta
+        new_day, new_start = split_in_tz(new_start_instant, trip_tz)
+        if new_day != original_day:
+            raise CrossMidnightShiftError(event.id, original_day, new_day)
+        event.start_time = new_start
+
+        if event.end_time is not None:
+            end_instant = combine_in_tz(event.day_date, event.end_time, trip_tz)
+            if end_instant is None:
+                return
+            new_end_instant = end_instant + delta
+            new_end_day, new_end = split_in_tz(new_end_instant, trip_tz)
+            if new_end_day != original_day:
+                raise CrossMidnightShiftError(event.id, original_day, new_end_day)
+            event.end_time = new_end
 
     async def _get_travel_minutes(
         self,

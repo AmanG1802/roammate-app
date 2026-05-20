@@ -1,7 +1,11 @@
 import Foundation
 
 /// A scheduled timeline event on a trip. Replaces the prior `TimelineItem`
-/// model and now matches the FastAPI `Event` Pydantic schema 1:1.
+/// model and matches the FastAPI `Event` Pydantic schema 1:1.
+///
+/// `startTime` / `endTime` are now wall-clock `TimeOfDay` values (no date,
+/// no tz). The owning `dayDate` and the trip's timezone are required to
+/// recover an absolute instant — use `TimeOfDay.combine(day:tz:)`.
 struct Event: Codable, Identifiable, Hashable {
     let id: Int
     let tripId: Int
@@ -24,8 +28,8 @@ struct Event: Codable, Identifiable, Hashable {
     // Event-specific
     let locationName: String?
     let dayDate: String?       // "YYYY-MM-DD" — plain ISO date string
-    let startTime: Date?       // full ISO-8601 datetime in UTC
-    let endTime: Date?
+    let startTime: TimeOfDay?  // trip-local wall-clock, "HH:mm:ss"
+    let endTime: TimeOfDay?
     let isLocked: Bool
     let eventType: String?
     let sortOrder: Int
@@ -73,8 +77,8 @@ struct EventCreate: Encodable {
     let addedBy: String?
     let locationName: String?
     let dayDate: String?
-    let startTime: Date?
-    let endTime: Date?
+    let startTime: TimeOfDay?
+    let endTime: TimeOfDay?
     let isLocked: Bool
     let eventType: String?
     let sortOrder: Int
@@ -104,8 +108,8 @@ struct EventCreate: Encodable {
 struct EventUpdate: Encodable {
     let title: String?
     let dayDate: String?
-    let startTime: Date?
-    let endTime: Date?
+    let startTime: TimeOfDay?
+    let endTime: TimeOfDay?
     let sortOrder: Int?
     let timeCategory: String?
     let isSkipped: Bool?
@@ -134,7 +138,7 @@ struct EventUpdate: Encodable {
 
 struct RippleRequest: Encodable {
     let deltaMinutes: Int
-    let startFromTime: Date?
+    let startFromTime: Date?  // absolute UTC instant; unrelated to TimeOfDay
 
     enum CodingKeys: String, CodingKey {
         case deltaMinutes = "delta_minutes"

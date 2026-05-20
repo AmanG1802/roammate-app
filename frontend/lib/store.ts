@@ -1,13 +1,21 @@
 import { create } from 'zustand';
 import { getToken } from '@/lib/auth';
 import { toastBus } from '@/lib/toast-bus';
+import type { TimeOfDay } from '@/lib/time';
+import { compareTimeOfDay } from '@/lib/time';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
-/** Create a temporary local event (used when API is unavailable). */
+/** Create a temporary local event (used when API is unavailable).
+ *
+ * After the schema split (docs/[27]), start/end times are wall-clock
+ * `TimeOfDay` strings ("HH:MM:SS") with no date. The owning `day_date`
+ * carries the day. We no longer synthesize a +1h end_time — TBD ends
+ * stay null until the user sets them.
+ */
 function makeLocalEvent(
   idea: Idea,
-  startTime: Date | null | undefined,
+  startTime: TimeOfDay | null | undefined,
   events: Event[],
   dayDate: string | null = null,
 ): Event {
@@ -18,7 +26,7 @@ function makeLocalEvent(
     title: idea.title,
     day_date: dayDate,
     start_time: startTime ?? null,
-    end_time: startTime ? new Date(startTime.getTime() + 3_600_000) : null,
+    end_time: null,
     lat: idea.lat,
     lng: idea.lng,
     sort_order: maxOrder + 1,
@@ -29,9 +37,9 @@ export interface Event {
   id: string;
   trip_id: string;
   title: string;
-  day_date: string | null;   // "YYYY-MM-DD" — the day this event belongs to
-  start_time: Date | null;   // null = TBD
-  end_time: Date | null;     // null = TBD
+  day_date: string | null;       // "YYYY-MM-DD" — the day this event belongs to
+  start_time: TimeOfDay | null;  // "HH:MM:SS" trip-local wall-clock; null = TBD
+  end_time: TimeOfDay | null;
   lat: number;
   lng: number;
   sort_order: number;
@@ -54,8 +62,8 @@ export interface Idea {
   lat: number;
   lng: number;
   place_id?: string | null;
-  start_time?: Date | null;
-  end_time?: Date | null;
+  start_time?: TimeOfDay | null;
+  end_time?: TimeOfDay | null;
   added_by?: string | null;
   up?: number;
   down?: number;
@@ -111,7 +119,7 @@ interface TripState {
    * Calls POST /events/ and DELETE /trips/{id}/ideas/{id}.
    * If tripId is null, falls back to in-memory only (demo mode).
    */
-  moveIdeaToTimeline: (ideaId: string, tripId: string | null, token: string | null, startTime?: Date | null, dayDate?: string | null) => Promise<void>;
+  moveIdeaToTimeline: (ideaId: string, tripId: string | null, token: string | null, startTime?: TimeOfDay | null, dayDate?: string | null) => Promise<void>;
 
   /**
    * Move event back → idea bin.
@@ -120,7 +128,7 @@ interface TripState {
   moveEventToIdea: (eventId: string, tripId: string | null, token: string | null) => Promise<void>;
 
   /** Persist a time update for a single event. */
-  updateEventTime: (eventId: string, startTime: Date | null, endTime: Date | null, token: string | null) => Promise<void>;
+  updateEventTime: (eventId: string, startTime: TimeOfDay | null, endTime: TimeOfDay | null, token: string | null) => Promise<void>;
 
   /** Toggle is_skipped for an event. */
   toggleEventSkip: (eventId: string, token: string | null) => Promise<void>;
@@ -168,8 +176,8 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
     trip_id: String(raw.trip_id),
     title: raw.title as string,
     day_date: (raw.day_date as string) ?? null,
-    start_time: raw.start_time ? new Date(raw.start_time as string) : null,
-    end_time: raw.end_time ? new Date(raw.end_time as string) : null,
+    start_time: (raw.start_time as TimeOfDay | null) ?? null,
+    end_time: (raw.end_time as TimeOfDay | null) ?? null,
     lat: (raw.lat as number) ?? 0,
     lng: (raw.lng as number) ?? 0,
     sort_order: (raw.sort_order as number) ?? 0,
@@ -189,8 +197,14 @@ function mapApiEvent(raw: Record<string, unknown>): Event {
 
 function sortEvents(events: Event[]): Event[] {
   return [...events].sort((a, b) => {
-    // Timed events first, sorted by start_time; then TBD by sort_order
-    if (a.start_time && b.start_time) return a.start_time.getTime() - b.start_time.getTime();
+    // Timed events first, sorted by (day_date, start_time) lexicographically;
+    // then TBD by sort_order. compareTimeOfDay already handles null-last.
+    if (a.start_time && b.start_time) {
+      const aDay = a.day_date ?? '';
+      const bDay = b.day_date ?? '';
+      if (aDay !== bDay) return aDay < bDay ? -1 : 1;
+      return compareTimeOfDay(a.start_time, b.start_time);
+    }
     if (a.start_time && !b.start_time) return -1;
     if (!a.start_time && b.start_time) return 1;
     return a.sort_order - b.sort_order;
@@ -253,7 +267,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         title: idea.title,
         day_date: dayDate ?? null,
         start_time: startTime ?? null,
-        end_time: startTime ? new Date(startTime.getTime() + 3600_000) : null,
+        end_time: null,
         lat: idea.lat,
         lng: idea.lng,
         sort_order: maxOrder + 1,
@@ -275,8 +289,8 @@ export const useTripStore = create<TripState>((set, get) => ({
           lat: idea.lat,
           lng: idea.lng,
           day_date: dayDate ?? null,
-          start_time: startTime ? startTime.toISOString() : null,
-          end_time: startTime ? new Date(startTime.getTime() + 3600_000).toISOString() : null,
+          start_time: startTime ?? null,
+          end_time: null,
           sort_order: maxOrder + 1,
           added_by: idea.added_by ?? null,
           source_idea_id: !isNaN(numId) ? numId : null,
@@ -348,8 +362,8 @@ export const useTripStore = create<TripState>((set, get) => ({
                 ? {
                     id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0,
                     place_id: idea.place_id ?? null,
-                    start_time: idea.start_time ? new Date(idea.start_time) : null,
-                    end_time: idea.end_time ? new Date(idea.end_time) : null,
+                    start_time: (idea.start_time as TimeOfDay | null) ?? null,
+                    end_time: (idea.end_time as TimeOfDay | null) ?? null,
                     added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0,
                   }
                 : i
@@ -381,8 +395,8 @@ export const useTripStore = create<TripState>((set, get) => ({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            start_time: startTime ? startTime.toISOString() : null,
-            end_time: endTime ? endTime.toISOString() : null,
+            start_time: startTime ?? null,
+            end_time: endTime ?? null,
           }),
         });
         if (!res.ok) throw new Error(`status ${res.status}`);

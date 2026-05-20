@@ -51,11 +51,18 @@ class ShiftTimelineParams(BaseModel):
     start_from_event_id: Optional[int] = None
 
 class MoveEventParams(BaseModel):
+    # Time/day fields are intentionally Optional[str] (not typed time/date):
+    # the concierge LLM emits loose human forms ("4pm", "16:00", "tomorrow")
+    # which a downstream normalizer rewrites to canonical TIME/DATE before
+    # hitting the event endpoints. Tightening here would 422 on natural
+    # emissions. Validation belongs at the normalizer boundary.
     event_id: int
     new_start_time: Optional[str] = None
     new_day_date: Optional[str] = None
 
 class AddEventParams(BaseModel):
+    # See MoveEventParams: strings are accepted in loose forms; downstream
+    # normalizer rewrites to canonical HH:MM:SS / YYYY-MM-DD before persisting.
     title: str
     day_date: Optional[str] = None
     start_time: Optional[str] = None

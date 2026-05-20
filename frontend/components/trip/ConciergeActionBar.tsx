@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useTripStore } from '@/lib/store';
+import { useTripStore, Event } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { toastBus } from '@/lib/toast-bus';
+import { combineInTz } from '@/lib/time';
 import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check, Sparkles } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useEntitlement } from '@/hooks/useEntitlement';
@@ -56,13 +57,8 @@ export default function ConciergeActionBar() {
       );
       if (res.ok) {
         const updated = await res.json();
-        setEvents(
-          updated.map((e: any) => ({
-            ...e,
-            start_time: new Date(e.start_time),
-            end_time: new Date(e.end_time),
-          }))
-        );
+        // Backend returns TIME-only strings ("HH:MM:SS") — pass through.
+        setEvents(updated as Event[]);
         const msg = updated.length > 0
           ? `Shifted ${updated.length} event${updated.length > 1 ? 's' : ''} by +${minutes} min`
           : 'No events needed adjustment';
@@ -79,10 +75,27 @@ export default function ConciergeActionBar() {
     }
   };
 
+  // ConciergeActionBar is used "in the moment"; we don't have Trip.timezone
+  // wired into the store yet, so fall back to the browser tz. This is right
+  // when the user is physically in the trip's tz (typical "Running Late"
+  // / "Skip Next" usage). If the user opens the app from a different tz,
+  // the check will be off — acceptable for the action-bar quick decisions.
+  const browserTz = typeof Intl !== 'undefined'
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone
+    : 'UTC';
+
+  const isStillUpcoming = (e: Event, now: Date): boolean => {
+    const start = combineInTz(e.day_date, e.start_time, browserTz);
+    const end = combineInTz(e.day_date, e.end_time, browserTz);
+    if (!start) return false;
+    if (start > now) return true;
+    return !!(end && end > now);
+  };
+
   const handleSkipNext = () => {
     const now = new Date();
     const nextEvent = events.find(
-      (e) => e.start_time && !e.is_skipped && (e.start_time > now || (e.end_time && e.end_time > now))
+      (e) => e.start_time && !e.is_skipped && isStillUpcoming(e, now),
     );
     if (!nextEvent) return;
 
@@ -145,7 +158,7 @@ export default function ConciergeActionBar() {
           title="Skip Next"
           aria-label="Skip next event"
           onClick={handleSkipNext}
-          disabled={!events.some((e) => e.start_time && !e.is_skipped && (e.start_time > new Date() || (e.end_time && e.end_time > new Date())))}
+          disabled={!events.some((e) => e.start_time && !e.is_skipped && isStillUpcoming(e, new Date()))}
           className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
         >
           <SkipForward className="w-4 h-4" />

@@ -53,8 +53,22 @@ class BrainstormPromoteRequest(BaseModel):
     item_ids: Optional[List[int]] = None
 
 
+class BrainstormSeedMessage(BaseModel):
+    role: str
+    content: str
+
+
+class BrainstormSeedRequest(BaseModel):
+    messages: List[BrainstormSeedMessage]
+
+
+class BrainstormSeedResponse(BaseModel):
+    seeded: int
+
+
 class PlanTripRequest(BaseModel):
     prompt: str
+    timezone: Optional[str] = None
 
 
 class PlanTripResponse(BaseModel):
@@ -63,3 +77,9 @@ class PlanTripResponse(BaseModel):
     duration_days: int
     items: List[BrainstormItemBase]
     enrichment: Optional[EnrichmentStatus] = None
+    user_output: str = ""
+    # IANA timezone inferred from the destination via Google's Time Zone API.
+    # When present, the client should override the device tz with this value
+    # when creating the trip. None if no item had usable (lat, lng) or the API
+    # call failed.
+    timezone: Optional[str] = None

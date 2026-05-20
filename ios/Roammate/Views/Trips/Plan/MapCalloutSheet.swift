@@ -8,11 +8,14 @@ struct MapCalloutSheet: View {
 
     private var timeString: String {
         guard let start = event.startTime else { return "TBD" }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "h:mm a"
-        var str = fmt.string(from: start)
+        func fmt(_ tod: TimeOfDay) -> String {
+            let suffix = tod.hour < 12 ? "AM" : "PM"
+            let h12 = tod.hour == 0 ? 12 : (tod.hour > 12 ? tod.hour - 12 : tod.hour)
+            return String(format: "%d:%02d %@", h12, tod.minute, suffix)
+        }
+        var str = fmt(start)
         if let end = event.endTime {
-            str += " – \(fmt.string(from: end))"
+            str += " – \(fmt(end))"
         }
         return str
     }

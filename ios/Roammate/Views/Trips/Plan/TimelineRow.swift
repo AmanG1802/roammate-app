@@ -10,18 +10,20 @@ struct TimelineRow: View {
     @State private var editStart = Date()
     @State private var editEnd = Date()
 
+    private static func fmtTime(_ tod: TimeOfDay) -> String {
+        let suffix = tod.hour < 12 ? "AM" : "PM"
+        let h12 = tod.hour == 0 ? 12 : (tod.hour > 12 ? tod.hour - 12 : tod.hour)
+        return String(format: "%d:%02d %@", h12, tod.minute, suffix)
+    }
+
     private var startTimeText: String {
         guard let start = event.startTime else { return "TBD" }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "h:mm a"
-        return fmt.string(from: start)
+        return Self.fmtTime(start)
     }
 
     private var endTimeText: String {
         guard let end = event.endTime else { return "" }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "h:mm a"
-        return fmt.string(from: end)
+        return Self.fmtTime(end)
     }
 
     private var timeRangeText: String {
@@ -72,8 +74,8 @@ struct TimelineRow: View {
 
                     HStack {
                         Button {
-                            editStart = event.startTime ?? Date()
-                            editEnd = event.endTime ?? Date()
+                            editStart = event.startTime?.asPickerDate() ?? Date()
+                            editEnd = event.endTime?.asPickerDate() ?? Date()
                             editingTime = true
                         } label: {
                             HStack(spacing: 4) {
@@ -202,8 +204,8 @@ struct TimelineRow: View {
                             let update = EventUpdate(
                                 title: nil,
                                 dayDate: nil,
-                                startTime: editStart,
-                                endTime: editEnd,
+                                startTime: TimeOfDay(date: editStart),
+                                endTime: TimeOfDay(date: editEnd),
                                 sortOrder: nil,
                                 timeCategory: nil,
                                 isSkipped: nil

@@ -34,11 +34,13 @@ MISS: Any = _CacheMiss()
 _FIND_PLACE_TTL = 24 * 60 * 60       # 24 hours
 _PLACE_DETAILS_TTL = 7 * 24 * 60 * 60  # 7 days
 _DIRECTIONS_TTL = 60 * 60            # 1 hour
+_TIMEZONE_TTL = 30 * 24 * 60 * 60    # 30 days — timezones don't change often
 _NEGATIVE_TTL = 60 * 60              # 1 hour for None results
 
 _find_place_cache: TTLCache = TTLCache(maxsize=4096, ttl=_FIND_PLACE_TTL)
 _place_details_cache: TTLCache = TTLCache(maxsize=4096, ttl=_PLACE_DETAILS_TTL)
 _directions_cache: TTLCache = TTLCache(maxsize=1024, ttl=_DIRECTIONS_TTL)
+_timezone_cache: TTLCache = TTLCache(maxsize=4096, ttl=_TIMEZONE_TTL)
 _negative_cache: TTLCache = TTLCache(maxsize=2048, ttl=_NEGATIVE_TTL)
 
 _lock = asyncio.Lock()
@@ -114,9 +116,34 @@ async def set_directions(
             _directions_cache[key] = value
 
 
+def _timezone_key(lat: float, lng: float) -> Tuple[float, float]:
+    """Round lat/lng to a ~1km grid cell — tz boundaries are coarse enough."""
+    return (round(lat, 2), round(lng, 2))
+
+
+async def get_timezone(lat: float, lng: float) -> Tuple[Any, str]:
+    key = _timezone_key(lat, lng)
+    async with _lock:
+        if key in _timezone_cache:
+            return _timezone_cache[key], "hit"
+        if ("timezone", key) in _negative_cache:
+            return None, "negative_hit"
+    return MISS, "miss"
+
+
+async def set_timezone(lat: float, lng: float, value: Optional[str]) -> None:
+    key = _timezone_key(lat, lng)
+    async with _lock:
+        if value is None:
+            _negative_cache[("timezone", key)] = True
+        else:
+            _timezone_cache[key] = value
+
+
 def clear_all() -> None:
     """Test-only utility to reset all caches between cases."""
     _find_place_cache.clear()
     _place_details_cache.clear()
     _directions_cache.clear()
+    _timezone_cache.clear()
     _negative_cache.clear()

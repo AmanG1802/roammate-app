@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, Loader2, Rocket, X, Compass, AlertTriangle } from 'lucide-react';
 import { getToken } from '@/lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
 
 // Witty messages shown while the AI is planning. Cycled every ~1.8s so the
 // user has something to read instead of a static spinner.
@@ -33,7 +34,12 @@ type Preview = {
   duration_days: number;
   items: Array<Record<string, any>>;
   enrichment?: EnrichmentStatus | null;
+  user_output?: string;
+  /** IANA tz inferred from the destination on the backend. Null → fall back to browser tz. */
+  timezone?: string | null;
 };
+
+type BufferedMessage = { role: 'user' | 'assistant'; content: string };
 
 function authHeaders(): HeadersInit {
   const token = getToken();
@@ -48,6 +54,10 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [witIdx, setWitIdx] = useState(0);
+  // Buffer the user prompts + assistant user_output replies so we can backfill
+  // them into the new trip's Brainstorm chat history after createTrip succeeds.
+  const planMessagesRef = useRef<BufferedMessage[]>([]);
+  const { requirePlus, refresh: refreshEntitlement } = useEntitlement();
 
   // Rotate witty messages while planning is in flight.
   useEffect(() => {
@@ -65,13 +75,33 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
     setPlanning(true);
     setError(null);
     try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/llm/plan-trip`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ prompt: p }),
+        body: JSON.stringify({ prompt: p, timezone }),
       });
+      if (res.status === 402) {
+        const body = await res.json().catch(() => null);
+        const needs = isNeedsPlus(body);
+        const subscribed = await requirePlus(needs?.feature ?? 'brainstorm_quota');
+        if (subscribed) {
+          await refreshEntitlement();
+          setPlanning(false);
+          plan();
+          return;
+        }
+        setError('You have used up this month’s free planner messages.');
+        return;
+      }
       if (!res.ok) throw new Error('AI planner hit a snag — your prompt is saved, just hit Plan again.');
-      setPreview(await res.json());
+      const data: Preview = await res.json();
+      planMessagesRef.current.push({ role: 'user', content: p });
+      if (data.user_output) {
+        planMessagesRef.current.push({ role: 'assistant', content: data.user_output });
+      }
+      setPreview(data);
+      void refreshEntitlement();
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong — your prompt is saved, just hit Plan again.');
     } finally {
@@ -86,6 +116,7 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
     try {
       const body: Record<string, any> = { name: preview.trip_name };
       if (preview.start_date) body.start_date = preview.start_date;
+      body.timezone = preview.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       const tripRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
         method: 'POST',
@@ -100,6 +131,24 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ items: preview.items }),
       });
+
+      // Backfill the planning conversation as the first Brainstorm chat.
+      // Failure is non-fatal — trip + items are already saved.
+      if (planMessagesRef.current.length > 0) {
+        try {
+          await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/trips/${trip.id}/brainstorm/messages/seed`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...authHeaders() },
+              body: JSON.stringify({ messages: planMessagesRef.current }),
+            },
+          );
+        } catch {
+          // ignore — seed is best-effort
+        }
+      }
+      planMessagesRef.current = [];
 
       onTripCreated?.();
       router.push(`/trips?id=${trip.id}&mode=brainstorm`);

@@ -38,13 +38,13 @@ struct TimelineDrawerContent: View {
 
     private var conflictIds: Set<Int> {
         var ids = Set<Int>()
-        var maxEnd: Date?
+        var maxEnd: TimeOfDay?
         for ev in displayEvents {
             if ev.isSkipped { continue }
             if let start = ev.startTime, let prevEnd = maxEnd, start < prevEnd {
                 ids.insert(ev.id)
             }
-            if let end = ev.endTime, end > (maxEnd ?? .distantPast) {
+            if let end = ev.endTime, end > (maxEnd ?? TimeOfDay(hour: 0, minute: 0)) {
                 maxEnd = end
             }
         }
@@ -203,7 +203,12 @@ struct TimelineDrawerContent: View {
         let hours: Int = {
             guard let end = from.endTime ?? from.startTime,
                   let start = to.startTime else { return 1 }
-            let diff = start.timeIntervalSince(end)
+            // Both are wall-clock TimeOfDay on the same day; compute hour-diff
+            // by anchoring on a stub date and subtracting.
+            let anchor = Calendar.current.startOfDay(for: Date())
+            let endDate = end.combine(day: anchor, tz: .current) ?? anchor
+            let startDate = start.combine(day: anchor, tz: .current) ?? anchor
+            let diff = startDate.timeIntervalSince(endDate)
             return max(1, min(8, Int(diff / 3600)))
         }()
 
@@ -249,7 +254,8 @@ struct TimelineDrawerContent: View {
 
         // Auto-resolve conflicts: if any overlaps exist, sort by startTime
         if hasConflicts(updated) {
-            updated.sort { ($0.startTime ?? .distantFuture) < ($1.startTime ?? .distantFuture) }
+            let maxTime = TimeOfDay(hour: 23, minute: 59, second: 59)
+            updated.sort { ($0.startTime ?? maxTime) < ($1.startTime ?? maxTime) }
             updated = updated.enumerated().map { idx, event in
                 Event(
                     id: event.id, tripId: event.tripId, title: event.title,
@@ -279,13 +285,13 @@ struct TimelineDrawerContent: View {
     }
 
     private func hasConflicts(_ events: [Event]) -> Bool {
-        var maxEnd: Date?
+        var maxEnd: TimeOfDay?
         for ev in events {
             if ev.isSkipped { continue }
             if let start = ev.startTime, let prevEnd = maxEnd, start < prevEnd {
                 return true
             }
-            if let end = ev.endTime, end > (maxEnd ?? .distantPast) {
+            if let end = ev.endTime, end > (maxEnd ?? TimeOfDay(hour: 0, minute: 0)) {
                 maxEnd = end
             }
         }

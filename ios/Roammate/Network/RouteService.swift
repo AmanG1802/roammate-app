@@ -136,6 +136,11 @@ enum RouteService {
         let routable = events
             .filter { !$0.isSkipped && $0.lat != nil && $0.lng != nil }
             .sorted { a, b in
+                // Sort by (dayDate, startTime); both are wall-clock so
+                // string + TimeOfDay lexicographic order is correct.
+                let aDay = a.dayDate ?? ""
+                let bDay = b.dayDate ?? ""
+                if aDay != bDay { return aDay < bDay }
                 if let at = a.startTime, let bt = b.startTime {
                     return at < bt
                 }
@@ -396,20 +401,23 @@ enum RouteService {
         let routable = events
             .filter { !$0.isSkipped && ($0.placeId != nil || ($0.lat != nil && $0.lng != nil)) }
             .sorted { a, b in
+                let aDay = a.dayDate ?? ""
+                let bDay = b.dayDate ?? ""
+                if aDay != bDay { return aDay < bDay }
                 if let at = a.startTime, let bt = b.startTime { return at < bt }
                 return a.sortOrder < b.sortOrder
             }
 
         var parts: [[String]] = []
-        let isoFmt = ISO8601DateFormatter()
         for e in routable {
             parts.append([
                 String(e.id),
                 e.placeId ?? "",
                 e.lat.map { String(format: "%.5f", $0) } ?? "",
                 e.lng.map { String(format: "%.5f", $0) } ?? "",
-                e.startTime.map { isoFmt.string(from: $0) } ?? "",
-                e.endTime.map { isoFmt.string(from: $0) } ?? "",
+                e.dayDate ?? "",
+                e.startTime?.wireString ?? "",
+                e.endTime?.wireString ?? "",
             ])
         }
 

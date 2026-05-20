@@ -27,6 +27,20 @@ private func shortTime(_ date: Date) -> String {
     return f.string(from: date)
 }
 
+private func shortTime(_ tod: TimeOfDay) -> String {
+    let suffix = tod.hour < 12 ? "AM" : "PM"
+    let h12 = tod.hour == 0 ? 12 : (tod.hour > 12 ? tod.hour - 12 : tod.hour)
+    return String(format: "%d:%02d %@", h12, tod.minute, suffix)
+}
+
+private func parseDayDate(_ s: String) -> Date? {
+    let f = DateFormatter()
+    f.calendar = Calendar(identifier: .gregorian)
+    f.timeZone = TimeZone(identifier: "UTC")
+    f.dateFormat = "yyyy-MM-dd"
+    return f.date(from: s)
+}
+
 // MARK: - Shared HeroShell
 
 private struct HeroShell<Content: View>: View {
@@ -166,15 +180,23 @@ struct InTripCard: View {
 
     private var scheduledItems: [(label: String, name: String, time: String)] {
         let now = Date()
+        let tz = TimeZone(identifier: trip.timezone ?? "UTC") ?? .current
         let sorted = todayEvents
 
         var ongoing: Event?
         var upcoming: [Event] = []
 
         for event in sorted {
-            if let start = event.startTime, let end = event.endTime, start <= now && now <= end {
+            guard let dayStr = event.dayDate,
+                  let day = parseDayDate(dayStr) else { continue }
+            // Combine wall-clock TIME with the day in the trip's tz to get
+            // absolute instants, then compare to `now`.
+            let startInstant = event.startTime?.combine(day: day, tz: tz)
+            let endInstant = event.endTime?.combine(day: day, tz: tz)
+
+            if let start = startInstant, let end = endInstant, start <= now && now <= end {
                 ongoing = event
-            } else if let start = event.startTime, start > now {
+            } else if let start = startInstant, start > now {
                 upcoming.append(event)
             }
         }
