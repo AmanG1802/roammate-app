@@ -116,9 +116,7 @@ final class BrainstormStore: ObservableObject {
         }
     }
 
-    private static func timeCategoryToTimes(_ category: String) -> (Date, Date) {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+    private static func timeCategoryToTimes(_ category: String) -> (TimeOfDay, TimeOfDay) {
         let (startHour, endHour): (Int, Int) = {
             switch category.lowercased() {
             case "morning": return (9, 11)
@@ -129,9 +127,7 @@ final class BrainstormStore: ObservableObject {
             default: return (10, 12)
             }
         }()
-        let start = cal.date(bySettingHour: startHour, minute: 0, second: 0, of: today)!
-        let end = cal.date(bySettingHour: endHour, minute: 0, second: 0, of: today)!
-        return (start, end)
+        return (TimeOfDay(hour: startHour, minute: 0), TimeOfDay(hour: endHour, minute: 0))
     }
 
     func delete(itemId: Int) async {

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -248,6 +249,7 @@ class RoammateServiceV1(BaseLLMService):
         system_prompt = (
             template
             .replace("{context_block}", context_block)
+            .replace("{today}", date.today().isoformat())
             .replace("{city}", city)
             .replace("{country}", country)
             .replace("{num_items}", str(num_items))
@@ -270,9 +272,12 @@ class RoammateServiceV1(BaseLLMService):
         try:
             data = json.loads(response.content)
             parsed = LLMPlanResponse(**data)
+            start_date = (
+                pre.start_date.isoformat() if pre.start_date else parsed.start_date
+            )
             return {
                 "trip_name": parsed.trip_name,
-                "start_date": pre.start_date.isoformat() if pre.start_date else None,
+                "start_date": start_date,
                 "duration_days": parsed.duration_days,
                 "items": [llm_item_to_brainstorm(item) for item in parsed.map_output],
                 "user_output": parsed.user_output,

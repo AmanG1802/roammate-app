@@ -61,4 +61,8 @@ class LLMPlanResponse(BaseModel):
     user_output: str = Field(default="", description="Narrative blurb for the user")
     trip_name: str
     duration_days: int = Field(ge=1)
+    start_date: str | None = Field(
+        default=None,
+        description="ISO YYYY-MM-DD trip start date extracted from the prompt, or null if not specified",
+    )
     map_output: list[LLMItem] = Field(default_factory=list)
