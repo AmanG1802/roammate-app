@@ -39,6 +39,7 @@ frontend/.turbo/
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
+frontend/tsconfig.tsbuildinfo
 
 # ── OS ─────────────────────────────────────────────────────────────────────────
 .DS_Store
