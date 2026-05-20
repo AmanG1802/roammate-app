@@ -63,8 +63,8 @@ function makeEvent(overrides: Partial<Event> = {}): Event {
     trip_id: '1',
     title: 'Louvre Museum',
     day_date: null,
-    start_time: new Date('2026-05-01T10:00:00'),
-    end_time:   new Date('2026-05-01T12:00:00'),
+    start_time: '10:00:00',
+    end_time:   '12:00:00',
     lat: 48.86,
     lng: 2.33,
     sort_order: 0,
@@ -187,8 +187,7 @@ describe('Timeline – drag from Idea Bin', () => {
   });
 
   it('passes start_time as startTime when idea has start_time', () => {
-    const at3pm = new Date();
-    at3pm.setHours(15, 0, 0, 0);
+    const at3pm = '15:00:00';
     mockStore([], [makeIdea({ id: 'idea-99', start_time: at3pm })]);
     render(<Timeline tripId="1" />);
 
@@ -198,9 +197,8 @@ describe('Timeline – drag from Idea Bin', () => {
     fireEvent.drop(container, { dataTransfer: dt });
 
     expect(mockMoveIdea).toHaveBeenCalledOnce();
-    const [, , , startTime] = mockMoveIdea.mock.calls[0] as [string, string, string, Date | null];
-    expect(startTime).toBeInstanceOf(Date);
-    expect((startTime as Date).getHours()).toBe(15);
+    const [, , , startTime] = mockMoveIdea.mock.calls[0] as [string, string, string, string | null];
+    expect(startTime).toBe('15:00:00');
   });
 
   it('passes null startTime when idea has no start_time', () => {
@@ -210,13 +208,12 @@ describe('Timeline – drag from Idea Bin', () => {
     const dt = makeDataTransfer({ ideaId: 'idea-99' });
     fireEvent.drop(screen.getByTestId('timeline-container'), { dataTransfer: dt });
 
-    const [, , , startTime] = mockMoveIdea.mock.calls[0] as [string, string, string, Date | null];
+    const [, , , startTime] = mockMoveIdea.mock.calls[0] as [string, string, string, string | null];
     expect(startTime).toBeNull();
   });
 
   it('[REGRESSION] idea dropped onto an existing event card carries start_time', () => {
-    const at230pm = new Date();
-    at230pm.setHours(14, 30, 0, 0);
+    const at230pm = '14:30:00';
     mockStore([makeEvent()], [makeIdea({ id: 'idea-77', start_time: at230pm })]);
     render(<Timeline tripId="1" />);
 
@@ -428,15 +425,15 @@ describe('Timeline – conflict detection', () => {
     const ev1 = makeEvent({
       id: 'ev-1',
       title: 'Morning Tour',
-      start_time: new Date('2026-05-01T10:00:00'),
-      end_time:   new Date('2026-05-01T13:00:00'), // ends at 1pm
+      start_time: '10:00:00',
+      end_time:   '13:00:00', // ends at 1pm
       sort_order: 0,
     });
     const ev2 = makeEvent({
       id: 'ev-2',
       title: 'Lunch',
-      start_time: new Date('2026-05-01T12:00:00'), // starts at noon — conflicts with ev1
-      end_time:   new Date('2026-05-01T14:00:00'),
+      start_time: '12:00:00', // starts at noon — conflicts with ev1
+      end_time:   '14:00:00',
       sort_order: 1,
     });
     mockStore([ev1, ev2]);
@@ -450,15 +447,15 @@ describe('Timeline – conflict detection', () => {
     const ev1 = makeEvent({
       id: 'ev-1',
       title: 'Morning Tour',
-      start_time: new Date('2026-05-01T09:00:00'),
-      end_time:   new Date('2026-05-01T11:00:00'),
+      start_time: '09:00:00',
+      end_time:   '11:00:00',
       sort_order: 0,
     });
     const ev2 = makeEvent({
       id: 'ev-2',
       title: 'Lunch',
-      start_time: new Date('2026-05-01T12:00:00'), // starts after ev1 ends
-      end_time:   new Date('2026-05-01T14:00:00'),
+      start_time: '12:00:00', // starts after ev1 ends
+      end_time:   '14:00:00',
       sort_order: 1,
     });
     mockStore([ev1, ev2]);
@@ -481,14 +478,14 @@ describe('Timeline – conflict detection', () => {
     // ev2 (ends 1pm) placed before ev1 (starts noon) → overlap expected.
     const ev2 = makeEvent({
       id: 'ev-2', title: 'Morning Tour',
-      start_time: new Date('2026-05-01T09:00:00'),
-      end_time:   new Date('2026-05-01T13:00:00'),
+      start_time: '09:00:00',
+      end_time:   '13:00:00',
       sort_order: 0,  // placed first after reorder
     });
     const ev1 = makeEvent({
       id: 'ev-1', title: 'Lunch',
-      start_time: new Date('2026-05-01T12:00:00'),
-      end_time:   new Date('2026-05-01T14:00:00'),
+      start_time: '12:00:00',
+      end_time:   '14:00:00',
       sort_order: 1,  // placed second after reorder
     });
     // Provide in the manually reordered sequence (ev2 first, ev1 second)
@@ -504,26 +501,26 @@ describe('Timeline – conflict detection', () => {
     // Bug previously: only C flagged because it only compared to immediate previous (B).
     const a = makeEvent({
       id: 'ev-a', title: 'A',
-      start_time: new Date('2026-05-01T10:00:00'),
-      end_time:   new Date('2026-05-01T13:00:00'),
+      start_time: '10:00:00',
+      end_time:   '13:00:00',
       sort_order: 0,
     });
     const b = makeEvent({
       id: 'ev-b', title: 'B',
-      start_time: new Date('2026-05-01T20:00:00'),
-      end_time:   new Date('2026-05-01T21:00:00'),
+      start_time: '20:00:00',
+      end_time:   '21:00:00',
       sort_order: 1,
     });
     const c = makeEvent({
       id: 'ev-c', title: 'C',
-      start_time: new Date('2026-05-01T14:00:00'),
-      end_time:   new Date('2026-05-01T15:00:00'),
+      start_time: '14:00:00',
+      end_time:   '15:00:00',
       sort_order: 2,
     });
     const d = makeEvent({
       id: 'ev-d', title: 'D',
-      start_time: new Date('2026-05-01T18:00:00'),
-      end_time:   new Date('2026-05-01T19:00:00'),
+      start_time: '18:00:00',
+      end_time:   '19:00:00',
       sort_order: 3,
     });
     mockStore([a, b, c, d]);
@@ -545,15 +542,15 @@ describe('Timeline – conflict detection', () => {
   it('does NOT flag conflicts against a skipped event', () => {
     const ev1 = makeEvent({
       id: 'ev-1', title: 'Skipped Tour',
-      start_time: new Date('2026-05-01T10:00:00'),
-      end_time:   new Date('2026-05-01T13:00:00'),
+      start_time: '10:00:00',
+      end_time:   '13:00:00',
       sort_order: 0,
       is_skipped: true,
     });
     const ev2 = makeEvent({
       id: 'ev-2', title: 'Lunch',
-      start_time: new Date('2026-05-01T12:00:00'),
-      end_time:   new Date('2026-05-01T14:00:00'),
+      start_time: '12:00:00',
+      end_time:   '14:00:00',
       sort_order: 1,
     });
     mockStore([ev1, ev2]);
@@ -582,14 +579,14 @@ describe('Timeline – gap dots', () => {
     // 1pm–2pm then 6pm–7pm → 4 hour gap → 4 dots
     const ev1 = makeEvent({
       id: 'ev-1', title: 'Lunch',
-      start_time: new Date('2026-05-01T13:00:00'),
-      end_time:   new Date('2026-05-01T14:00:00'),
+      start_time: '13:00:00',
+      end_time:   '14:00:00',
       sort_order: 0,
     });
     const ev2 = makeEvent({
       id: 'ev-2', title: 'Dinner',
-      start_time: new Date('2026-05-01T18:00:00'),
-      end_time:   new Date('2026-05-01T19:00:00'),
+      start_time: '18:00:00',
+      end_time:   '19:00:00',
       sort_order: 1,
     });
     mockStore([ev1, ev2]);
@@ -601,14 +598,14 @@ describe('Timeline – gap dots', () => {
   it('floors fractional gaps (1.5h → 1 dot)', () => {
     const ev1 = makeEvent({
       id: 'ev-1',
-      start_time: new Date('2026-05-01T10:00:00'),
-      end_time:   new Date('2026-05-01T11:00:00'),
+      start_time: '10:00:00',
+      end_time:   '11:00:00',
       sort_order: 0,
     });
     const ev2 = makeEvent({
       id: 'ev-2',
-      start_time: new Date('2026-05-01T12:30:00'),
-      end_time:   new Date('2026-05-01T13:00:00'),
+      start_time: '12:30:00',
+      end_time:   '13:00:00',
       sort_order: 1,
     });
     mockStore([ev1, ev2]);
@@ -620,14 +617,14 @@ describe('Timeline – gap dots', () => {
   it('renders no dots when gap is less than 1 hour', () => {
     const ev1 = makeEvent({
       id: 'ev-1',
-      start_time: new Date('2026-05-01T13:00:00'),
-      end_time:   new Date('2026-05-01T14:00:00'),
+      start_time: '13:00:00',
+      end_time:   '14:00:00',
       sort_order: 0,
     });
     const ev2 = makeEvent({
       id: 'ev-2',
-      start_time: new Date('2026-05-01T14:30:00'),
-      end_time:   new Date('2026-05-01T15:00:00'),
+      start_time: '14:30:00',
+      end_time:   '15:00:00',
       sort_order: 1,
     });
     mockStore([ev1, ev2]);
@@ -641,14 +638,14 @@ describe('Timeline – gap dots', () => {
   it('renders no dots before the first card or after the last', () => {
     const ev1 = makeEvent({
       id: 'ev-1',
-      start_time: new Date('2026-05-01T10:00:00'),
-      end_time:   new Date('2026-05-01T11:00:00'),
+      start_time: '10:00:00',
+      end_time:   '11:00:00',
       sort_order: 0,
     });
     const ev2 = makeEvent({
       id: 'ev-2',
-      start_time: new Date('2026-05-01T15:00:00'),
-      end_time:   new Date('2026-05-01T16:00:00'),
+      start_time: '15:00:00',
+      end_time:   '16:00:00',
       sort_order: 1,
     });
     mockStore([ev1, ev2]);
@@ -662,8 +659,8 @@ describe('Timeline – gap dots', () => {
   it('renders no dots adjacent to a TBD event', () => {
     const ev1 = makeEvent({
       id: 'ev-1',
-      start_time: new Date('2026-05-01T10:00:00'),
-      end_time:   new Date('2026-05-01T11:00:00'),
+      start_time: '10:00:00',
+      end_time:   '11:00:00',
       sort_order: 0,
     });
     const tbd = makeEvent({ id: 'ev-2', start_time: null, end_time: null, sort_order: 1 });
@@ -686,12 +683,14 @@ describe('Timeline – gap dots', () => {
 describe('Timeline – travel time hint', () => {
   const DAY = new Date('2026-05-01T00:00:00');
 
+  // ISO inputs are kept on the test surface for readability; we extract the
+  // time-of-day portion since that's what the model now stores.
   function timedDayEvent(id: string, startISO: string, endISO: string, sort = 0): Event {
     return makeEvent({
       id,
       day_date: '2026-05-01',
-      start_time: new Date(startISO),
-      end_time:   new Date(endISO),
+      start_time: startISO.slice(11, 19),
+      end_time: endISO.slice(11, 19),
       sort_order: sort,
     });
   }

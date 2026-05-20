@@ -33,6 +33,10 @@ class LibraryIdeaOut(BaseModel):
     place_id: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
+    # Canonical wire format is "HH:MM:SS" (TIME in trip-local wall-clock).
+    # Kept as Optional[str] here because this is an output view serialized via
+    # str(idea.start_time) on the consumer side; once the column is TIME the
+    # cast naturally produces "HH:MM:SS".
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     added_by: Optional[str] = None

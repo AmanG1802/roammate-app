@@ -1,6 +1,6 @@
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr, model_validator
-from datetime import datetime, date
+from pydantic import BaseModel, EmailStr, field_serializer, field_validator, model_validator
+from datetime import datetime, date, time
 
 from app.schemas.place import PlaceFields
 
@@ -63,8 +63,30 @@ class InvitationOut(BaseModel):
 
 # ── Idea Bin ───────────────────────────────────────────────────────────────────
 class IdeaBinItemBase(PlaceFields):
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    # TIME (HH:MM:SS), trip-local wall-clock. Ideas have no day_date; promotion
+    # to the timeline attaches it.
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+
+    @field_validator("start_time", "end_time", mode="after")
+    @classmethod
+    def _strip_tz(cls, v: Optional[time]) -> Optional[time]:
+        if v is not None and v.tzinfo is not None:
+            raise ValueError("start_time/end_time must be naive TIME (HH:MM:SS)")
+        return v
+
+    @model_validator(mode="after")
+    def _no_overnight(self) -> "IdeaBinItemBase":
+        s, e = self.start_time, self.end_time
+        if s is not None and e is not None and e < s:
+            raise ValueError(
+                "Overnight idea times (end < start) are not supported in v1."
+            )
+        return self
+
+    @field_serializer("start_time", "end_time")
+    def _ser_time(self, v: Optional[time]) -> Optional[str]:
+        return v.strftime("%H:%M:%S") if v is not None else None
 
 class IdeaBinItemCreate(IdeaBinItemBase):
     pass

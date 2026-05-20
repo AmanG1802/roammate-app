@@ -19,9 +19,10 @@ struct IdeaBinItem: Codable, Identifiable, Hashable {
     let timeCategory: String?
     let addedBy: String?
 
-    // Optional scheduling hints
-    let startTime: Date?
-    let endTime: Date?
+    // Optional scheduling hints — wall-clock TIME (no date, no tz).
+    // Ideas have no day_date; promotion to the timeline attaches one.
+    let startTime: TimeOfDay?
+    let endTime: TimeOfDay?
 
     // Vote tallies
     let up: Int
@@ -44,8 +45,8 @@ struct IdeaBinItem: Codable, Identifiable, Hashable {
 
 struct IdeaUpdate: Encodable {
     let title: String?
-    let startTime: Date?
-    let endTime: Date?
+    let startTime: TimeOfDay?
+    let endTime: TimeOfDay?
     let timeCategory: String?
 
     enum CodingKeys: String, CodingKey {

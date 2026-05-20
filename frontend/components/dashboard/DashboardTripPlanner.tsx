@@ -35,6 +35,8 @@ type Preview = {
   items: Array<Record<string, any>>;
   enrichment?: EnrichmentStatus | null;
   user_output?: string;
+  /** IANA tz inferred from the destination on the backend. Null → fall back to browser tz. */
+  timezone?: string | null;
 };
 
 type BufferedMessage = { role: 'user' | 'assistant'; content: string };
@@ -114,6 +116,7 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
     try {
       const body: Record<string, any> = { name: preview.trip_name };
       if (preview.start_date) body.start_date = preview.start_date;
+      body.timezone = preview.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       const tripRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
         method: 'POST',

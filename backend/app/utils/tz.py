@@ -7,7 +7,7 @@ naive datetimes — ``utc_now()`` replaces every ``datetime.now()`` and
 """
 from __future__ import annotations
 
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, time, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 
@@ -38,6 +38,43 @@ def from_utc(dt_utc: datetime, tz_name: str) -> datetime:
 def today_in_tz(tz_name: str) -> date:
     """Return today's date in the given timezone."""
     return utc_now().astimezone(ZoneInfo(tz_name)).date()
+
+
+def combine_in_tz(
+    day: date | None,
+    t: time | None,
+    tz_name: str | None,
+) -> datetime | None:
+    """Combine a (day_date, time) pair in *tz_name* into a tz-aware UTC instant.
+
+    Returns None if either component is missing. Naive ``time`` is required —
+    the trip-local wall-clock convention is enforced upstream at the API
+    boundary. Invalid tz falls back to UTC.
+    """
+    if day is None or t is None:
+        return None
+    try:
+        tz = ZoneInfo(tz_name) if tz_name else timezone.utc
+    except Exception:
+        tz = timezone.utc
+    local = datetime.combine(day, t).replace(tzinfo=tz)
+    return local.astimezone(timezone.utc)
+
+
+def split_in_tz(
+    dt_utc: datetime,
+    tz_name: str | None,
+) -> tuple[date, time]:
+    """Inverse of ``combine_in_tz``: split a UTC instant into the (day_date,
+    time-of-day) pair as it would render in *tz_name*."""
+    if dt_utc.tzinfo is None:
+        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+    try:
+        tz = ZoneInfo(tz_name) if tz_name else timezone.utc
+    except Exception:
+        tz = timezone.utc
+    local = dt_utc.astimezone(tz)
+    return local.date(), local.time().replace(tzinfo=None)
 
 
 def ensure_utc(dt: datetime | None) -> datetime | None:

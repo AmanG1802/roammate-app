@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index, Numeric
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Time, ForeignKey, Boolean, Float, UniqueConstraint, JSON, Index, Numeric, CheckConstraint
 from sqlalchemy.orm import relationship, declared_attr
 from sqlalchemy.sql import func
 from app.db.base_class import Base
@@ -134,8 +134,17 @@ class IdeaBinItem(PlaceColumnsMixin, Base):
     id = Column(Integer, primary_key=True, index=True)
     trip_id = Column(Integer, ForeignKey("trip.id"))
     origin_idea_id = Column(Integer, ForeignKey("idea_bin_item.id"), nullable=True, index=True)
-    start_time = Column(DateTime(timezone=True), nullable=True)
-    end_time = Column(DateTime(timezone=True), nullable=True)
+    # Trip-local wall-clock TIME (no date). The owning timeline day attaches the
+    # date when promoted; ideas themselves have no day_date.
+    start_time = Column(Time, nullable=True)
+    end_time = Column(Time, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "end_time IS NULL OR start_time IS NULL OR end_time >= start_time",
+            name="idea_bin_item_no_overnight",
+        ),
+    )
 
     trip = relationship("Trip", back_populates="idea_bin_items")
 
@@ -233,13 +242,28 @@ class TimelineItem(PlaceColumnsMixin, Base):
     id = Column(Integer, primary_key=True, index=True)
     trip_id = Column(Integer, ForeignKey("trip.id"))
     location_name = Column(String, nullable=True)
-    day_date = Column(String, nullable=True, index=True)
-    start_time = Column(DateTime(timezone=True), nullable=True)
-    end_time = Column(DateTime(timezone=True), nullable=True)
+    # Calendar day this item belongs to, in the trip's local timezone.
+    day_date = Column(Date, nullable=True, index=True)
+    # Trip-local wall-clock TIME (no date). Combine with day_date + trip.timezone
+    # to recover an absolute instant. Overnight events (end &lt; start) are
+    # rejected at the API layer in v1; see docs/[27].
+    start_time = Column(Time, nullable=True)
+    end_time = Column(Time, nullable=True)
     is_locked = Column(Boolean, default=False)
     event_type = Column(String, nullable=True)
     sort_order = Column(Integer, default=0)
     is_skipped = Column(Boolean, default=False, server_default="false", nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "end_time IS NULL OR start_time IS NULL OR end_time >= start_time",
+            name="timeline_item_no_overnight",
+        ),
+        Index(
+            "ix_timeline_item_trip_day_start",
+            "trip_id", "day_date", "start_time",
+        ),
+    )
 
     trip = relationship("Trip", back_populates="timeline_items")
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTripStore, Event, Idea, legsKey, RouteLeg, reEnrichItem } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { format } from 'date-fns';
+import { formatTimeOfDay, type TimeOfDay } from '@/lib/time';
 import { Clock, MapPin, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VoteControl from '@/components/trip/VoteControl';
@@ -33,7 +34,10 @@ interface TimelineProps {
  */
 function computeConflicts(events: Event[]): Set<string> {
   const conflicts = new Set<string>();
-  let maxEndSoFar: Date | null = null;
+  // start_time / end_time are wall-clock "HH:MM:SS" strings — lexicographic
+  // compare is chronological within a single day. Same-day only is enforced
+  // by the no-overnight invariant (docs/[27]).
+  let maxEndSoFar: string | null = null;
   for (const ev of events) {
     if (ev.is_skipped) continue;
     if (ev.start_time && maxEndSoFar && ev.start_time < maxEndSoFar) {
@@ -49,9 +53,14 @@ function computeConflicts(events: Event[]): Set<string> {
 /** Number of dots to render between two adjacent cards (floor of hour gap, 0 if <1h or TBD). */
 function gapDotCount(prev: Event, next: Event): number {
   if (!prev.end_time || !next.start_time) return 0;
-  const ms = next.start_time.getTime() - prev.end_time.getTime();
-  if (ms < 60 * 60 * 1000) return 0;
-  return Math.floor(ms / (60 * 60 * 1000));
+  // Parse HH:MM:SS pieces and compute hour gap on the same day.
+  const toMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const gapMin = toMin(next.start_time) - toMin(prev.end_time);
+  if (gapMin < 60) return 0;
+  return Math.floor(gapMin / 60);
 }
 
 /** Format leg duration: "<60min" → "X min"; "≥60min" → "Hh" or "Hh Mm". */
@@ -95,21 +104,14 @@ function travelMode(leg: { duration_s: number; distance_m: number }): 'walk' | '
   return speed < 2.8 ? 'walk' : 'drive';
 }
 
-/** Parse a time input string ("HH:MM") into a Date on the given base date (defaults to today). */
-function parseTimeString(raw: string, baseDate?: Date | null): Date | null {
+/** Parse a time input string ("HH:MM") into a wall-clock TimeOfDay ("HH:MM:SS"). */
+function parseTimeString(raw: string): TimeOfDay | null {
   const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
-  const d = baseDate ? new Date(baseDate) : new Date();
-  d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
-  return d;
-}
-
-/** Pin the time-of-day from `time` to `day`'s calendar date. */
-function pinTimeToDay(time: Date | null | undefined, day: Date | null | undefined): Date | null {
-  if (!time) return null;
-  if (!day) return time;
-  return new Date(day.getFullYear(), day.getMonth(), day.getDate(),
-    time.getHours(), time.getMinutes(), 0, 0);
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`;
 }
 
 function TimeDisplay({
@@ -145,11 +147,11 @@ function TimeDisplay({
       }`}
     >
       {isConflict && <AlertCircle className="w-2.5 h-2.5" data-testid="conflict-icon" />}
-      {format(event.start_time, 'h:mm a')}
+      {formatTimeOfDay(event.start_time)}
       {event.end_time && (
         <>
           <span className="mx-0.5">–</span>
-          {format(event.end_time, 'h:mm a')}
+          {formatTimeOfDay(event.end_time)}
         </>
       )}
       <Pencil className="w-2.5 h-2.5 ml-0.5" />
@@ -163,11 +165,11 @@ function TimeEditor({
   onCancel,
 }: {
   event: Event;
-  onConfirm: (start: Date | null, end: Date | null) => void;
+  onConfirm: (start: TimeOfDay | null, end: TimeOfDay | null) => void;
   onCancel: () => void;
 }) {
-  const initialStart = event.start_time ? format(event.start_time, 'HH:mm') : '';
-  const initialEnd = event.end_time ? format(event.end_time, 'HH:mm') : '';
+  const initialStart = event.start_time ? event.start_time.slice(0, 5) : '';
+  const initialEnd = event.end_time ? event.end_time.slice(0, 5) : '';
 
   const [startVal, setStartVal] = useState(initialStart);
   const [endVal, setEndVal] = useState(initialEnd);
@@ -176,13 +178,13 @@ function TimeEditor({
   const isDirty = startVal !== initialStart || endVal !== initialEnd;
 
   const handleConfirm = () => {
-    const baseDate = event.day_date ? new Date(event.day_date + 'T00:00:00') : null;
-    const startDate = startVal ? parseTimeString(startVal, baseDate) : null;
-    const endDate = endVal ? parseTimeString(endVal, baseDate) : null;
-    if (startDate && endDate && endDate <= startDate) {
-      endDate.setTime(startDate.getTime() + 3600_000);
+    const start = startVal ? parseTimeString(startVal) : null;
+    let end = endVal ? parseTimeString(endVal) : null;
+    // v1 disallows overnight — clamp end < start back up to start.
+    if (start && end && end < start) {
+      end = start;
     }
-    onConfirm(startDate, endDate);
+    onConfirm(start, end);
   };
 
   const handleClickOutside = useCallback(
@@ -324,7 +326,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (noDaysExist) return;
     const token = getToken();
     const idea = ideas.find((i: Idea) => i.id === ideaId);
-    const startTime = pinTimeToDay(idea?.start_time, filterDay);
+    const startTime = idea?.start_time ?? null;
     moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
   };
 
@@ -348,7 +350,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     if (ideaId) {
       if (noDaysExist) { setDraggingId(null); setDragOverId(null); return; }
       const idea = ideas.find((i: Idea) => i.id === ideaId);
-      const startTime = pinTimeToDay(idea?.start_time, filterDay);
+      const startTime = idea?.start_time ?? null;
       moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
       setDraggingId(null);
       setDragOverId(null);
@@ -518,11 +520,11 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                                 }`}
                               >
                                 {isConflict && <AlertCircle className="w-2.5 h-2.5" />}
-                                {format(event.start_time, 'h:mm a')}
+                                {formatTimeOfDay(event.start_time)}
                                 {event.end_time && (
                                   <>
                                     <span className="mx-0.5">–</span>
-                                    {format(event.end_time, 'h:mm a')}
+                                    {formatTimeOfDay(event.end_time)}
                                   </>
                                 )}
                               </span>

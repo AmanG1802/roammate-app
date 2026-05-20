@@ -78,3 +78,8 @@ class PlanTripResponse(BaseModel):
     items: List[BrainstormItemBase]
     enrichment: Optional[EnrichmentStatus] = None
     user_output: str = ""
+    # IANA timezone inferred from the destination via Google's Time Zone API.
+    # When present, the client should override the device tz with this value
+    # when creating the trip. None if no item had usable (lat, lng) or the API
+    # call failed.
+    timezone: Optional[str] = None

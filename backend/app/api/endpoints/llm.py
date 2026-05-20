@@ -83,6 +83,21 @@ async def plan_trip(
         from app.utils.tz import today_in_tz
         start_date = today_in_tz(body.timezone or "UTC").isoformat()
 
+    # Timezone inference always goes through Google (Apple Maps has its own
+    # timezone API but we haven't implemented that adapter). On mock/missing
+    # key the call returns None, which the client falls back to device tz.
+    tz_svc = get_google_maps_service()
+    inferred_tz: Optional[str] = None
+    for it in enriched_items:
+        lat = it.get("lat")
+        lng = it.get("lng")
+        if lat is not None and lng is not None:
+            inferred_tz = await tz_svc.timezone_for(
+                float(lat), float(lng), user_id=current_user.id,
+            )
+            if inferred_tz:
+                break
+
     return PlanTripResponse(
         trip_name=result["trip_name"],
         start_date=start_date,
@@ -90,4 +105,5 @@ async def plan_trip(
         items=[BrainstormItemBase(**it) for it in enriched_items],
         enrichment=enr,
         user_output=result.get("user_output", ""),
+        timezone=inferred_tz,
     )

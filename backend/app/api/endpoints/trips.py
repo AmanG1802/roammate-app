@@ -1,4 +1,24 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from typing import Any
+
+
+def _parse_time(v: Any) -> time | None:
+    """Coerce a wire value to ``datetime.time`` or None.
+
+    Accepts ``None``, an already-parsed ``time``, or an ``"HH:MM:SS"`` /
+    ``"HH:MM"`` string. Raises 422 on anything else so concierge / loose
+    callers can't smuggle garbage into TIME columns.
+    """
+    if v is None:
+        return None
+    if isinstance(v, time):
+        return v
+    if isinstance(v, str):
+        try:
+            return time.fromisoformat(v)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid time format: {v!r}") from exc
+    raise HTTPException(status_code=422, detail=f"Invalid time value type: {type(v).__name__}")
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -297,11 +317,11 @@ async def update_trip(
                 new_day_date = old_day_date + delta
                 evt_stmt = select(EventModel).where(
                     EventModel.trip_id == trip_id,
-                    EventModel.day_date == old_day_date.isoformat(),
+                    EventModel.day_date == old_day_date,
                 )
                 day_events = (await db.execute(evt_stmt)).scalars().all()
                 for evt in day_events:
-                    evt.day_date = new_day_date.isoformat()
+                    evt.day_date = new_day_date
                 d.date = new_day_date
                 await db.flush()
         elif not old_start:
@@ -323,11 +343,11 @@ async def update_trip(
                     continue
                 evt_stmt = select(EventModel).where(
                     EventModel.trip_id == trip_id,
-                    EventModel.day_date == old_day_date.isoformat(),
+                    EventModel.day_date == old_day_date,
                 )
                 day_events = (await db.execute(evt_stmt)).scalars().all()
                 for evt in day_events:
-                    evt.day_date = new_day_date.isoformat()
+                    evt.day_date = new_day_date
                 d.date = new_day_date
                 await db.flush()
 
@@ -780,9 +800,18 @@ async def update_idea(
         raise HTTPException(status_code=404, detail="Idea not found")
 
     if "start_time" in update:
-        item.start_time = update["start_time"]
+        item.start_time = _parse_time(update["start_time"])
     if "end_time" in update:
-        item.end_time = update["end_time"]
+        item.end_time = _parse_time(update["end_time"])
+    if (
+        item.start_time is not None
+        and item.end_time is not None
+        and item.end_time < item.start_time
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Overnight idea times (end < start) are not supported in v1.",
+        )
     if "time_category" in update:
         item.time_category = update["time_category"]
     if "title" in update:
@@ -932,7 +961,7 @@ async def delete_trip_day(
     # Handle events on this day
     evt_stmt = select(EventModel).where(
         EventModel.trip_id == trip_id,
-        EventModel.day_date == deleted_date.isoformat(),
+        EventModel.day_date == deleted_date,
     )
     day_events = (await db.execute(evt_stmt)).scalars().all()
 
@@ -977,11 +1006,11 @@ async def delete_trip_day(
         # Shift events on this day to the new date
         evt_shift = select(EventModel).where(
             EventModel.trip_id == trip_id,
-            EventModel.day_date == old_date.isoformat(),
+            EventModel.day_date == old_date,
         )
         events_to_shift = (await db.execute(evt_shift)).scalars().all()
         for evt in events_to_shift:
-            evt.day_date = new_date.isoformat()
+            evt.day_date = new_date
         d.day_number -= 1
         d.date = new_date
         await db.flush()

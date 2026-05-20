@@ -38,6 +38,9 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTripName, setNewTripName] = useState('');
   const [newTripStartDate, setNewTripStartDate] = useState('');
+  const [newTripTimezone, setNewTripTimezone] = useState<string>(
+    typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
+  );
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,6 +122,9 @@ export default function DashboardPage() {
   const openCreateModal = () => {
     setNewTripName('');
     setNewTripStartDate('');
+    setNewTripTimezone(
+      typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
+    );
     setCreateError('');
     setIsModalOpen(true);
   };
@@ -238,6 +244,7 @@ export default function DashboardPage() {
       const token = getToken();
       const body: Record<string, unknown> = { name: newTripName };
       body.start_date = `${newTripStartDate}T00:00:00`;
+      if (newTripTimezone) body.timezone = newTripTimezone;
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -276,6 +283,9 @@ export default function DashboardPage() {
       if (response.ok) {
         setNewTripName('');
         setNewTripStartDate('');
+        setNewTripTimezone(
+          typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
+        );
         setCreateError('');
         setIsModalOpen(false);
         onTripMutated();
@@ -648,6 +658,25 @@ export default function DashboardPage() {
                       onChange={(e) => setNewTripStartDate(e.target.value)}
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+                      Timezone
+                    </label>
+                    <input
+                      list="new-trip-tz-list"
+                      type="text"
+                      placeholder="e.g. Asia/Tokyo"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-base font-bold text-slate-800 focus:bg-white focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 outline-none transition-all"
+                      value={newTripTimezone}
+                      onChange={(e) => setNewTripTimezone(e.target.value)}
+                    />
+                    <datalist id="new-trip-tz-list">
+                      {(typeof Intl !== 'undefined' && (Intl as any).supportedValuesOf
+                        ? (Intl as any).supportedValuesOf('timeZone')
+                        : []
+                      ).map((tz: string) => <option key={tz} value={tz} />)}
+                    </datalist>
+                  </div>
                   <button
                     type="submit"
                     disabled={isCreating || !newTripName.trim() || !newTripStartDate}
@@ -725,6 +754,8 @@ function TripGrid({
   const [editingNameVal, setEditingNameVal] = useState('');
   const [editingDateId, setEditingDateId] = useState<number | null>(null);
   const [editingDateVal, setEditingDateVal] = useState('');
+  const [editingTzId, setEditingTzId] = useState<number | null>(null);
+  const [editingTzVal, setEditingTzVal] = useState('');
 
   const handleOpenTrip = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>, tripId: number) => {
@@ -792,6 +823,25 @@ function TripGrid({
       toastBus('Network error — name not updated', { kind: 'error' });
     } finally { setEditingNameId(null); }
   }, [editingNameVal, onTripUpdate]);
+
+  const handleSaveTz = useCallback(async (tripId: number) => {
+    if (!editingTzVal) { setEditingTzId(null); return; }
+    try {
+      const token = getToken();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ timezone: editingTzVal }),
+      });
+      if (res.ok) {
+        onTripUpdate?.();
+      } else {
+        toastBus("Couldn't update timezone", { kind: 'error' });
+      }
+    } catch {
+      toastBus('Network error — timezone not updated', { kind: 'error' });
+    } finally { setEditingTzId(null); }
+  }, [editingTzVal, onTripUpdate]);
 
   const handleSaveDate = useCallback(async (tripId: number) => {
     if (!editingDateVal) { setEditingDateId(null); return; }
@@ -949,6 +999,51 @@ function TripGrid({
                       }}
                       className="p-0.5 text-slate-200 hover:text-indigo-500 transition-colors opacity-0 group-hover:opacity-100"
                       title="Edit date"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Timezone — editable by admin */}
+              {editingTzId === trip.id ? (
+                <div className="flex items-center gap-1.5 mb-3">
+                  <input
+                    autoFocus
+                    list={`tz-list-${trip.id}`}
+                    value={editingTzVal}
+                    onChange={(e) => setEditingTzVal(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTz(trip.id); if (e.key === 'Escape') setEditingTzId(null); }}
+                    className="text-xs font-bold text-slate-700 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-0.5 outline-none focus:ring-2 focus:ring-indigo-400 flex-1"
+                    placeholder="e.g. Asia/Tokyo"
+                  />
+                  <datalist id={`tz-list-${trip.id}`}>
+                    {(typeof Intl !== 'undefined' && (Intl as any).supportedValuesOf
+                      ? (Intl as any).supportedValuesOf('timeZone')
+                      : []
+                    ).map((tz: string) => <option key={tz} value={tz} />)}
+                  </datalist>
+                  <button onClick={() => handleSaveTz(trip.id)} className="p-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors">
+                    <Check className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => setEditingTzId(null)} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-slate-400 text-xs font-bold mb-3">
+                  <span className="inline-block w-3.5 text-center">🌐</span>
+                  {trip.timezone || 'UTC'}
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTzVal(trip.timezone || '');
+                        setEditingTzId(trip.id);
+                      }}
+                      className="p-0.5 text-slate-200 hover:text-indigo-500 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Edit timezone"
                     >
                       <Pencil className="w-3 h-3" />
                     </button>

@@ -59,6 +59,7 @@
 		813485819924A77F6E6536BF /* BrainstormPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11C5EC3922C26FD0DE959A2 /* BrainstormPaneView.swift */; };
 		816A915D3D13BD9C07B94E9B /* TodayWidgetCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = E79E919629FE6B81EA06A18E /* TodayWidgetCards.swift */; };
 		86B55A1BE8494AA5B7C1235B /* Event.swift in Sources */ = {isa = PBXBuildFile; fileRef = 786EA04F6FD711A4855376FB /* Event.swift */; };
+		C052E6C59BA594DE364F50C2 /* TimeOfDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 895081B18070F6502FDF255C /* TimeOfDay.swift */; };
 		86CBDE9F87CE3EF20FC93D3B /* PlusBanners.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48050BA455551581999E7D6C /* PlusBanners.swift */; };
 		8C3116E3FF4EDC2EC07ACB03 /* TimelineDrawerContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0BBBA3F7F162A164F380F12 /* TimelineDrawerContent.swift */; };
 		8DF2DEA662576E5A309FEA80 /* BrainstormStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A191FB50293EFDD37CACEDE /* BrainstormStore.swift */; };
@@ -175,6 +176,7 @@
 		6F442625DEF0FC29D2FECA94 /* EventService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventService.swift; sourceTree = "<group>"; };
 		76E5C89AC813B0A9B23DBE87 /* AIChatDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIChatDrawer.swift; sourceTree = "<group>"; };
 		786EA04F6FD711A4855376FB /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
+		895081B18070F6502FDF255C /* TimeOfDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOfDay.swift; sourceTree = "<group>"; };
 		78F481F6A5BBC214681A0A00 /* RoammateTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoammateTheme.swift; sourceTree = "<group>"; };
 		7B4AF2BFC7AE0B0D33E0D2A5 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		7F6136CD967B3A0CAB460752 /* PaneSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSlider.swift; sourceTree = "<group>"; };
@@ -464,6 +466,7 @@
 				685413A58AAE02F5AB8A21F5 /* Notification.swift */,
 				94AFBB985D12E03C00AAB099 /* PlanTrip.swift */,
 				4878E9A03BC29E352246567B /* Trip.swift */,
+				895081B18070F6502FDF255C /* TimeOfDay.swift */,
 				2D130DDDCA344C1E431989CE /* TripDay.swift */,
 				DD03460EF395DD9021BD1331 /* TripMember.swift */,
 				183B43A45F4A82BBCE4B03FD /* User.swift */,
@@ -702,6 +705,7 @@
 				0DB74015C8178C56BDA1CA60 /* SubscriptionView.swift in Sources */,
 				8C3116E3FF4EDC2EC07ACB03 /* TimelineDrawerContent.swift in Sources */,
 				5D26466C21E1F2907F60AB70 /* TimelineRow.swift in Sources */,
+				C052E6C59BA594DE364F50C2 /* TimeOfDay.swift in Sources */,
 				7034736D4211266BF0F87683 /* TodayWidget.swift in Sources */,
 				816A915D3D13BD9C07B94E9B /* TodayWidgetCards.swift in Sources */,
 				D8931D2ADA26C90D5F6C5838 /* TravellersStrip.swift in Sources */,

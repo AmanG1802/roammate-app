@@ -434,6 +434,96 @@ class BaseMapService(abc.ABC):
             reason=self._last_failure_reason if skipped > 0 else None,
         )
 
+    # ── Timezone (shared; legacy Time Zone API endpoint) ─────────────────
+
+    async def timezone_for(
+        self,
+        lat: float,
+        lng: float,
+        *,
+        user_id: Optional[int] = None,
+        trip_id: Optional[int] = None,
+    ) -> Optional[str]:
+        """Resolve an IANA timezone identifier (e.g. ``"Asia/Tokyo"``) for a
+        ``(lat, lng)`` via Google's Time Zone API. Returns ``None`` on
+        zero-result, network error, missing key, or open breaker.
+
+        Results are cached for 30 days keyed on a rounded ~1km cell.
+        """
+        cached, state = await gmap_cache.get_timezone(lat, lng)
+        if cached is not gmap_cache.MISS:
+            track_call(
+                op="timezone",
+                status="cache_hit" if state == "hit" else "cache_negative",
+                latency_ms=0,
+                cache_state=state,
+                user_id=user_id,
+                trip_id=trip_id,
+            )
+            return cached
+
+        if not self.api_key:
+            track_call(
+                op="timezone", status="no_api_key",
+                user_id=user_id, trip_id=trip_id,
+            )
+            return None
+
+        if not await breaker.allow():
+            track_call(
+                op="timezone", status="circuit_open", breaker_state="open",
+                user_id=user_id, trip_id=trip_id,
+            )
+            return None
+
+        params = {
+            "location": f"{lat},{lng}",
+            "timestamp": str(int(time.time())),
+            "key": self.api_key,
+        }
+        url = "https://maps.googleapis.com/maps/api/timezone/json"
+        t0 = time.monotonic()
+        try:
+            async with httpx.AsyncClient() as own:
+                data, attempts, http_status = await self._request_with_retry(
+                    own, url, method="GET", params=params, op="timezone",
+                )
+        except Exception as exc:
+            await breaker.record_failure()
+            track_call(
+                op="timezone", status="error",
+                latency_ms=int((time.monotonic() - t0) * 1000),
+                error_class=exc.__class__.__name__,
+                breaker_state=breaker.state,
+                user_id=user_id, trip_id=trip_id,
+            )
+            return None
+
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        if data is None:
+            await breaker.record_failure()
+            track_call(
+                op="timezone", status="error",
+                latency_ms=latency_ms, attempts=attempts, http_status=http_status,
+                breaker_state=breaker.state,
+                user_id=user_id, trip_id=trip_id,
+            )
+            return None
+
+        await breaker.record_success()
+        api_status = (data.get("status") or "").upper()
+        tz_id = data.get("timeZoneId") if api_status == "OK" else None
+        await gmap_cache.set_timezone(lat, lng, tz_id)
+        track_call(
+            op="timezone",
+            status="ok" if tz_id else "zero_results",
+            latency_ms=latency_ms, attempts=attempts, http_status=http_status,
+            cache_state="miss",
+            user_id=user_id, trip_id=trip_id,
+            extra={"tz": tz_id} if tz_id else None,
+        )
+        return tz_id
+
     # ── Directions (shared cache + breaker + tracker) ────────────────────
 
     async def directions(

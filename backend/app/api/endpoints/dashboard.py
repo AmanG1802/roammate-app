@@ -8,7 +8,7 @@ from app.db.session import get_db
 from app.models.all_models import Trip, TripMember, TimelineItem, TripDay, User
 from app.schemas.dashboard import TodayWidgetOut, TodayWidgetPage, TodayTrip, TodayEvent
 from app.api.deps import get_current_user
-from app.utils.tz import utc_now, from_utc, today_in_tz, ensure_utc
+from app.utils.tz import utc_now, from_utc, today_in_tz, combine_in_tz
 
 router = APIRouter()
 
@@ -120,7 +120,7 @@ async def get_today_widget(
         sd = _to_date(t.start_date)
         ev_stmt = (
             select(TimelineItem)
-            .where(TimelineItem.trip_id == t.id, TimelineItem.day_date == trip_today.isoformat())
+            .where(TimelineItem.trip_id == t.id, TimelineItem.day_date == trip_today)
             .order_by(TimelineItem.start_time.nulls_last(), TimelineItem.sort_order)
         )
         events = list((await db.execute(ev_stmt)).scalars().all())
@@ -128,8 +128,10 @@ async def get_today_widget(
         ongoing_idx: int | None = None
         next_idx: int | None = None
         for i, e in enumerate(events):
-            st = ensure_utc(e.start_time)
-            et = ensure_utc(e.end_time)
+            # TIME-only columns now; combine with day_date in the trip's tz
+            # to recover an absolute instant for "is it happening right now?"
+            st = combine_in_tz(e.day_date, e.start_time, trip_tz)
+            et = combine_in_tz(e.day_date, e.end_time, trip_tz)
             if st is not None and et is not None:
                 if st <= now < et:
                     ongoing_idx = i

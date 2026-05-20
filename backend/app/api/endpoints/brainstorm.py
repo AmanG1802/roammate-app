@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, time as dt_time, timezone as dt_tz
 from typing import List, Optional
 
-from app.utils.tz import today_in_tz, to_utc
+from app.utils.tz import today_in_tz, to_utc  # noqa: F401 — used elsewhere in this module
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,22 +38,21 @@ _TIME_CATEGORY_HOURS: dict[str, int] = {
 def _time_category_to_times(
     tc: str | None,
     trip_tz: str | None = None,
-) -> tuple[datetime | None, datetime | None]:
-    """Convert a time_category hint to a (start, start+1h) pair in the trip's timezone.
+) -> tuple[dt_time | None, dt_time | None]:
+    """Convert a time_category hint to a (start, start+1h) pair as wall-clock TIMEs.
 
-    The returned datetimes are tz-aware UTC, but the wall-clock hour matches the
-    category (e.g. "midday" → 12:00 local) when rendered in *trip_tz*.
+    Ideas/events now store TIME-only (trip-local wall-clock); the date is
+    attached at timeline-promotion time, so this helper returns naive
+    ``datetime.time`` values. *trip_tz* is no longer used but kept for
+    signature stability.
     """
+    del trip_tz
     if not tc:
         return None, None
     hour = _TIME_CATEGORY_HOURS.get(tc.lower())
     if hour is None:
         return None, None
-    tz_name = trip_tz or "UTC"
-    today = today_in_tz(tz_name)
-    start_naive = datetime.combine(today, dt_time(hour, 0))
-    end_naive = datetime.combine(today, dt_time(hour + 1, 0))
-    return to_utc(start_naive, tz_name), to_utc(end_naive, tz_name)
+    return dt_time(hour, 0), dt_time(hour + 1, 0)
 
 from app.db.session import get_db
 from app.api.deps import get_current_user

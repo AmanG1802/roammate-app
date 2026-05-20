@@ -8,6 +8,10 @@ struct TripLandingView: View {
     @State private var subPageDestination: SubPage?
     @State private var editingDate = false
     @State private var dateValue = Date()
+    @State private var editingTimezone = false
+    @State private var timezoneValue: String = TimeZone.current.identifier
+
+    private static let knownTimezones: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
 
     // Inline invite state
     @State private var inviteEmail = ""
@@ -69,6 +73,11 @@ struct TripLandingView: View {
                 dateValue = s
             } else if let s = trip.startDate {
                 dateValue = s
+            }
+            if let tz = store.trip?.timezone, !tz.isEmpty {
+                timezoneValue = tz
+            } else if let tz = trip.timezone, !tz.isEmpty {
+                timezoneValue = tz
             }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 tabBarVisibility.isVisible = false
@@ -146,6 +155,49 @@ struct TripLandingView: View {
                         } label: {
                             Image(systemName: "pencil")
                                 .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            // Timezone row (display + admin-editable)
+            HStack(spacing: 8) {
+                Image(systemName: "globe")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+
+                if editingTimezone {
+                    Picker("Timezone", selection: $timezoneValue) {
+                        ForEach(Self.knownTimezones, id: \.self) { tz in
+                            Text(tz).tag(tz)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(.white)
+                    .colorScheme(.dark)
+
+                    Button {
+                        Task { await saveTimezone() }
+                        editingTimezone = false
+                    } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(Color.roammateEmerald)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(timezoneValue)
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.8))
+
+                    if canInvite {
+                        Button {
+                            editingTimezone = true
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.6))
                         }
                         .buttonStyle(.plain)
@@ -330,6 +382,15 @@ struct TripLandingView: View {
         let _ = try? await TripService.updateTrip(
             id: trip.id,
             update: TripUpdate(name: nil, startDate: dateValue, endDate: nil, timezone: nil)
+        )
+        await store.loadAll()
+        await tripStore.load()
+    }
+
+    private func saveTimezone() async {
+        let _ = try? await TripService.updateTrip(
+            id: trip.id,
+            update: TripUpdate(name: nil, startDate: nil, endDate: nil, timezone: timezoneValue)
         )
         await store.loadAll()
         await tripStore.load()

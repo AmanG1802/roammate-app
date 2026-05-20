@@ -73,7 +73,7 @@ final class PlanTripStore: ObservableObject {
                 name: preview.tripName,
                 startDate: preview.startDate,
                 endDate: nil,
-                timezone: TimeZone.current.identifier
+                timezone: preview.timezone ?? TimeZone.current.identifier
             )
             let trip = try await TripService.createTrip(payload)
             if !preview.items.isEmpty {

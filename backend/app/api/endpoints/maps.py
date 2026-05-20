@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime, time
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -70,12 +70,16 @@ router = APIRouter()
 def compute_waypoint_fingerprint(events: list[EventModel]) -> str:
     """Deterministic hash of the routable waypoint sequence.
 
-    Only includes waypoint-affecting fields: event id, location, and times.
+    Only includes waypoint-affecting fields: event id, location, day, and times.
     Changes to title/description/category do NOT alter the fingerprint.
     """
     ordered = sorted(
         events,
-        key=lambda e: (e.start_time or datetime.min, e.sort_order or 0),
+        key=lambda e: (
+            e.day_date or date.min,
+            e.start_time or time.min,
+            e.sort_order or 0,
+        ),
     )
     parts = []
     for e in ordered:
@@ -85,6 +89,7 @@ def compute_waypoint_fingerprint(events: list[EventModel]) -> str:
                 e.place_id or "",
                 f"{e.lat:.5f}" if e.lat else "",
                 f"{e.lng:.5f}" if e.lng else "",
+                e.day_date.isoformat() if e.day_date else "",
                 e.start_time.isoformat() if e.start_time else "",
                 e.end_time.isoformat() if e.end_time else "",
             ))
@@ -92,7 +97,7 @@ def compute_waypoint_fingerprint(events: list[EventModel]) -> str:
 
 
 class RouteRequest(BaseModel):
-    day_date: str
+    day_date: date
 
 
 def _has_conflict(prev: EventModel, curr: EventModel) -> bool:
@@ -101,6 +106,9 @@ def _has_conflict(prev: EventModel, curr: EventModel) -> bool:
     A conflict exists when the previous event's ``end_time`` is strictly
     after the next event's ``start_time``.  Missing bounds → not a
     conflict (matches the UI behaviour at Timeline.tsx:22-25).
+
+    Same-day comparison only — overnight events are rejected in v1, so all
+    callers filter by a single ``day_date`` before reaching here.
     """
     if prev.end_time is None or curr.start_time is None:
         return False
@@ -142,10 +150,10 @@ async def compute_route(
     # frontend/components/trip/Timeline.tsx:277-278).  This means every
     # conflict we 422 on corresponds to a red time icon the user can
     # see; we never block on a pair the UI hasn't already flagged. ──
-    def _timeline_order_key(e: EventModel) -> tuple[int, datetime, int]:
+    def _timeline_order_key(e: EventModel) -> tuple[int, time, int]:
         if e.start_time is not None:
             return (0, e.start_time, e.sort_order or 0)
-        return (1, datetime.max, e.sort_order or 0)
+        return (1, time.max, e.sort_order or 0)
 
     by_timeline = sorted(events, key=_timeline_order_key)
     conflict_ids: list[str] = []
@@ -174,7 +182,7 @@ async def compute_route(
     ordered = sorted(
         events,
         key=lambda e: (
-            e.start_time or datetime.min,
+            e.start_time or time.min,
             e.sort_order or 0,
         ),
     )
@@ -233,10 +241,11 @@ async def compute_route(
     unroutable_dicts = [u.model_dump() for u in unroutable_no_loc]
     legs_dicts = [l.model_dump() for l in legs]
 
+    day_date_str = body.day_date.isoformat()
     existing_route = (await db.execute(
         select(DayRoute).where(
             DayRoute.trip_id == trip_id,
-            DayRoute.day_date == body.day_date,
+            DayRoute.day_date == day_date_str,
         )
     )).scalar_one_or_none()
 
@@ -252,7 +261,7 @@ async def compute_route(
     else:
         db.add(DayRoute(
             trip_id=trip_id,
-            day_date=body.day_date,
+            day_date=day_date_str,
             encoded_polyline=route.encoded_polyline or None,
             legs=legs_dicts,
             total_duration_s=route.total_duration_s,
@@ -281,17 +290,18 @@ async def compute_route(
 @router.get("/{trip_id}/route", response_model=Optional[RouteResponse])
 async def get_stored_route(
     trip_id: int,
-    day_date: str = Query(...),
+    day_date: date = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Optional[RouteResponse]:
     """Return the persisted route for a trip-day, with staleness flag."""
     await require_trip_member(db, trip_id, current_user.id)
 
+    day_date_str = day_date.isoformat()
     stored = (await db.execute(
         select(DayRoute).where(
             DayRoute.trip_id == trip_id,
-            DayRoute.day_date == day_date,
+            DayRoute.day_date == day_date_str,
         )
     )).scalar_one_or_none()
 
@@ -395,7 +405,7 @@ async def re_enrich_item(
 # ── Client-computed route persistence (iOS MKDirections) ──────────────────
 
 class RouteSaveRequest(BaseModel):
-    day_date: str
+    day_date: date
     encoded_polyline: Optional[str] = None
     legs: list[RouteLeg] = []
     total_duration_s: int = 0
@@ -424,6 +434,7 @@ async def save_client_route(
     legs_dicts = [l.model_dump() for l in body.legs]
     unroutable_dicts = [u.model_dump() for u in body.unroutable]
 
+    day_date_str = body.day_date.isoformat()
     # Compute fingerprint from current events if client didn't supply one
     fingerprint = body.waypoint_fingerprint
     if not fingerprint:
@@ -438,7 +449,7 @@ async def save_client_route(
     existing_route = (await db.execute(
         select(DayRoute).where(
             DayRoute.trip_id == trip_id,
-            DayRoute.day_date == body.day_date,
+            DayRoute.day_date == day_date_str,
         )
     )).scalar_one_or_none()
 
@@ -454,7 +465,7 @@ async def save_client_route(
     else:
         db.add(DayRoute(
             trip_id=trip_id,
-            day_date=body.day_date,
+            day_date=day_date_str,
             encoded_polyline=body.encoded_polyline,
             legs=legs_dicts,
             total_duration_s=body.total_duration_s,

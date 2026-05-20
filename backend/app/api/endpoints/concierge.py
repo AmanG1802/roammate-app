@@ -44,7 +44,7 @@ from app.services.google_maps import RoutePoint, get_google_maps_service
 from app.services.llm.registry import get_concierge_client
 from app.services.roles import require_trip_member
 from app.services import entitlements
-from app.utils.tz import utc_now, from_utc, today_in_tz
+from app.utils.tz import utc_now, from_utc, today_in_tz, combine_in_tz
 
 log = logging.getLogger(__name__)
 
@@ -70,9 +70,9 @@ def _event_dict_for_response(e: EventModel) -> dict:
         "location_name": e.location_name,
         "lat": e.lat,
         "lng": e.lng,
-        "day_date": e.day_date,
-        "start_time": e.start_time.isoformat() if e.start_time else None,
-        "end_time": e.end_time.isoformat() if e.end_time else None,
+        "day_date": e.day_date.isoformat() if e.day_date else None,
+        "start_time": e.start_time.strftime("%H:%M:%S") if e.start_time else None,
+        "end_time": e.end_time.strftime("%H:%M:%S") if e.end_time else None,
         "is_locked": e.is_locked,
         "is_skipped": e.is_skipped,
         "category": e.category,
@@ -91,7 +91,7 @@ def _event_dict_for_response(e: EventModel) -> dict:
 async def _load_today_events(
     db: AsyncSession, trip_id: int, trip_tz: str,
 ) -> list[EventModel]:
-    today = today_in_tz(trip_tz).isoformat()
+    today = today_in_tz(trip_tz)
     stmt = (
         select(EventModel)
         .where(
@@ -104,20 +104,13 @@ async def _load_today_events(
 
 
 def _build_events_list(events: list[EventModel], trip_tz: str) -> str:
+    del trip_tz  # start/end_time are already trip-local wall-clock TIMEs
     if not events:
         return "No events scheduled today."
     lines = []
     for e in events:
-        if e.start_time:
-            local_st = from_utc(e.start_time, trip_tz)
-            st = local_st.strftime("%H:%M")
-        else:
-            st = "TBD"
-        if e.end_time:
-            local_et = from_utc(e.end_time, trip_tz)
-            et = local_et.strftime("%H:%M")
-        else:
-            et = "TBD"
+        st = e.start_time.strftime("%H:%M") if e.start_time else "TBD"
+        et = e.end_time.strftime("%H:%M") if e.end_time else "TBD"
         loc = e.address or e.location_name or ""
         skipped = " [SKIPPED]" if e.is_skipped else ""
         lines.append(f"[id={e.id}] {st}-{et} | {e.title} | {e.category or 'General'} | {loc}{skipped}")
@@ -397,19 +390,24 @@ async def whats_next(
 
     current_event = None
     next_event = None
+    next_event_start_utc = None
 
     for e in active:
-        end = e.end_time or (e.start_time + timedelta(hours=1))
-        if e.start_time <= now <= end:
+        start_utc = combine_in_tz(e.day_date, e.start_time, trip_tz)
+        if start_utc is None:
+            continue
+        end_utc = combine_in_tz(e.day_date, e.end_time, trip_tz) or (start_utc + timedelta(hours=1))
+        if start_utc <= now <= end_utc:
             current_event = e
-        elif e.start_time > now and next_event is None:
+        elif start_utc > now and next_event is None:
             next_event = e
+            next_event_start_utc = start_utc
 
     time_until = None
     travel_time = None
 
-    if next_event:
-        delta = next_event.start_time - now
+    if next_event and next_event_start_utc is not None:
+        delta = next_event_start_utc - now
         minutes = int(delta.total_seconds() / 60)
         if minutes >= 60:
             time_until = f"{minutes // 60}h {minutes % 60}m"
@@ -462,13 +460,15 @@ async def today_summary(
     skipped = 0
 
     for e in events:
+        end_utc = combine_in_tz(e.day_date, e.end_time, trip_tz)
+        start_utc = combine_in_tz(e.day_date, e.start_time, trip_tz)
         if e.is_skipped:
             status = "skipped"
             skipped += 1
-        elif e.end_time and e.end_time <= now:
+        elif end_utc is not None and end_utc <= now:
             status = "completed"
             completed += 1
-        elif e.start_time and e.start_time <= now:
+        elif start_utc is not None and start_utc <= now:
             status = "ongoing"
         else:
             status = "upcoming"

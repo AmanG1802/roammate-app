@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 from typing import List
-from datetime import datetime, timezone
 from app.db.session import get_db
 from app.models.all_models import (
     TimelineItem as EventModel, TripMember, User,
@@ -11,7 +10,7 @@ from app.models.all_models import (
 )
 from app.schemas.event import Event, EventCreate, EventUpdate, RippleRequest
 from app.schemas.trip import IdeaBinItem
-from app.services.smart_ripple import smart_ripple_engine
+from app.services.smart_ripple import smart_ripple_engine, CrossMidnightShiftError
 from app.services import notification_service
 from app.services.roles import require_trip_admin
 from app.schemas.notification import NotificationType
@@ -156,6 +155,18 @@ async def update_event(
     if update.is_skipped is not None:
         event.is_skipped = update.is_skipped
 
+    # Re-check overnight invariant against the merged state (the schema-level
+    # validator only sees fields present in this PATCH).
+    if (
+        event.start_time is not None
+        and event.end_time is not None
+        and event.end_time < event.start_time
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Overnight events (end_time < start_time) are not supported in v1.",
+        )
+
     await db.commit()
     await db.refresh(event)
 
@@ -236,20 +247,13 @@ async def move_event_to_bin(
         raise HTTPException(status_code=403, detail="Not a member of this trip")
 
     fields = {f: getattr(event, f) for f in PLACE_FIELDS}
-    # Preserve time-of-day but reset the date to today so the idea bin item
-    # carries a meaningful time without being anchored to the old trip date.
-    _today = datetime.now(timezone.utc)
-
-    def _redate(dt: datetime | None) -> datetime | None:
-        if dt is None:
-            return None
-        return dt.replace(year=_today.year, month=_today.month, day=_today.day)
-
+    # Times carry no date now (TIME column); copy straight across. The idea
+    # has no day_date — promotion to the timeline attaches one.
     idea = IdeaBinItemModel(
         **fields,
         trip_id=event.trip_id,
-        start_time=_redate(event.start_time),
-        end_time=_redate(event.end_time),
+        start_time=event.start_time,
+        end_time=event.end_time,
     )
     trip_id = event.trip_id
     title = event.title
@@ -383,5 +387,16 @@ async def trigger_ripple_engine(
                 )
                 await db.commit()
         return [await _event_with_votes(db, e, current_user.id) for e in updated_events]
+    except CrossMidnightShiftError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "detail": "cross_midnight_shift",
+                "event_id": exc.event_id,
+                "original_day": str(exc.original_day),
+                "new_day": str(exc.new_day),
+                "message": "Overnight shifts are not supported in v1. Reduce delta_minutes or skip the conflicting event.",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

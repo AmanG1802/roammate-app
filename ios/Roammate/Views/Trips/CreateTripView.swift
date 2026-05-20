@@ -7,9 +7,12 @@ struct CreateTripView: View {
 
     @State private var name = ""
     @State private var startDate = Date()
+    @State private var timezoneId: String = TimeZone.current.identifier
     @State private var isLoading = false
     @State private var error: String?
     @FocusState private var nameFieldFocused: Bool
+
+    private static let knownTimezones: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
 
     var body: some View {
         NavigationStack {
@@ -48,6 +51,21 @@ struct CreateTripView: View {
                         DatePicker("", selection: $startDate, displayedComponents: .date)
                             .datePickerStyle(.compact)
                             .labelsHidden()
+                    }
+
+                    // Timezone picker — defaults to device tz, override for cross-tz trips
+                    VStack(spacing: 8) {
+                        Text("Trip timezone")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Color.roammateMuted)
+
+                        Picker("Trip timezone", selection: $timezoneId) {
+                            ForEach(Self.knownTimezones, id: \.self) { tz in
+                                Text(tz).tag(tz)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Color.roammateIndigo)
                     }
 
                     if let error {
@@ -96,7 +114,7 @@ struct CreateTripView: View {
             name: name.trimmingCharacters(in: .whitespaces),
             startDate: startDate,
             endDate: nil,
-            timezone: TimeZone.current.identifier
+            timezone: timezoneId
         )
         let result = await tripStore.create(payload)
         if result != nil {

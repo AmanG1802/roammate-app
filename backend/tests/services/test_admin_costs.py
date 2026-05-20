@@ -51,7 +51,7 @@ def test_MAPS_PRICING_each_op_has_entry():
     expected_ops = {
         "place_details_v1", "place_details_v2",
         "nearby_or_text_search", "directions", "routes",
-        "photo_url", "enrich_batch",
+        "photo_url", "timezone", "enrich_batch",
     }
     assert set(MAPS_PRICING.keys()) == expected_ops
 

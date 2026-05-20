@@ -40,6 +40,9 @@ struct PlanTripPreview: Codable {
     let durationDays: Int
     let items: [BrainstormItem]
     let userOutput: String?
+    /// IANA timezone inferred from the destination on the backend
+    /// (Google Time Zone API). nil → fall back to device tz.
+    let timezone: String?
 
     enum CodingKeys: String, CodingKey {
         case tripName = "trip_name"
@@ -47,6 +50,7 @@ struct PlanTripPreview: Codable {
         case durationDays = "duration_days"
         case items
         case userOutput = "user_output"
+        case timezone
     }
 }
 

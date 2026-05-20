@@ -15,10 +15,13 @@ struct IdeaRow: View {
     @State private var editEnd = Date()
 
     private var timeText: String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "h:mm a"
-        let s = idea.startTime.map { fmt.string(from: $0) }
-        let e = idea.endTime.map { fmt.string(from: $0) }
+        func fmt(_ tod: TimeOfDay) -> String {
+            let suffix = tod.hour < 12 ? "AM" : "PM"
+            let h12 = tod.hour == 0 ? 12 : (tod.hour > 12 ? tod.hour - 12 : tod.hour)
+            return String(format: "%d:%02d %@", h12, tod.minute, suffix)
+        }
+        let s = idea.startTime.map(fmt)
+        let e = idea.endTime.map(fmt)
         if let s, let e { return "\(s) – \(e)" }
         if let s { return s }
         return "No time set"
@@ -77,8 +80,8 @@ struct IdeaRow: View {
 
                     HStack(spacing: 0) {
                         Button {
-                            editStart = idea.startTime ?? Date()
-                            editEnd = idea.endTime ?? Date()
+                            editStart = idea.startTime?.asPickerDate() ?? Date()
+                            editEnd = idea.endTime?.asPickerDate() ?? Date()
                             editingTime = true
                         } label: {
                             HStack(spacing: 4) {
@@ -228,7 +231,12 @@ struct IdeaRow: View {
                         Task {
                             await store.updateIdea(
                                 ideaId: idea.id,
-                                fields: IdeaUpdate(title: nil, startTime: editStart, endTime: editEnd, timeCategory: nil)
+                                fields: IdeaUpdate(
+                                    title: nil,
+                                    startTime: TimeOfDay(date: editStart),
+                                    endTime: TimeOfDay(date: editEnd),
+                                    timeCategory: nil,
+                                )
                             )
                         }
                         editingTime = false
