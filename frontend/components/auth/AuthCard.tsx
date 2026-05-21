@@ -48,10 +48,10 @@ export function AuthCard({
             &ldquo;The best way to see the world is with a plan that knows how to change.&rdquo;
           </h3>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white font-bold">AG</div>
+            <div className="w-12 h-12 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white font-bold">R</div>
             <div>
-              <p className="text-white font-black text-lg">Aman Gupta</p>
-              <p className="text-indigo-200 font-bold text-sm uppercase tracking-widest">Co-Founder, Roammate</p>
+              <p className="text-white font-black text-lg">Roammate</p>
+              <p className="text-indigo-200 font-bold text-sm uppercase tracking-widest">Your AI Travel Concierge</p>
             </div>
           </div>
         </div>

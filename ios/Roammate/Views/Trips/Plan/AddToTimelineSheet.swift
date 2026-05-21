@@ -115,10 +115,29 @@ struct AddToTimelineSheet: View {
 
         let selectedIdeas = store.ideas.filter { selectedIdeaIds.contains($0.id) }
         let key = EventService.isoDateString(from: day.date)
-        let existingCount = (store.eventsByDay[key] ?? []).count
+        let existing = (store.eventsByDay[key] ?? [])
+
+        // Merge existing + new ideas, sort by start_time, then assign sort_order
+        let allItems: [(startTime: TimeOfDay?, idea: IdeaBinItem?)] =
+            existing.map { (startTime: $0.startTime, idea: nil) } +
+            selectedIdeas.map { (startTime: $0.startTime, idea: $0) }
+        let sorted = allItems.sorted {
+            if let a = $0.startTime, let b = $1.startTime { return a < b }
+            if $0.startTime != nil { return true }
+            return false
+        }
+
+        // Compute sort_order for each new idea based on its position in the merged sorted list
+        var ideaSortOrders: [Int: Int] = [:]
+        for (idx, item) in sorted.enumerated() {
+            if let idea = item.idea {
+                ideaSortOrders[idea.id] = idx
+            }
+        }
 
         await withTaskGroup(of: (Event?, Int).self) { group in
-            for (index, idea) in selectedIdeas.enumerated() {
+            for idea in selectedIdeas {
+                let assignedOrder = ideaSortOrders[idea.id] ?? existing.count
                 group.addTask {
                     let create = EventCreate(
                         tripId: store.tripId,
@@ -141,7 +160,7 @@ struct AddToTimelineSheet: View {
                         endTime: idea.endTime,
                         isLocked: false,
                         eventType: nil,
-                        sortOrder: existingCount + index,
+                        sortOrder: assignedOrder,
                         isSkipped: false,
                         sourceIdeaId: idea.id
                     )

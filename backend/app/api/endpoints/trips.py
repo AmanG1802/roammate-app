@@ -75,6 +75,7 @@ async def get_my_trips(
             name=trip.name,
             start_date=trip.start_date,
             end_date=trip.end_date,
+            timezone=trip.timezone or "UTC",
             created_at=trip.created_at,
             created_by_id=trip.created_by_id,
             my_role=role,
@@ -102,7 +103,7 @@ async def create_trip(
     )
     db.add(trip)
     await db.flush()
-    
+
     member = TripMember(
         trip_id=trip.id,
         user_id=current_user.id,
@@ -426,7 +427,7 @@ async def get_trip(
     res = await db.execute(stmt)
     if not res.scalars().first():
         raise HTTPException(status_code=403, detail="Not a member of this trip")
-    
+
     stmt = select(Trip).where(Trip.id == trip_id)
     result = await db.execute(stmt)
     trip = result.scalars().first()
@@ -824,8 +825,8 @@ async def update_idea(
 
 @router.post("/{trip_id}/ingest", response_model=List[IdeaBinItem])
 async def ingest_to_idea_bin(
-    trip_id: int, 
-    request: IngestRequest, 
+    trip_id: int,
+    request: IngestRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -841,9 +842,9 @@ async def ingest_to_idea_bin(
     first_name = (current_user.name or "").split()[0] if current_user.name else None
     try:
         items = await idea_bin_service.ingest_from_text(
-            db=db, 
-            trip_id=trip_id, 
-            text=request.text, 
+            db=db,
+            trip_id=trip_id,
+            text=request.text,
             source_url=request.source_url,
             added_by=first_name,
         )

@@ -51,7 +51,10 @@ struct DashboardView: View {
                     .padding(.bottom, RoammateLayout.contentBottomPadding)
                 }
                 .background(Color.roammateBackground.ignoresSafeArea())
-                .refreshable { await tripStore.load() }
+                .refreshable {
+                    await tripStore.load()
+                    await loadActiveTripEvents()
+                }
 
                 ChatFAB {
                     HapticManager.medium()
@@ -84,6 +87,10 @@ struct DashboardView: View {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                         tabBarVisibility.isVisible = true
                     }
+                    Task {
+                        await tripStore.load()
+                        await loadActiveTripEvents()
+                    }
                 }
             }
         }
@@ -91,8 +98,6 @@ struct DashboardView: View {
 
     private func loadActiveTripEvents() async {
         guard let active = TodayWidget.activeTrip(from: tripStore.trips) else { return }
-        let now = Date()
-        guard let s = active.startDate, let e = active.endDate, s <= now && now <= e else { return }
         do {
             let events = try await EventService.getEvents(tripId: active.id, dayDate: nil)
             activeTripEvents = events

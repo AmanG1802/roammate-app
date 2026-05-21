@@ -161,18 +161,35 @@ struct InTripCard: View {
     let trip: Trip
     var events: [Event] = []
 
+    private var tripCalendar: Calendar {
+        var cal = Calendar(identifier: .iso8601)
+        cal.timeZone = TimeZone(identifier: trip.timezone ?? "") ?? .current
+        return cal
+    }
+
     private var dayNumber: Int {
         guard let start = trip.startDate else { return 1 }
-        return daysBetween(start, Date()) + 1
+        let cal = tripCalendar
+        let s = cal.startOfDay(for: start)
+        let t = cal.startOfDay(for: Date())
+        return max(1, (cal.dateComponents([.day], from: s, to: t).day ?? 0) + 1)
     }
 
     private var totalDays: Int {
         guard let start = trip.startDate, let end = trip.endDate else { return 1 }
-        return max(1, daysBetween(start, end) + 1)
+        let cal = tripCalendar
+        let s = cal.startOfDay(for: start)
+        let e = cal.startOfDay(for: end)
+        return max(1, (cal.dateComponents([.day], from: s, to: e).day ?? 0) + 1)
     }
 
     private var todayEvents: [Event] {
-        let todayStr = EventService.isoDateString(from: Date())
+        let tz = TimeZone(identifier: trip.timezone ?? "") ?? .current
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.timeZone = tz
+        f.dateFormat = "yyyy-MM-dd"
+        let todayStr = f.string(from: Date())
         return events
             .filter { $0.dayDate == todayStr }
             .sorted { $0.sortOrder < $1.sortOrder }
