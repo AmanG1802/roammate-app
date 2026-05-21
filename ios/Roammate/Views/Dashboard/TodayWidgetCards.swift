@@ -255,9 +255,28 @@ struct InTripCard: View {
                 }
             }
 
-            if !scheduledItems.isEmpty {
-                Divider().opacity(0.4)
+            Divider().opacity(0.4)
 
+            if scheduledItems.isEmpty {
+                let dayWrappedUp = !todayEvents.isEmpty
+                VStack(spacing: 6) {
+                    Text(dayWrappedUp ? "DAY COMPLETE" : "NOTHING ON TODAY")
+                        .font(.system(.caption2, design: .rounded, weight: .black))
+                        .tracking(2)
+                        .foregroundStyle(Color.roammateEmerald)
+                    Text("That's all — nothing else planned for today.")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(Color.roammateInk)
+                        .multilineTextAlignment(.center)
+                    if dayWrappedUp {
+                        Text("\(todayEvents.count) event\(todayEvents.count == 1 ? "" : "s") wrapped.")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundStyle(Color.roammateMuted)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+            } else {
                 VStack(spacing: 8) {
                     ForEach(Array(scheduledItems.enumerated()), id: \.offset) { _, item in
                         HStack(spacing: 8) {

@@ -168,6 +168,10 @@ class BrainstormMessage(Base):
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    # Stamped when /brainstorm/extract has already processed this message;
+    # subsequent extracts skip stamped rows so promoted/deleted items don't
+    # re-materialize from the same chat turn.
+    extracted_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
     trip = relationship("Trip", back_populates="brainstorm_messages")
     user = relationship("User")

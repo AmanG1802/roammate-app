@@ -1,11 +1,56 @@
 import SwiftUI
 
+/// Compact quota indicator for the trip header. Hides for Plus users.
+/// At zero remaining, swaps to a danger-toned "Get Plus" chip that opens the paywall.
+struct BrainstormQuotaPill: View {
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+
+    var body: some View {
+        if let remaining = subscriptionStore.entitlement.brainstormRemaining,
+           let cap = subscriptionStore.entitlement.brainstormCap {
+            Button {
+                if remaining == 0 {
+                    NotificationCenter.default.post(
+                        name: .needsPlus,
+                        object: nil,
+                        userInfo: ["feature": PaywallFeature.brainstormQuota.rawValue]
+                    )
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: remaining == 0 ? "bolt.fill" : "sparkles")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(remaining == 0 ? "Get Plus" : "\(remaining)/\(cap)")
+                        .font(.caption2.weight(.black))
+                        .tracking(0.4)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(remaining == 0
+                    ? Color(red: 254/255, green: 226/255, blue: 226/255)
+                    : Color.roammateIndigoTint))
+                .overlay(Capsule().stroke(remaining == 0
+                    ? Color.roammateDanger.opacity(0.35)
+                    : Color.roammateIndigo.opacity(0.2), lineWidth: 1))
+                .foregroundStyle(remaining == 0 ? Color.roammateDanger : Color.roammateIndigo)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
 struct BrainstormChatView: View {
     @EnvironmentObject var store: BrainstormStore
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @Binding var page: Int
 
     @State private var inputText = ""
+
+    /// True when the user has run out of free brainstorms. Plus users have
+    /// `brainstormRemaining == nil` (unlimited), so this stays false for them.
+    private var isQuotaExhausted: Bool {
+        subscriptionStore.entitlement.brainstormRemaining == 0
+    }
 
     private let suggestedPrompts = [
         "Best restaurants in the area",
@@ -22,11 +67,9 @@ struct BrainstormChatView: View {
                 messageList
             }
 
-            if store.messages.count >= 2 {
+            if store.messages.count >= 2 && !isQuotaExhausted {
                 extractButton
             }
-
-            quotaPill
 
             inputBar
         }
@@ -188,129 +231,83 @@ struct BrainstormChatView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 if store.isExtracting {
                     ProgressView()
                         .scaleEffect(0.8)
-                        .tint(Color.roammateIndigo)
+                        .tint(.white)
                 } else {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 14, weight: .bold))
                         .symbolEffect(.pulse)
                 }
                 Text("Extract ideas from chat")
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .font(.system(.subheadline, design: .rounded, weight: .heavy))
             }
-            .foregroundStyle(Color.roammateIndigo)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
             .background(
-                Capsule().fill(Color.roammateIndigoTint)
+                LinearGradient(
+                    colors: [Color.roammateIndigo, Color.roammateViolet],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ),
+                in: Capsule()
             )
-            .overlay(
-                Capsule().stroke(Color.roammateIndigo.opacity(0.2), lineWidth: 1)
-            )
-            .shadow(color: Color.roammateIndigo.opacity(0.1), radius: 8, y: 2)
+            .shadow(color: Color.roammateIndigo.opacity(0.25), radius: 8, y: 2)
+            .opacity(store.isExtracting ? 0.7 : 1)
         }
         .buttonStyle(.plain)
         .disabled(store.isExtracting)
-        .padding(.vertical, RoammateSpacing.sm)
-    }
-
-    // MARK: - Brainstorm quota pill (free tier only)
-
-    /// Small status pill above the input that shows monthly brainstorms left.
-    /// Hidden for Plus users. Tinted amber at ≤3 left, rose at 0.
-    @ViewBuilder
-    private var quotaPill: some View {
-        if let remaining = subscriptionStore.entitlement.brainstormRemaining,
-           let cap = subscriptionStore.entitlement.brainstormCap {
-            let tone: QuotaTone = {
-                if remaining == 0 { return .danger }
-                if remaining <= 3 { return .warn }
-                return .ok
-            }()
-            HStack {
-                Spacer()
-                Button {
-                    if remaining == 0 {
-                        NotificationCenter.default.post(
-                            name: .needsPlus,
-                            object: nil,
-                            userInfo: ["feature": PaywallFeature.brainstormQuota.rawValue]
-                        )
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10, weight: .bold))
-                        Text(remaining == 0 ? "No brainstorms left" : "\(remaining) / \(cap) left")
-                            .font(.caption2.weight(.black))
-                            .tracking(0.4)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(tone.bg))
-                    .overlay(Capsule().stroke(tone.border, lineWidth: 1))
-                    .foregroundStyle(tone.fg)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, RoammateSpacing.md)
-            .padding(.bottom, 4)
-        }
-    }
-
-    private enum QuotaTone {
-        case ok, warn, danger
-        var bg: Color {
-            switch self {
-            case .ok: return Color.roammateIndigoTint
-            case .warn: return Color.roammateAmberTint
-            case .danger: return Color(red: 254/255, green: 226/255, blue: 226/255)
-            }
-        }
-        var border: Color {
-            switch self {
-            case .ok: return Color.roammateIndigo.opacity(0.18)
-            case .warn: return Color.roammateAmber.opacity(0.3)
-            case .danger: return Color.roammateDanger.opacity(0.3)
-            }
-        }
-        var fg: Color {
-            switch self {
-            case .ok: return Color.roammateIndigo
-            case .warn: return Color.roammateAmber
-            case .danger: return Color.roammateDanger
-            }
-        }
+        .padding(.horizontal, RoammateSpacing.md)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Input Bar
 
+    private func openPaywall() {
+        NotificationCenter.default.post(
+            name: .needsPlus,
+            object: nil,
+            userInfo: ["feature": PaywallFeature.brainstormQuota.rawValue]
+        )
+    }
+
     private var inputBar: some View {
         HStack(spacing: RoammateSpacing.sm) {
-            TextField("Type something…", text: $inputText, axis: .vertical)
-                .font(.system(.body, design: .rounded))
-                .lineLimit(1...4)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color.roammateSurface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(Color.roammateBorder, lineWidth: 1)
-                )
+            TextField(
+                isQuotaExhausted ? "Out of free brainstorms" : "Type something…",
+                text: $inputText,
+                axis: .vertical
+            )
+            .font(.system(.body, design: .rounded))
+            .lineLimit(1...4)
+            .disabled(isQuotaExhausted)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(isQuotaExhausted ? Color.roammateBackground : Color.roammateSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.roammateBorder, lineWidth: 1)
+            )
 
             Button {
+                if isQuotaExhausted {
+                    HapticManager.light()
+                    openPaywall()
+                    return
+                }
                 let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
                 inputText = ""
                 Task {
                     await store.send(text)
                     // Counter ticked up on the server — refresh entitlement so
-                    // the quota pill below reflects it. (On a 402 the APIClient
+                    // the header pill reflects it. (On a 402 the APIClient
                     // has already broadcast .needsPlus; the paywall will open
                     // and entitlement is refreshed on subscribe success.)
                     await subscriptionStore.refresh()
@@ -319,18 +316,20 @@ struct BrainstormChatView: View {
                 ZStack {
                     Circle()
                         .fill(
-                            canSend
-                                ? Color.roammateIndigo
-                                : Color.roammateMuted.opacity(0.3)
+                            isQuotaExhausted
+                                ? Color.roammateDanger
+                                : (canSend
+                                    ? Color.roammateIndigo
+                                    : Color.roammateMuted.opacity(0.3))
                         )
                         .frame(width: 36, height: 36)
-                    Image(systemName: "arrow.up")
+                    Image(systemName: isQuotaExhausted ? "lock.fill" : "arrow.up")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
                 }
             }
             .buttonStyle(.plain)
-            .disabled(!canSend)
+            .disabled(!isQuotaExhausted && !canSend)
         }
         .padding(.horizontal, RoammateSpacing.md)
         .padding(.vertical, RoammateSpacing.sm)

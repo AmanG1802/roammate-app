@@ -61,7 +61,7 @@ function TripPlannerPageContent() {
   const [planSubTab, setPlanSubTab] = useState<'timeline' | 'map' | 'ideas'>('timeline');
   const [conciergeMobileView, setConciergeMobileView] = useState<'timeline' | 'map'>('map');
 
-  const { setActiveTrip, loadEvents, events, tripDays, loadTripDays, addTripDay, deleteTripDay } = useTripStore();
+  const { setActiveTrip, setActiveTripTimezone, loadEvents, events, tripDays, loadTripDays, addTripDay, deleteTripDay } = useTripStore();
   const [deleteConfirm, setDeleteConfirm] = useState<{ dayId: string; dayNumber: number; date: string } | null>(null);
   const mutatingRef = useRef(false);
 
@@ -205,13 +205,18 @@ function TripPlannerPageContent() {
         cache: 'no-store',
       })
         .then((res) => (res.ok ? res.json() : null))
-        .then((data) => { if (data) setTrip(data); })
+        .then((data) => {
+          if (data) {
+            setTrip(data);
+            setActiveTripTimezone(data.timezone ?? null);
+          }
+        })
         .catch(() => {}),
       loadTripDays(tripId, token),
       loadEvents(tripId, token),
       fetchMembers(),
     ]);
-  }, [tripId, loadTripDays, loadEvents, fetchMembers]);
+  }, [tripId, loadTripDays, loadEvents, fetchMembers, setActiveTripTimezone]);
 
   useEffect(() => {
     if (!tripId) return;
@@ -327,8 +332,8 @@ function TripPlannerPageContent() {
               lat: r.lat ?? 0,
               lng: r.lng ?? 0,
               place_id: r.place_id ?? null,
-              start_time: r.start_time ? new Date(r.start_time) : null,
-              end_time: r.end_time ? new Date(r.end_time) : null,
+              start_time: r.start_time ?? null,
+              end_time: r.end_time ?? null,
               added_by: r.added_by ?? null,
               up: r.up ?? 0,
               down: r.down ?? 0,

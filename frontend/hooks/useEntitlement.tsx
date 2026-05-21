@@ -83,15 +83,12 @@ interface EntitlementContextValue {
 
 const EntitlementContext = createContext<EntitlementContextValue | null>(null);
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-
 async function fetchStatus(): Promise<Entitlement | null> {
   const token = getToken();
-  if (!token) return null;
   try {
-    const res = await fetch(`${API}/billing/status`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const res = await fetch('/api/billing/status', {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     if (!res.ok) return null;
     return (await res.json()) as Entitlement;

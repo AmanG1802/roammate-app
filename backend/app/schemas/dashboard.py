@@ -14,6 +14,7 @@ class TodayEvent(BaseModel):
     end_time: Optional[time] = None
     is_next: bool = False
     is_ongoing: bool = False
+    is_past: bool = False
     model_config = {"from_attributes": True}
 
     @field_serializer("start_time", "end_time")

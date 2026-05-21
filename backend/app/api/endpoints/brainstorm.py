@@ -17,7 +17,7 @@ from app.utils.tz import today_in_tz, to_utc  # noqa: F401 — used elsewhere in
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 log = logging.getLogger(__name__)
 
@@ -257,15 +257,24 @@ async def extract(
 ):
     await require_trip_member(db, trip_id, current_user.id)
 
+    # Only consider messages that haven't been extracted yet. This decouples
+    # re-extraction from the bin contents — once items are promoted (deleted
+    # from BrainstormBinItem) or trashed, we don't re-mine the same chat turns.
     stmt = (
         select(BrainstormMessage)
         .where(
             BrainstormMessage.trip_id == trip_id,
             BrainstormMessage.user_id == current_user.id,
+            BrainstormMessage.extracted_at.is_(None),
         )
         .order_by(BrainstormMessage.created_at)
     )
     history_rows = (await db.execute(stmt)).scalars().all()
+
+    if not history_rows:
+        # Nothing new to extract — skip LLM/enrichment/counter entirely.
+        return BrainstormExtractResponse(items=[], enrichment=None)
+
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
     client = get_brainstorm_client()
@@ -299,6 +308,14 @@ async def extract(
         )
         db.add(row)
         created.append(row)
+
+    # Stamp the consumed messages in the same transaction as the bin inserts.
+    consumed_ids = [m.id for m in history_rows]
+    await db.execute(
+        update(BrainstormMessage)
+        .where(BrainstormMessage.id.in_(consumed_ids))
+        .values(extracted_at=datetime.now(dt_tz.utc))
+    )
 
     await db.commit()
     for row in created:

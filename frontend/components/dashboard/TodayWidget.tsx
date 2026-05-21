@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useImperativeHandle, useRef, forwardR
 import Link from 'next/link';
 import { Calendar, Clock, MapPin, ChevronRight, ChevronLeft, Sparkles, Plane, History, Loader2 } from 'lucide-react';
 import { getToken } from '@/lib/auth';
+import { formatTimeOfDay } from '@/lib/time';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type TodayEvent = {
@@ -14,6 +15,7 @@ type TodayEvent = {
   end_time: string | null;
   is_next: boolean;
   is_ongoing: boolean;
+  is_past?: boolean;
 };
 
 type TodayTrip = {
@@ -47,12 +49,6 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 function authHeaders(): Record<string, string> {
   const t = getToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
@@ -247,9 +243,9 @@ function EventSlot({ event, kind }: { event: TodayEvent | null; kind: SlotKind }
 
   const timeLabel =
     kind === 'ongoing' && event.start_time && event.end_time
-      ? `${formatTime(event.start_time)} – ${formatTime(event.end_time)}`
+      ? `${formatTimeOfDay(event.start_time)} – ${formatTimeOfDay(event.end_time)}`
       : event.start_time
-        ? formatTime(event.start_time)
+        ? formatTimeOfDay(event.start_time)
         : '';
 
   return (
@@ -306,11 +302,11 @@ function PreTripCard({ page }: { page: Page }) {
 function InTripCard({ page }: { page: Page }) {
   const trip = page.trip;
   const events = page.today_events ?? [];
-  const ongoingIdx = events.findIndex((e) => e.is_ongoing);
-  const ongoing = ongoingIdx >= 0 ? events[ongoingIdx] : null;
-  const nextIdx = events.findIndex((e) => e.is_next && !e.is_ongoing);
-  const upcomingStart = nextIdx >= 0 ? nextIdx : ongoingIdx >= 0 ? ongoingIdx + 1 : 0;
-  const upcoming = events.slice(upcomingStart).filter((e) => !e.is_ongoing);
+
+  // Drop events that have already ended. Keep ongoing + future only.
+  const live = events.filter((e) => !e.is_past);
+  const ongoing = live.find((e) => e.is_ongoing) ?? null;
+  const upcoming = live.filter((e) => !e.is_ongoing);
 
   const slots: Array<{ event: TodayEvent | null; kind: SlotKind }> = ongoing
     ? [
@@ -328,16 +324,20 @@ function InTripCard({ page }: { page: Page }) {
     ? `Day ${page.day_number} of ${page.total_days}`
     : page.day_number ? `Day ${page.day_number}` : 'Today';
 
+  const nothingScheduled = events.length === 0;
+  const dayWrappedUp = !nothingScheduled && live.length === 0;
+  const subtitle = nothingScheduled
+    ? 'No events scheduled today.'
+    : dayWrappedUp
+      ? "That's all — nothing else planned for today."
+      : `${live.length} event${live.length === 1 ? '' : 's'} ${ongoing ? 'in progress' : 'still ahead'}.`;
+
   return (
     <HeroShell badge={dayLabel} badgeIcon={<Sparkles className="w-3.5 h-3.5" />} tone="amber">
       <div className="flex items-start justify-between gap-4 mb-3">
         <div>
           <h2 className="text-xl font-black text-slate-900 mb-0.5 leading-tight">{trip.name}</h2>
-          <p className="text-slate-500 text-xs font-bold">
-            {events.length === 0
-              ? 'No events scheduled today.'
-              : `${events.length} event${events.length === 1 ? '' : 's'} on deck.`}
-          </p>
+          <p className="text-slate-500 text-xs font-bold">{subtitle}</p>
         </div>
         <Link
           href={`/trips/${trip.id}`}
@@ -347,11 +347,25 @@ function InTripCard({ page }: { page: Page }) {
         </Link>
       </div>
 
-      <div className="space-y-2">
-        {slots.map((s, i) => (
-          <EventSlot key={s.event ? s.event.id : `empty-${i}`} event={s.event} kind={s.kind} />
-        ))}
-      </div>
+      {dayWrappedUp ? (
+        <div className="px-4 py-6 flex flex-col items-center justify-center text-center">
+          <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">
+            Day Complete
+          </div>
+          <p className="text-sm font-black text-slate-700">
+            That's all — nothing else planned for today.
+          </p>
+          <p className="text-xs text-slate-500 font-bold mt-1">
+            {events.length} event{events.length === 1 ? '' : 's'} wrapped.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {slots.map((s, i) => (
+            <EventSlot key={s.event ? s.event.id : `empty-${i}`} event={s.event} kind={s.kind} />
+          ))}
+        </div>
+      )}
     </HeroShell>
   );
 }

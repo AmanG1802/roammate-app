@@ -12,7 +12,7 @@ import type { RouteLeg } from '@/lib/store';
 import { categoryPinColor, categoryAccent } from '@/lib/categoryColors';
 import { getToken } from '@/lib/auth';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
-import { format } from 'date-fns';
+import { formatTimeOfDay } from '@/lib/time';
 import MapOverlayLayer, { useMapBreakpoint } from './MapOverlayLayer';
 
 const MOCK_MODE =
@@ -156,7 +156,7 @@ function travelMode(leg: { duration_s: number; distance_m: number }): 'walk' | '
 function buildInfoWindowContent(event: Event): string {
   const accent = categoryAccent(event.category);
   const timeStr = event.start_time
-    ? `${format(event.start_time, 'h:mm a')}${event.end_time ? ` – ${format(event.end_time, 'h:mm a')}` : ''}`
+    ? `${formatTimeOfDay(event.start_time)}${event.end_time ? ` – ${formatTimeOfDay(event.end_time)}` : ''}`
     : 'TBD';
   const timeBg = event.start_time ? '#eef2ff' : '#fffbeb';
   const timeColor = event.start_time ? '#4f46e5' : '#d97706';

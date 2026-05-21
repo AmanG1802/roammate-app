@@ -127,6 +127,7 @@ async def get_today_widget(
 
         ongoing_idx: int | None = None
         next_idx: int | None = None
+        past_flags: list[bool] = [False] * len(events)
         for i, e in enumerate(events):
             # TIME-only columns now; combine with day_date in the trip's tz
             # to recover an absolute instant for "is it happening right now?"
@@ -137,6 +138,13 @@ async def get_today_widget(
                     ongoing_idx = i
             if next_idx is None and st is not None and st > now:
                 next_idx = i
+            # An event is "past" once its end has elapsed. If no end_time is
+            # known, treat it as past once its start has elapsed (so a 14:00
+            # open-ended event still falls off the widget by 21:00).
+            if et is not None and et <= now:
+                past_flags[i] = True
+            elif et is None and st is not None and st <= now:
+                past_flags[i] = True
 
         today_events = [
             TodayEvent(
@@ -144,6 +152,7 @@ async def get_today_widget(
                 start_time=e.start_time, end_time=e.end_time,
                 is_next=(i == next_idx),
                 is_ongoing=(i == ongoing_idx),
+                is_past=past_flags[i] and i != ongoing_idx,
             )
             for i, e in enumerate(events)
         ]

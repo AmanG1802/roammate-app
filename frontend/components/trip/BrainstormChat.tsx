@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, RotateCcw, Send, Sparkles, MessageSquare } from 'lucide-react';
+import { AlertTriangle, Loader2, Lock, RotateCcw, Send, Sparkles, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getToken } from '@/lib/auth';
@@ -30,7 +30,9 @@ export default function BrainstormChat({
   const [loadError, setLoadError] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
-  const { requirePlus, refresh: refreshEntitlement } = useEntitlement();
+  const { entitlement, requirePlus, refresh: refreshEntitlement } = useEntitlement();
+  // Plus users have `brainstorm_remaining === null` (unlimited) → not exhausted.
+  const isQuotaExhausted = entitlement.brainstorm_remaining === 0;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -158,11 +160,7 @@ export default function BrainstormChat({
             AI-powered · Private to you
           </p>
         </div>
-        {messages.length > 0 && (
-          <span className="shrink-0 px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black border border-indigo-100 tabular-nums">
-            {messages.length}
-          </span>
-        )}
+        <BrainstormQuotaPill className="shrink-0" />
       </div>
 
       {/* Messages */}
@@ -264,11 +262,8 @@ export default function BrainstormChat({
 
       {/* Input area */}
       <div className="border-t border-slate-100 p-4 space-y-2.5 shrink-0 bg-white">
-        <div className="flex justify-end">
-          <BrainstormQuotaPill />
-        </div>
         <AnimatePresence>
-          {hasAssistant && (
+          {hasAssistant && !isQuotaExhausted && (
             <motion.button
               key="extract"
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -296,17 +291,28 @@ export default function BrainstormChat({
                 send();
               }
             }}
-            placeholder="Ask about a destination…"
-            className="flex-1 px-3.5 py-2.5 text-sm font-medium border border-slate-200 bg-slate-50 rounded-2xl resize-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 outline-none transition-all leading-relaxed"
+            placeholder={isQuotaExhausted ? 'Out of free brainstorms' : 'Ask about a destination…'}
+            disabled={isQuotaExhausted}
+            className="flex-1 px-3.5 py-2.5 text-sm font-medium border border-slate-200 bg-slate-50 rounded-2xl resize-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 outline-none transition-all leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
           />
-          <button
-            onClick={() => send()}
-            disabled={sending || !input.trim()}
-            aria-label="Send message"
-            className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer active:scale-95"
-          >
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </button>
+          {isQuotaExhausted ? (
+            <button
+              onClick={() => requirePlus('brainstorm_quota')}
+              aria-label="Get Plus to keep chatting"
+              className="p-2.5 bg-rose-500 text-white rounded-xl hover:bg-rose-600 transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={() => send()}
+              disabled={sending || !input.trim()}
+              aria-label="Send message"
+              className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </button>
+          )}
         </div>
       </div>
     </div>
