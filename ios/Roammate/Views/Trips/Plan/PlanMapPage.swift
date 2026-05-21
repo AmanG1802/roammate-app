@@ -19,10 +19,18 @@ struct PlanMapPage: View {
     }
 
     private var dayEvents: [Event] {
-        guard let day = currentDayDate else {
-            return store.eventsByDay.values.flatMap { $0 }
+        let events: [Event]
+        if let day = currentDayDate {
+            events = store.eventsByDay[day] ?? []
+        } else {
+            events = store.eventsByDay.values.flatMap { $0 }
         }
-        return store.eventsByDay[day] ?? []
+        return events.sorted {
+            if let aTime = $0.startTime, let bTime = $1.startTime {
+                return aTime < bTime
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
     }
 
     private var activeEvents: [Event] {
