@@ -7,8 +7,10 @@ struct MainShell: View {
     @StateObject private var tabBarVisibility = TabBarVisibility()
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @State private var showPersonaOnboarding = false
+    @State private var personaSheetShownThisSession = false
     @State private var showPlusOnboarding = false
-    @State private var showPaywallFromOnboarding = false
+    @State private var previousTier: String?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -35,14 +37,47 @@ struct MainShell: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: tabBarVisibility.isVisible)
         .environment(\.tabBarVisibility, tabBarVisibility)
         .environmentObject(tabBarVisibility)
-        .onAppear { maybeShowOnboarding() }
+        .onAppear {
+            previousTier = subscriptionStore.entitlement.tier
+            evaluateOnboarding()
+        }
+        .onChange(of: authManager.currentUser?.id) { _, _ in evaluateOnboarding() }
+        .onChange(of: subscriptionStore.entitlement.tier) { _, newTier in
+            // Detect plus → free downgrade; clear the seen flag so the pitch
+            // can re-appear on the next free launch.
+            if previousTier == "plus", newTier == "free", let uid = authManager.currentUser?.id {
+                PlusOnboardingFlag.clear(userId: uid)
+            }
+            previousTier = newTier
+            evaluateOnboarding()
+        }
+        .sheet(isPresented: $showPersonaOnboarding) {
+            OnboardingPersonasSheet(
+                onComplete: { _ in
+                    showPersonaOnboarding = false
+                    // Allow the sheet to dismiss before stacking Plus.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        evaluateOnboarding()
+                    }
+                },
+                onSkip: {
+                    Task {
+                        // Persist empty array so we don't keep prompting next session.
+                        try? await AuthService.updatePersonas([])
+                        authManager.currentUser = try? await AuthService.getMe()
+                    }
+                    showPersonaOnboarding = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        evaluateOnboarding()
+                    }
+                }
+            )
+        }
         .sheet(isPresented: $showPlusOnboarding) {
             PlusOnboardingSheet(
                 onClose: { showPlusOnboarding = false },
                 onSeePlus: {
                     showPlusOnboarding = false
-                    // Wait a beat for the sheet to dismiss before posting
-                    // .needsPlus, otherwise iOS may swallow the new sheet.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         NotificationCenter.default.post(
                             name: .needsPlus,
@@ -55,18 +90,32 @@ struct MainShell: View {
         }
     }
 
-    /// Show Plus onboarding once per user. Guarded by an AppStorage flag keyed
-    /// off the user id so a sign-out → sign-in with a different account
-    /// re-triggers naturally.
-    private func maybeShowOnboarding() {
-        guard let uid = authManager.currentUser?.id else { return }
-        let key = "plus_onboarding_shown_\(uid)"
-        let defaults = UserDefaults.standard
-        if defaults.bool(forKey: key) { return }
-        // Let the dashboard settle, then present.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+    /// Decide which onboarding sheet (if any) to present. Persona picker takes
+    /// precedence; the Plus pitch waits until the persona flow is done.
+    private func evaluateOnboarding() {
+        guard let user = authManager.currentUser else { return }
+
+        // 1. Persona picker — once per session when personas are unset/empty.
+        let needsPersona = (user.personas?.isEmpty ?? true)
+        if needsPersona, !personaSheetShownThisSession, !showPersonaOnboarding {
+            personaSheetShownThisSession = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                showPersonaOnboarding = true
+            }
+            return
+        }
+
+        // 2. Plus onboarding — only for free users, once per device. Defer if
+        // the persona sheet is currently open.
+        guard !showPersonaOnboarding else { return }
+        guard subscriptionStore.entitlement.tier == "free" else { return }
+        guard !PlusOnboardingFlag.hasSeen(userId: user.id) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            // Re-check after the delay — the user's state may have changed.
+            guard subscriptionStore.entitlement.tier == "free",
+                  !PlusOnboardingFlag.hasSeen(userId: user.id) else { return }
+            PlusOnboardingFlag.markSeen(userId: user.id)
             showPlusOnboarding = true
-            defaults.set(true, forKey: key)
         }
     }
 }

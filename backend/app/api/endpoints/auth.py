@@ -118,6 +118,7 @@ def _user_dict(u: User) -> dict:
         "name": u.name,
         "avatar_url": u.avatar_url,
         "email_verified": bool(u.email_verified),
+        "personas": u.personas,
     }
 
 

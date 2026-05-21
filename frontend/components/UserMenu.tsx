@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MoreVertical, User, LogOut } from 'lucide-react';
+import { clearPlusOnboardingSeen, currentUserIdFromCache } from '@/lib/plusOnboarding';
 
 type UserMenuProps = {
   user: { name?: string; email?: string; avatar_url?: string | null } | null;
@@ -25,6 +26,8 @@ export default function UserMenu({ user, getInitials }: UserMenuProps) {
   }, [open]);
 
   const handleLogout = () => {
+    const uid = currentUserIdFromCache();
+    if (uid != null) clearPlusOnboardingSeen(uid);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     router.push('/');

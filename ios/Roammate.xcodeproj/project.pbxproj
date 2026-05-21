@@ -77,6 +77,8 @@
 		A86201D5D78DF6CF431F744C /* CreateTripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C09D662432BD02513D58EA6 /* CreateTripView.swift */; };
 		AA1B2C3D4E5F6A7B8C9D0E1F /* RouteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2C3D4E5F6A7B8C9D0E1F2A /* RouteService.swift */; };
 		B014C6C2746626B24DD960D6 /* PlusOnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AF1FA12C10DDEA4F9530675 /* PlusOnboardingSheet.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* OnboardingPersonasSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* OnboardingPersonasSheet.swift */; };
+		A1B2C3D4E5F60718293A4B5E /* PlusOnboardingFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5F /* PlusOnboardingFlag.swift */; };
 		B045FA5E60FBB1604ABF9F0B /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA92943D4234EE9D68E41B23 /* APIClient.swift */; };
 		B1BFEEB6EAD535583C018832 /* InviteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AF3168C1CA54DBCE5457AED /* InviteSheet.swift */; };
 		B1E0190655462E7983CE4596 /* Brainstorm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F13363AC46609B3D03EF79 /* Brainstorm.swift */; };
@@ -137,6 +139,8 @@
 		1A6D999AFC9D81A87AF7CFFC /* DiskCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskCache.swift; sourceTree = "<group>"; };
 		1ADDC09C2CE62A0203C0110F /* SubscriptionStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
 		1AF1FA12C10DDEA4F9530675 /* PlusOnboardingSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlusOnboardingSheet.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5D /* OnboardingPersonasSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingPersonasSheet.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5F /* PlusOnboardingFlag.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlusOnboardingFlag.swift; sourceTree = "<group>"; };
 		211B67571C4F7C5E0C2E91C0 /* ChatFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatFAB.swift; sourceTree = "<group>"; };
 		221C822FC1F25C327372274F /* PlusCrestView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlusCrestView.swift; sourceTree = "<group>"; };
 		24137F564EF2CC7AF5B2DE2E /* TripService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripService.swift; sourceTree = "<group>"; };
@@ -365,6 +369,7 @@
 				7D9F775FB793917D68B37CA8 /* Profile */,
 				42A1996DA597C884179CB7AE /* Trips */,
 				62D530E61B884E0E2ABDE6AD /* Paywall */,
+				B7C1D2E3F4A5B6C7D8E9F011 /* Onboarding */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -392,6 +397,15 @@
 			path = Store;
 			sourceTree = "<group>";
 		};
+		B7C1D2E3F4A5B6C7D8E9F011 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				1AF1FA12C10DDEA4F9530675 /* PlusOnboardingSheet.swift */,
+				A1B2C3D4E5F60718293A4B5D /* OnboardingPersonasSheet.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
 		62D530E61B884E0E2ABDE6AD /* Paywall */ = {
 			isa = PBXGroup;
 			children = (
@@ -399,7 +413,6 @@
 				BEDCEA3CFDAFF250420C86C8 /* PaywallSheet.swift */,
 				4EB4B38A10BC6C402E9AD419 /* PaywallObserver.swift */,
 				276D8F1B6DB0FC4A528BB0A1 /* ConfettiBurst.swift */,
-				1AF1FA12C10DDEA4F9530675 /* PlusOnboardingSheet.swift */,
 				48050BA455551581999E7D6C /* PlusBanners.swift */,
 				B66016AB4422CBB52DF44A31 /* CouponInputView.swift */,
 			);
@@ -481,6 +494,7 @@
 				A277F837A4005DA2B97E355F /* Entitlement.swift */,
 				5F8510A98F489EE3C131FCA8 /* StoreKitClient.swift */,
 				1ADDC09C2CE62A0203C0110F /* SubscriptionStore.swift */,
+				A1B2C3D4E5F60718293A4B5F /* PlusOnboardingFlag.swift */,
 				E82A5A46C54732AB1F60C504 /* RoammatePlus.storekit */,
 			);
 			path = Subscription;
@@ -733,6 +747,8 @@
 				A14D1E27A42B6EAEAEC39370 /* PaywallObserver.swift in Sources */,
 				3284E6E1C5877AA7AE5996D3 /* ConfettiBurst.swift in Sources */,
 				B014C6C2746626B24DD960D6 /* PlusOnboardingSheet.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* OnboardingPersonasSheet.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5E /* PlusOnboardingFlag.swift in Sources */,
 				86CBDE9F87CE3EF20FC93D3B /* PlusBanners.swift in Sources */,
 				2CBB7BB3206E26F24CDF3D15 /* CouponInputView.swift in Sources */,
 			);

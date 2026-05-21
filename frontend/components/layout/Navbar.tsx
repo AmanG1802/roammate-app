@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Compass, Sparkles, User, LogOut, LayoutGrid, Map as MapIcon, Menu, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { clearPlusOnboardingSeen, currentUserIdFromCache } from '@/lib/plusOnboarding';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -40,6 +41,8 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = () => {
+    const uid = currentUserIdFromCache();
+    if (uid != null) clearPlusOnboardingSeen(uid);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
