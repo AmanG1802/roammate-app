@@ -18,38 +18,40 @@ from typing import Optional
 # Curated list of top travel cities.  Kept intentionally short for startup;
 # expand to ~5K entries via CSV when needed.
 
-_CITY_COUNTRY: dict[str, str] = {
-    "tokyo": "Japan", "kyoto": "Japan", "osaka": "Japan", "nara": "Japan",
-    "bangkok": "Thailand", "chiang mai": "Thailand", "phuket": "Thailand",
-    "pattaya": "Thailand", "krabi": "Thailand", "koh samui": "Thailand",
-    "paris": "France", "nice": "France", "lyon": "France", "marseille": "France",
-    "london": "United Kingdom", "edinburgh": "United Kingdom", "manchester": "United Kingdom",
-    "rome": "Italy", "florence": "Italy", "venice": "Italy", "milan": "Italy",
-    "naples": "Italy", "amalfi": "Italy",
-    "barcelona": "Spain", "madrid": "Spain", "seville": "Spain", "valencia": "Spain",
-    "new york": "United States", "los angeles": "United States", "san francisco": "United States",
-    "miami": "United States", "chicago": "United States", "las vegas": "United States",
-    "new orleans": "United States", "hawaii": "United States", "seattle": "United States",
-    "berlin": "Germany", "munich": "Germany", "hamburg": "Germany",
-    "amsterdam": "Netherlands", "lisbon": "Portugal", "porto": "Portugal",
-    "prague": "Czech Republic", "vienna": "Austria", "zurich": "Switzerland",
-    "istanbul": "Turkey", "cappadocia": "Turkey", "antalya": "Turkey",
-    "dubai": "United Arab Emirates", "abu dhabi": "United Arab Emirates",
-    "singapore": "Singapore", "kuala lumpur": "Malaysia", "penang": "Malaysia",
-    "bali": "Indonesia", "jakarta": "Indonesia",
-    "hanoi": "Vietnam", "ho chi minh": "Vietnam", "da nang": "Vietnam",
-    "seoul": "South Korea", "busan": "South Korea",
-    "taipei": "Taiwan", "hong kong": "China", "shanghai": "China", "beijing": "China",
-    "delhi": "India", "mumbai": "India", "jaipur": "India", "goa": "India",
-    "sydney": "Australia", "melbourne": "Australia",
-    "cairo": "Egypt", "marrakech": "Morocco",
-    "cape town": "South Africa", "nairobi": "Kenya",
-    "rio de janeiro": "Brazil", "buenos aires": "Argentina",
-    "cancun": "Mexico", "mexico city": "Mexico", "tulum": "Mexico",
-    "athens": "Greece", "santorini": "Greece", "mykonos": "Greece",
-    "dubrovnik": "Croatia", "split": "Croatia",
-    "reykjavik": "Iceland", "copenhagen": "Denmark", "stockholm": "Sweden",
-    "oslo": "Norway", "helsinki": "Finland",
+_CITY_COUNTRY: dict[str, tuple[str, str]] = {
+    "tokyo": ("Japan", "JP"), "kyoto": ("Japan", "JP"), "osaka": ("Japan", "JP"), "nara": ("Japan", "JP"),
+    "bangkok": ("Thailand", "TH"), "chiang mai": ("Thailand", "TH"), "phuket": ("Thailand", "TH"),
+    "pattaya": ("Thailand", "TH"), "krabi": ("Thailand", "TH"), "koh samui": ("Thailand", "TH"),
+    "paris": ("France", "FR"), "nice": ("France", "FR"), "lyon": ("France", "FR"), "marseille": ("France", "FR"),
+    "london": ("United Kingdom", "GB"), "edinburgh": ("United Kingdom", "GB"), "manchester": ("United Kingdom", "GB"),
+    "rome": ("Italy", "IT"), "florence": ("Italy", "IT"), "venice": ("Italy", "IT"), "milan": ("Italy", "IT"),
+    "naples": ("Italy", "IT"), "amalfi": ("Italy", "IT"),
+    "barcelona": ("Spain", "ES"), "madrid": ("Spain", "ES"), "seville": ("Spain", "ES"), "valencia": ("Spain", "ES"),
+    "new york": ("United States", "US"), "los angeles": ("United States", "US"), "san francisco": ("United States", "US"),
+    "miami": ("United States", "US"), "chicago": ("United States", "US"), "las vegas": ("United States", "US"),
+    "new orleans": ("United States", "US"), "hawaii": ("United States", "US"), "seattle": ("United States", "US"),
+    "berlin": ("Germany", "DE"), "munich": ("Germany", "DE"), "hamburg": ("Germany", "DE"),
+    "amsterdam": ("Netherlands", "NL"), "lisbon": ("Portugal", "PT"), "porto": ("Portugal", "PT"),
+    "prague": ("Czech Republic", "CZ"), "vienna": ("Austria", "AT"), "zurich": ("Switzerland", "CH"),
+    "istanbul": ("Turkey", "TR"), "cappadocia": ("Turkey", "TR"), "antalya": ("Turkey", "TR"),
+    "dubai": ("United Arab Emirates", "AE"), "abu dhabi": ("United Arab Emirates", "AE"),
+    "singapore": ("Singapore", "SG"), "kuala lumpur": ("Malaysia", "MY"), "penang": ("Malaysia", "MY"),
+    "bali": ("Indonesia", "ID"), "jakarta": ("Indonesia", "ID"),
+    "hanoi": ("Vietnam", "VN"), "ho chi minh": ("Vietnam", "VN"), "da nang": ("Vietnam", "VN"),
+    "seoul": ("South Korea", "KR"), "busan": ("South Korea", "KR"),
+    "taipei": ("Taiwan", "TW"), "hong kong": ("China", "HK"), "shanghai": ("China", "CN"), "beijing": ("China", "CN"),
+    "delhi": ("India", "IN"), "mumbai": ("India", "IN"), "jaipur": ("India", "IN"), "goa": ("India", "IN"),
+    "bengaluru": ("India", "IN"), "bangalore": ("India", "IN"), "chennai": ("India", "IN"),
+    "kolkata": ("India", "IN"), "hyderabad": ("India", "IN"),
+    "sydney": ("Australia", "AU"), "melbourne": ("Australia", "AU"),
+    "cairo": ("Egypt", "EG"), "marrakech": ("Morocco", "MA"),
+    "cape town": ("South Africa", "ZA"), "nairobi": ("Kenya", "KE"),
+    "rio de janeiro": ("Brazil", "BR"), "buenos aires": ("Argentina", "AR"),
+    "cancun": ("Mexico", "MX"), "mexico city": ("Mexico", "MX"), "tulum": ("Mexico", "MX"),
+    "athens": ("Greece", "GR"), "santorini": ("Greece", "GR"), "mykonos": ("Greece", "GR"),
+    "dubrovnik": ("Croatia", "HR"), "split": ("Croatia", "HR"),
+    "reykjavik": ("Iceland", "IS"), "copenhagen": ("Denmark", "DK"), "stockholm": ("Sweden", "SE"),
+    "oslo": ("Norway", "NO"), "helsinki": ("Finland", "FI"),
 }
 
 _CITY_NAMES_SORTED = sorted(_CITY_COUNTRY.keys(), key=len, reverse=True)
@@ -136,6 +138,7 @@ class PreExtracted:
     raw_text: str
     city: Optional[str] = None
     country: Optional[str] = None
+    country_code: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     num_days: Optional[int] = None
@@ -198,13 +201,14 @@ def _extract_dates(text: str) -> tuple[Optional[date], Optional[date]]:
     return None, None
 
 
-def _extract_city(text: str) -> tuple[Optional[str], Optional[str]]:
-    """Match city from curated lookup; return (city_title, country) or (None, None)."""
+def _extract_city(text: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Match city from curated lookup; return (city_title, country, country_code) or (None, None, None)."""
     lower = text.lower()
     for city in _CITY_NAMES_SORTED:
         if re.search(r"\b" + re.escape(city) + r"\b", lower):
-            return city.title(), _CITY_COUNTRY[city]
-    return None, None
+            country, code = _CITY_COUNTRY[city]
+            return city.title(), country, code
+    return None, None, None
 
 
 def _extract_duration(text: str) -> Optional[int]:
@@ -284,7 +288,7 @@ def _build_residual(text: str, extracted: PreExtracted) -> str:
 
 def pre_extract(text: str) -> PreExtracted:
     """Run all extractors on *text* and return a PreExtracted bundle."""
-    city, country = _extract_city(text)
+    city, country, country_code = _extract_city(text)
     start_date, end_date = _extract_dates(text)
     num_days = _extract_duration(text)
     if start_date and end_date and num_days is None:
@@ -294,6 +298,7 @@ def pre_extract(text: str) -> PreExtracted:
         raw_text=text,
         city=city,
         country=country,
+        country_code=country_code,
         start_date=start_date,
         end_date=end_date,
         num_days=num_days,

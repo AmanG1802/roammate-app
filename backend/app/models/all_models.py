@@ -71,6 +71,13 @@ class Trip(Base):
     created_by_id = Column(Integer, ForeignKey("user.id"))
     group_id = Column(Integer, ForeignKey("group.id"), nullable=True, index=True)
 
+    # Destination metadata captured at plan-trip time, used to bias Maps
+    # enrichment for items the user adds later via Brainstorm chat.
+    destination_city = Column(String, nullable=True)
+    country_code = Column(String(2), nullable=True)
+    destination_lat = Column(Float, nullable=True)
+    destination_lng = Column(Float, nullable=True)
+
     members = relationship("TripMember", back_populates="trip")
     timeline_items = relationship("TimelineItem", back_populates="trip")
     idea_bin_items = relationship("IdeaBinItem", back_populates="trip")

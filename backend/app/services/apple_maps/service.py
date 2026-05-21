@@ -20,6 +20,7 @@ import httpx
 from app.services.apple_maps.auth import AppleMapsTokenProvider
 from app.services.google_maps.base import (
     BaseMapService,
+    LocationContext,
     RoutePoint,
     MAX_RETRIES,
     RETRY_BACKOFF_BASE,
@@ -58,12 +59,25 @@ class AppleMapsService(BaseMapService):
         query: str,
         *,
         client: Optional[httpx.AsyncClient] = None,
+        location: Optional[LocationContext] = None,
     ) -> Optional[dict[str, Any]]:
+        """Apple's /v1/search endpoint accepts ``searchLocation`` (lat,lng) and
+        ``searchRadius`` (metres) as soft biases — same shape we already use in
+        ``nearby_search`` here. Apple has no direct country_code filter on this
+        endpoint; the centroid+radius is the disambiguator. ``lang`` is honored
+        when set.
+        """
         if not query:
             return None
 
         headers = self._auth_headers()
-        params = {"q": query, "limit": "1"}
+        params: dict[str, Any] = {"q": query, "limit": "1"}
+        if location is not None:
+            if location.has_circle():
+                params["searchLocation"] = f"{location.lat},{location.lng}"
+                params["searchRadius"] = str(int(location.radius_m))
+            if location.language_code:
+                params["lang"] = location.language_code
 
         t0 = time.monotonic()
         try:

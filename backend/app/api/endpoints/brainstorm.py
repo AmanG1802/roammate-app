@@ -81,7 +81,7 @@ from app.services import notification_service
 from app.services import entitlements
 from app.services.llm.registry import get_brainstorm_client
 from app.services.google_maps import get_google_maps_service
-from app.services.google_maps.base import BaseMapService
+from app.services.google_maps.base import BaseMapService, LocationContext
 from app.services.llm.dedup import deduplicate
 from app.schemas.notification import NotificationType
 
@@ -287,8 +287,21 @@ async def extract(
             detail="AI extraction is temporarily unavailable. Please try again.",
         ) from exc
 
+    trip_row = (await db.execute(select(Trip).where(Trip.id == trip_id))).scalars().first()
+    bias: Optional[LocationContext] = None
+    if trip_row is not None and (
+        trip_row.destination_lat is not None
+        or trip_row.destination_lng is not None
+        or trip_row.country_code is not None
+    ):
+        bias = LocationContext(
+            lat=trip_row.destination_lat,
+            lng=trip_row.destination_lng,
+            country_code=trip_row.country_code,
+        )
+
     raw_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
-        raw_items, user_id=current_user.id, trip_id=trip_id,
+        raw_items, user_id=current_user.id, trip_id=trip_id, location=bias,
     )
 
     existing_stmt = select(BrainstormBinItem).where(

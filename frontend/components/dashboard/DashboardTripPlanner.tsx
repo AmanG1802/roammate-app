@@ -37,6 +37,10 @@ type Preview = {
   user_output?: string;
   /** IANA tz inferred from the destination on the backend. Null → fall back to browser tz. */
   timezone?: string | null;
+  destination_city?: string | null;
+  country_code?: string | null;
+  destination_lat?: number | null;
+  destination_lng?: number | null;
 };
 
 type BufferedMessage = { role: 'user' | 'assistant'; content: string };
@@ -117,6 +121,10 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
       const body: Record<string, any> = { name: preview.trip_name };
       if (preview.start_date) body.start_date = preview.start_date;
       body.timezone = preview.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (preview.destination_city) body.destination_city = preview.destination_city;
+      if (preview.country_code) body.country_code = preview.country_code;
+      if (preview.destination_lat != null) body.destination_lat = preview.destination_lat;
+      if (preview.destination_lng != null) body.destination_lng = preview.destination_lng;
 
       const tripRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
         method: 'POST',

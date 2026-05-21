@@ -65,4 +65,14 @@ class LLMPlanResponse(BaseModel):
         default=None,
         description="ISO YYYY-MM-DD trip start date extracted from the prompt, or null if not specified",
     )
+    destination_city: str | None = Field(
+        default=None,
+        description="Primary destination city for the trip, e.g. 'Bengaluru', 'Florence'. Used to bias Maps enrichment.",
+    )
+    country_code: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=2,
+        description="ISO-3166-1 alpha-2 country code for the destination, e.g. 'IN', 'IT'. Used to bias Maps enrichment.",
+    )
     map_output: list[LLMItem] = Field(default_factory=list)

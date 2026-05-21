@@ -20,7 +20,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.google_maps import cache as gmap_cache
-from app.services.google_maps.base import BaseMapService, RoutePoint
+from app.services.google_maps.base import BaseMapService, LocationContext, RoutePoint
 from app.services.google_maps.breaker import breaker
 
 log = logging.getLogger(__name__)
@@ -80,11 +80,13 @@ class MapServiceV2(BaseMapService):
         query: str,
         *,
         client: Optional[httpx.AsyncClient] = None,
+        location: Optional[LocationContext] = None,
     ) -> Optional[dict[str, Any]]:
         if not query:
             return None
 
-        cached, state = await gmap_cache.get_find_place(query)
+        bias_fp = location.fingerprint() if location is not None else None
+        cached, state = await gmap_cache.get_find_place(query, bias_fp)
         if cached is not gmap_cache.MISS:
             self._track(
                 op="place_details_v2",
@@ -110,7 +112,23 @@ class MapServiceV2(BaseMapService):
             "X-Goog-FieldMask": _SEARCH_TEXT_FIELD_MASK,
             "Content-Type": "application/json",
         }
-        json_body = {"textQuery": query}
+        json_body: dict[str, Any] = {"textQuery": query}
+        if location is not None:
+            if location.has_circle():
+                json_body["locationBias"] = {
+                    "circle": {
+                        "center": {
+                            "latitude": location.lat,
+                            "longitude": location.lng,
+                        },
+                        "radius": float(location.radius_m),
+                    }
+                }
+            if location.country_code:
+                # Places API v1 expects lowercase region codes.
+                json_body["regionCode"] = location.country_code.lower()
+            if location.language_code:
+                json_body["languageCode"] = location.language_code
         try:
             if client is not None:
                 data, attempts, http_status = await self._request_with_retry(
@@ -160,7 +178,7 @@ class MapServiceV2(BaseMapService):
         await breaker.record_success()
         places = data.get("places") or []
         candidate = places[0] if places else None
-        await gmap_cache.set_find_place(query, candidate)
+        await gmap_cache.set_find_place(query, candidate, bias_fp)
         self._track(
             op="place_details_v2",
             status="ok" if candidate else "zero_results",

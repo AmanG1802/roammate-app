@@ -275,12 +275,15 @@ class RoammateServiceV1(BaseLLMService):
             start_date = (
                 pre.start_date.isoformat() if pre.start_date else parsed.start_date
             )
+            country_code = (parsed.country_code or "").strip().upper() or None
             return {
                 "trip_name": parsed.trip_name,
                 "start_date": start_date,
                 "duration_days": parsed.duration_days,
                 "items": [llm_item_to_brainstorm(item) for item in parsed.map_output],
                 "user_output": parsed.user_output,
+                "destination_city": parsed.destination_city,
+                "country_code": country_code,
             }
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             log.warning("LLM plan_trip parse failed (%s)", exc)

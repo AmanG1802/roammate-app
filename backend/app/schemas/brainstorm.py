@@ -83,3 +83,9 @@ class PlanTripResponse(BaseModel):
     # when creating the trip. None if no item had usable (lat, lng) or the API
     # call failed.
     timezone: Optional[str] = None
+    # Destination metadata to persist on the Trip row so later Brainstorm
+    # extracts can bias Maps enrichment to the right city.
+    destination_city: Optional[str] = None
+    country_code: Optional[str] = None
+    destination_lat: Optional[float] = None
+    destination_lng: Optional[float] = None

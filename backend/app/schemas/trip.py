@@ -109,12 +109,26 @@ class TripBase(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     timezone: str = "UTC"
+    destination_city: Optional[str] = None
+    country_code: Optional[str] = None
+    destination_lat: Optional[float] = None
+    destination_lng: Optional[float] = None
 
     @model_validator(mode="after")
     def _check_dates(self):
         if self.start_date and self.end_date and self.end_date < self.start_date:
             raise ValueError("end_date must be on or after start_date")
         return self
+
+    @field_validator("country_code", mode="after")
+    @classmethod
+    def _upper_country(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip().upper()
+        if len(v) != 2:
+            raise ValueError("country_code must be ISO-3166-1 alpha-2 (2 letters)")
+        return v
 
 class TripCreate(TripBase):
     pass
