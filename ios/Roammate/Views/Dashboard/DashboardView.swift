@@ -4,6 +4,7 @@ struct DashboardView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var tripStore: TripStore
     @EnvironmentObject var notificationStore: NotificationStore
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
 
     @State private var showPlanTrip = false
@@ -52,7 +53,10 @@ struct DashboardView: View {
                 }
                 .background(Color.roammateBackground.ignoresSafeArea())
                 .refreshable {
-                    await tripStore.load()
+                    async let trips: Void = tripStore.load()
+                    async let notifs: Void = notificationStore.load()
+                    async let subs: Void = subscriptionStore.refresh()
+                    _ = await (trips, notifs, subs)
                     await loadActiveTripEvents()
                 }
 
