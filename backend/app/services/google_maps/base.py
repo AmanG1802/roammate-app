@@ -57,6 +57,39 @@ class EnrichmentSummary(BaseModel):
     reason: Optional[FailureReason] = None
 
 
+# ── Location-biasing context ────────────────────────────────────────────────
+
+DEFAULT_BIAS_RADIUS_M = 50_000  # ~city-scale soft bias
+
+
+@dataclass
+class LocationContext:
+    """Optional bias passed into ``find_place`` to disambiguate generic titles.
+
+    None / unset fields are simply not forwarded. When neither lat/lng nor
+    country_code is set the context is effectively a no-op and providers
+    should behave identically to the legacy un-biased call.
+    """
+
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    radius_m: int = DEFAULT_BIAS_RADIUS_M
+    country_code: Optional[str] = None  # ISO-3166-1 alpha-2, e.g. "IN"
+    language_code: Optional[str] = None  # ISO 639-1, e.g. "en"
+
+    def has_circle(self) -> bool:
+        return self.lat is not None and self.lng is not None
+
+    def fingerprint(self) -> Optional[str]:
+        """Cache-key-safe summary; returns None when there's no bias signal."""
+        if not self.has_circle() and not self.country_code:
+            return None
+        cc = (self.country_code or "-").upper()
+        if self.has_circle():
+            return f"{cc}|{self.lat:.2f},{self.lng:.2f}|{self.radius_m // 1000}"
+        return f"{cc}|-|-"
+
+
 # ── Shared dataclasses ─────────────────────────────────────────────────────
 
 @dataclass
@@ -228,8 +261,15 @@ class BaseMapService(abc.ABC):
         query: str,
         *,
         client: Optional[httpx.AsyncClient] = None,
+        location: Optional["LocationContext"] = None,
     ) -> Optional[dict[str, Any]]:
-        """Find a place by free-text query.  Returns raw API-shaped dict."""
+        """Find a place by free-text query.  Returns raw API-shaped dict.
+
+        ``location`` is an optional bias hint — concrete implementations
+        translate it to their native fields (Google v2 ``locationBias``,
+        Google v1 ``locationbias=circle:...``, Apple ``searchLocation``).
+        When omitted the call is identical to today's un-biased behaviour.
+        """
         ...
 
     @abc.abstractmethod
@@ -309,6 +349,7 @@ class BaseMapService(abc.ABC):
         item: dict[str, Any],
         *,
         client: Optional[httpx.AsyncClient] = None,
+        location: Optional[LocationContext] = None,
     ) -> dict[str, Any]:
         """Idempotent: items that already carry a ``place_id`` are returned as-is."""
         if item.get("place_id"):
@@ -317,7 +358,7 @@ class BaseMapService(abc.ABC):
         if not title:
             return item
         try:
-            candidate = await self.find_place(title, client=client)
+            candidate = await self.find_place(title, client=client, location=location)
             if not candidate:
                 return item
             pid = self._extract_place_id(candidate)
@@ -349,6 +390,7 @@ class BaseMapService(abc.ABC):
         *,
         user_id: Optional[int] = None,
         trip_id: Optional[int] = None,
+        location: Optional[LocationContext] = None,
     ) -> list[dict[str, Any]]:
         """Parallel hydration with bounded concurrency."""
         if not items:
@@ -366,7 +408,7 @@ class BaseMapService(abc.ABC):
 
             async def _runner(it: dict[str, Any]) -> dict[str, Any]:
                 async with sem:
-                    return await self.enrich_item(it, client=http_client)
+                    return await self.enrich_item(it, client=http_client, location=location)
 
             results = await asyncio.gather(
                 *[_runner(it) for it in items], return_exceptions=False
@@ -393,6 +435,7 @@ class BaseMapService(abc.ABC):
         *,
         user_id: Optional[int] = None,
         trip_id: Optional[int] = None,
+        location: Optional[LocationContext] = None,
     ) -> tuple[list[dict[str, Any]], EnrichmentSummary]:
         """Like ``enrich_items`` but returns an ``EnrichmentSummary`` alongside."""
         total = len(items)
@@ -415,7 +458,7 @@ class BaseMapService(abc.ABC):
                 reason="breaker_open",
             )
 
-        results = await self.enrich_items(items, user_id=user_id, trip_id=trip_id)
+        results = await self.enrich_items(items, user_id=user_id, trip_id=trip_id, location=location)
         enriched = sum(1 for r in results if r.get("place_id"))
         skipped = total - enriched
 

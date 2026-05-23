@@ -143,6 +143,64 @@ async def test_extract_non_member_403(
     assert resp.status_code == 403
 
 
+async def test_extract_returns_empty_when_no_new_messages(
+    client: AsyncClient, auth_headers
+):
+    """Re-extracting after every chat turn has been processed yields no items."""
+    trip = await create_trip(client, auth_headers)
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/chat",
+        json={"message": "Suggest places"},
+        headers=auth_headers,
+    )
+    first = await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/extract",
+        headers=auth_headers,
+    )
+    assert first.status_code == 200
+    assert len(first.json()["items"]) > 0
+
+    second = await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/extract",
+        headers=auth_headers,
+    )
+    assert second.status_code == 200
+    assert second.json()["items"] == []
+
+
+async def test_extract_after_promote_does_not_recreate_items(
+    client: AsyncClient, auth_headers
+):
+    """Promoting all items out of the bin must NOT cause the next extract
+    (with no new chat turns) to re-mine the same chat history."""
+    trip = await create_trip(client, auth_headers)
+    await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/chat",
+        json={"message": "Suggest places"},
+        headers=auth_headers,
+    )
+    first = await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/extract",
+        headers=auth_headers,
+    )
+    item_ids = [i["id"] for i in first.json()["items"]]
+    assert item_ids
+
+    promote = await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/promote",
+        json={"item_ids": item_ids},
+        headers=auth_headers,
+    )
+    assert promote.status_code == 200
+
+    again = await client.post(
+        f"/api/trips/{trip['id']}/brainstorm/extract",
+        headers=auth_headers,
+    )
+    assert again.status_code == 200
+    assert again.json()["items"] == []
+
+
 # ── Bulk insert ───────────────────────────────────────────────────────────────
 
 async def test_bulk_insert_seeds_bin(client: AsyncClient, auth_headers):

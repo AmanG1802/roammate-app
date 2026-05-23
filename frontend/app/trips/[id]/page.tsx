@@ -72,6 +72,26 @@ const AVATAR_PALETTE = [
   '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#10b981',
 ];
 
+const TIMEZONE_FALLBACK = [
+  'UTC',
+  'America/Los_Angeles',
+  'America/New_York',
+  'Europe/London',
+  'Europe/Berlin',
+  'Asia/Kolkata',
+  'Asia/Tokyo',
+  'Asia/Singapore',
+  'Australia/Sydney',
+];
+
+const TIMEZONE_OPTIONS: string[] = (() => {
+  try {
+    const fn = (Intl as any)?.supportedValuesOf;
+    if (typeof fn === 'function') return fn.call(Intl, 'timeZone');
+  } catch { /* ignore */ }
+  return TIMEZONE_FALLBACK;
+})();
+
 // ── Trip Hub ──────────────────────────────────────────────────────────────────
 
 function TripHubContent() {
@@ -101,6 +121,9 @@ function TripHubContent() {
 
   const [editingDate, setEditingDate] = useState(false);
   const [dateValue, setDateValue] = useState('');
+
+  const [editingTimezone, setEditingTimezone] = useState(false);
+  const [tzValue, setTzValue] = useState('');
 
   const isAdmin = currentUser
     ? members.some((m) => m.user_id === currentUser.id && m.role === 'admin')
@@ -183,6 +206,29 @@ function TripHubContent() {
     }
   };
 
+  // ── Save timezone ──────────────────────────────────────────────────────────
+  const handleSaveTimezone = async () => {
+    if (!tzValue) return;
+    const token = getToken();
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ timezone: tzValue }),
+        }
+      );
+      if (res.ok) {
+        const updated = await res.json();
+        setTrip(updated);
+      }
+    } catch {
+      // silently fail
+    }
+    setEditingTimezone(false);
+  };
+
   // ── Save start date ────────────────────────────────────────────────────────
   const handleSaveDate = async () => {
     if (!dateValue) return;
@@ -247,6 +293,7 @@ function TripHubContent() {
             <div className="flex items-center gap-3 flex-wrap">
               <div className="h-11 w-48 rounded-2xl bg-white/5 animate-pulse" />
               <div className="h-11 w-24 rounded-2xl bg-white/5 animate-pulse" />
+              <div className="h-11 w-32 rounded-2xl bg-white/5 animate-pulse" />
             </div>
           </div>
           <div className="w-full lg:w-[360px] xl:w-[400px] flex flex-col gap-5 shrink-0">
@@ -438,6 +485,54 @@ function TripHubContent() {
               <div className="hub-date-pill flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/8 rounded-2xl backdrop-blur-sm">
                 <Clock className="w-3.5 h-3.5 text-violet-400 shrink-0" />
                 <span className="text-slate-300 font-bold text-sm">{duration}</span>
+              </div>
+            )}
+
+            {/* Timezone pill */}
+            {isAdmin && editingTimezone ? (
+              <div className="hub-date-pill flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-indigo-500/40 rounded-2xl backdrop-blur-sm">
+                <Globe className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <select
+                  autoFocus
+                  value={tzValue}
+                  onChange={(e) => setTzValue(e.target.value)}
+                  className="bg-transparent text-white font-bold text-sm outline-none border-none max-w-[180px]"
+                >
+                  {TIMEZONE_OPTIONS.map((tz) => (
+                    <option key={tz} value={tz} className="bg-slate-900 text-white">
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleSaveTimezone}
+                  className="p-1 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition-colors"
+                >
+                  <Check className="w-3 h-3 text-white" />
+                </button>
+                <button
+                  onClick={() => setEditingTimezone(false)}
+                  className="p-1 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="hub-date-pill flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/8 rounded-2xl backdrop-blur-sm group">
+                <Globe className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span className="text-slate-300 font-bold text-sm">{trip?.timezone || 'UTC'}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setTzValue(trip?.timezone || 'UTC');
+                      setEditingTimezone(true);
+                    }}
+                    className="p-1 text-white/30 hover:text-indigo-400 transition-colors"
+                    title="Edit timezone"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             )}
           </motion.div>

@@ -12,6 +12,8 @@ from app.schemas.brainstorm import PlanTripRequest, PlanTripResponse, Brainstorm
 from app.services import entitlements
 from app.services.google_maps import get_google_maps_service
 from app.services.google_maps.base import BaseMapService
+from app.services.google_maps.geocoding import geocode_city
+from app.services.llm.pre_processor import pre_extract
 from app.services.llm.registry import get_dashboard_client
 
 log = logging.getLogger(__name__)
@@ -63,8 +65,25 @@ async def plan_trip(
     await entitlements.bump_brainstorm_counter(db, current_user)
     await db.commit()
 
+    # Destination + country code drive Maps location-biasing so generic
+    # titles like "Commercial Street" resolve to the right city. Prefer the
+    # LLM-returned values (it has world knowledge + full prompt context);
+    # fall back to the regex/keyword pre-extractor.
+    destination_city = result.get("destination_city")
+    country_code = result.get("country_code")
+    if not destination_city or not country_code:
+        pre = pre_extract(body.prompt)
+        if not destination_city:
+            destination_city = pre.city
+        if not country_code:
+            country_code = pre.country_code
+
+    bias = await geocode_city(
+        maps_svc, destination_city, country_code, user_id=current_user.id,
+    )
+
     enriched_items, enrichment_summary = await maps_svc.enrich_items_with_summary(
-        result["items"], user_id=current_user.id,
+        result["items"], user_id=current_user.id, location=bias,
     )
     from app.schemas.enrichment import EnrichmentStatus
     enr = None if enrichment_summary.status == "full" else EnrichmentStatus(
@@ -106,4 +125,8 @@ async def plan_trip(
         enrichment=enr,
         user_output=result.get("user_output", ""),
         timezone=inferred_tz,
+        destination_city=destination_city,
+        country_code=country_code.upper() if country_code else None,
+        destination_lat=bias.lat if bias and bias.has_circle() else None,
+        destination_lng=bias.lng if bias and bias.has_circle() else None,
     )

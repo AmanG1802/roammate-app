@@ -27,6 +27,7 @@ struct TripSubPagesHost: View {
     @EnvironmentObject var detailStore: TripDetailStore
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
     @EnvironmentObject var tripStore: TripStore
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @StateObject private var brainstormStore: BrainstormStore
 
     @State private var currentPage: SubPage
@@ -102,7 +103,7 @@ struct TripSubPagesHost: View {
     }
 
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 8) {
             Button {
                 HapticManager.light()
                 popToRoot()
@@ -112,14 +113,18 @@ struct TripSubPagesHost: View {
                     .foregroundStyle(Color.roammateInk)
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
             Text(trip.name)
                 .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(Color.roammateInk)
                 .lineLimit(1)
 
-            Spacer()
+            Spacer(minLength: 4)
+
+            if currentPage == .brainstorm {
+                BrainstormQuotaPill()
+            }
 
             Button {
                 HapticManager.light()

@@ -96,12 +96,14 @@ export function legsKey(tripId: string, dayDate: string): string {
 
 interface TripState {
   activeTripId: string | null;
+  activeTripTimezone: string | null;
   ideas: Idea[];
   events: Event[];
   tripDays: TripDay[];
   collaborators: { id: string; name: string; color: string; activeEventId?: string }[];
 
   setActiveTrip: (id: string) => void;
+  setActiveTripTimezone: (tz: string | null) => void;
   setIdeas: (ideas: Idea[]) => void;
   setEvents: (events: Event[]) => void;
   /** Set events WITHOUT sorting — used after manual drag-to-reorder. */
@@ -213,6 +215,7 @@ function sortEvents(events: Event[]): Event[] {
 
 export const useTripStore = create<TripState>((set, get) => ({
   activeTripId: null,
+  activeTripTimezone: null,
   ideas: [],
   events: [],
   tripDays: [],
@@ -223,7 +226,8 @@ export const useTripStore = create<TripState>((set, get) => ({
     { id: '2', name: 'Sarah', color: '#ec4899' },
   ],
 
-  setActiveTrip: (id) => set({ activeTripId: id, events: [], ideas: [], tripDays: [] }),
+  setActiveTrip: (id) => set({ activeTripId: id, activeTripTimezone: null, events: [], ideas: [], tripDays: [] }),
+  setActiveTripTimezone: (tz) => set({ activeTripTimezone: tz }),
   setIdeas: (ideas) => set({ ideas }),
   setEvents: (events) => set({ events: sortEvents(events) }),
   setEventsRaw: (events) => set({ events }),
@@ -266,8 +270,8 @@ export const useTripStore = create<TripState>((set, get) => ({
         trip_id: '0',
         title: idea.title,
         day_date: dayDate ?? null,
-        start_time: startTime ?? null,
-        end_time: null,
+        start_time: startTime ?? idea.start_time ?? null,
+        end_time: idea.end_time ?? null,
         lat: idea.lat,
         lng: idea.lng,
         sort_order: maxOrder + 1,
@@ -289,8 +293,8 @@ export const useTripStore = create<TripState>((set, get) => ({
           lat: idea.lat,
           lng: idea.lng,
           day_date: dayDate ?? null,
-          start_time: startTime ?? null,
-          end_time: null,
+          start_time: startTime ?? idea.start_time ?? null,
+          end_time: idea.end_time ?? null,
           sort_order: maxOrder + 1,
           added_by: idea.added_by ?? null,
           source_idea_id: !isNaN(numId) ? numId : null,

@@ -74,6 +74,10 @@ async def create_event(
             for f in PLACE_FIELDS:
                 if getattr(event, f) is None:
                     setattr(event, f, getattr(src_idea, f, None))
+            if event.start_time is None:
+                event.start_time = src_idea.start_time
+            if event.end_time is None:
+                event.end_time = src_idea.end_time
             if not event.location_name:
                 event.location_name = src_idea.address or event.location_name
 

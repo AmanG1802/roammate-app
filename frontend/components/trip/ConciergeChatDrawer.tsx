@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useTripStore } from '@/lib/store';
 import { getToken } from '@/lib/auth';
+import { formatTimeOfDay, timeOfDayFromDate } from '@/lib/time';
 import clsx from 'clsx';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 
@@ -197,7 +198,7 @@ export default function ConciergeChatDrawer({
   const [selectedPlace, setSelectedPlace] = useState<PlaceCard | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { activeTripId, loadEvents } = useTripStore();
+  const { activeTripId, activeTripTimezone, loadEvents } = useTripStore();
   const processedPreActionRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const nearbyAbortRef = useRef<AbortController | null>(null);
@@ -471,8 +472,10 @@ export default function ConciergeChatDrawer({
   const handlePlaceSelect = (place: PlaceCard) => {
     setSelectedPlace(place);
     const travelMin = place.travel_time_s ? Math.ceil(place.travel_time_s / 60) : 15;
-    const startTime = new Date(Date.now() + travelMin * 60_000);
-    const timeStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const tripTz = activeTripTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const futureInstant = new Date(Date.now() + travelMin * 60_000);
+    const startTod = timeOfDayFromDate(futureInstant, tripTz);
+    const timeStr = formatTimeOfDay(startTod);
 
     const cardId = `place-confirm-${Date.now()}`;
     addMessage({
@@ -492,7 +495,7 @@ export default function ConciergeChatDrawer({
         price_level: place.price_level,
         types: place.types,
         category: place.category,
-        start_time: startTime.toISOString(),
+        start_time: startTod,
       },
       requires_confirmation: true,
       status: 'pending',
@@ -838,7 +841,7 @@ function MessageBubble({
                   </p>
                   {se.event.start_time && (
                     <p className="text-xs text-slate-400">
-                      {new Date(se.event.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatTimeOfDay(se.event.start_time)}
                     </p>
                   )}
                 </div>

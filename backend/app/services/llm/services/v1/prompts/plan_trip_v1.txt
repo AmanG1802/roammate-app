@@ -6,14 +6,22 @@ Pre-extracted context:
 {context_block}
 
 Output envelope:
-- Return ONLY a JSON object with exactly five top-level keys:
+- Return ONLY a JSON object with exactly seven top-level keys:
     {
       "user_output": "<user-facing markdown summary of the trip>",
       "trip_name": "<catchy 3-5 word name>",
       "duration_days": <integer >= 1>,
       "start_date": "<YYYY-MM-DD or null>",
+      "destination_city": "<primary city, e.g. 'Bengaluru', 'Florence'>",
+      "country_code": "<ISO-3166-1 alpha-2, e.g. 'IN', 'IT', 'US'>",
       "map_output": [ <items...> ]
     }
+- "destination_city" is the single main city this trip is centered on.
+  - Pick the city you generated items for. For multi-city trips, pick the city with the most items.
+  - For ambiguous names always include enough context that a human reader knows which city it is (e.g. "Florence" for Italy, "Florence, SC" if SC was intended).
+  - Required — never null.
+- "country_code" is the ISO-3166-1 alpha-2 code for that city's country (two uppercase letters).
+  - Required — never null.
 - "start_date" is the trip's first day. Identify it from the user prompt:
   - Absolute dates ("June 10", "2026-07-03", "15 March 2026") → return as YYYY-MM-DD.
   - Relative phrases ("next Friday", "in two weeks", "this weekend", "tomorrow") → resolve against Today's date above and return the resolved YYYY-MM-DD.

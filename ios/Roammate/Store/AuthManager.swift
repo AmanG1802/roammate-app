@@ -141,6 +141,9 @@ final class AuthManager: NSObject, ObservableObject {
 
     func logout() {
         Task { try? await AuthService.logout() }
+        if let uid = currentUser?.id {
+            PlusOnboardingFlag.clear(userId: uid)
+        }
         KeychainHelper.clearAll()
         DiskCache.shared.clearAll()
         currentUser = nil

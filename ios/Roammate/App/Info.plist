@@ -16,26 +16,24 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>GIDClientID</key>
+	<string>376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.googleusercontent.apps.376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh</string>
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>GIDClientID</key>
-	<string>376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

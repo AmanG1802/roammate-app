@@ -99,6 +99,10 @@ async def create_trip(
         start_date=trip_in.start_date,
         end_date=trip_in.end_date,
         timezone=trip_in.timezone,
+        destination_city=trip_in.destination_city,
+        country_code=trip_in.country_code,
+        destination_lat=trip_in.destination_lat,
+        destination_lng=trip_in.destination_lng,
         created_by_id=current_user.id
     )
     db.add(trip)

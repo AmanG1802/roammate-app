@@ -30,6 +30,44 @@ struct TripLandingView: View {
         return f.string(from: dateValue)
     }
 
+    private var dateRangeText: String {
+        let short = DateFormatter()
+        short.dateFormat = "MMM d"
+        let long = DateFormatter()
+        long.dateFormat = "MMM d, yyyy"
+        if let end = store.trip?.endDate ?? trip.endDate {
+            return "\(short.string(from: dateValue)) → \(long.string(from: end))"
+        }
+        return long.string(from: dateValue)
+    }
+
+    private var durationText: String? {
+        guard let end = store.trip?.endDate ?? trip.endDate else { return nil }
+        let days = Calendar.current.dateComponents([.day], from: dateValue, to: end).day ?? 0
+        let total = max(days + 1, 1)
+        return "\(total) day\(total == 1 ? "" : "s")"
+    }
+
+    private var titleGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.roammateIndigo, Color.roammateViolet],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private var styledTitle: Text {
+        let words = trip.name.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard let last = words.last else {
+            return Text(trip.name).foregroundStyle(titleGradient)
+        }
+        if words.count == 1 {
+            return Text(last).foregroundStyle(titleGradient)
+        }
+        let leading = words.dropLast().joined(separator: " ") + " "
+        return Text(leading).foregroundStyle(.white) + Text(last).foregroundStyle(titleGradient)
+    }
+
     private var canInvite: Bool {
         store.members.first(where: { $0.userId == currentUserId })?.role == "admin"
     }
@@ -62,6 +100,26 @@ struct TripLandingView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10, weight: .black))
+                    Text("TRIP OVERVIEW")
+                        .font(.system(size: 10, weight: .black))
+                        .tracking(3)
+                }
+                .foregroundStyle(Color.roammateIndigo)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule().fill(Color.roammateIndigo.opacity(0.10))
+                )
+                .overlay(
+                    Capsule().stroke(Color.roammateIndigo.opacity(0.25), lineWidth: 1)
+                )
+            }
+        }
         .navigationDestination(item: $subPageDestination) { page in
             TripSubPagesHost(trip: trip, initialPage: page, popToRoot: popToRoot)
                 .environmentObject(store)
@@ -109,100 +167,25 @@ struct TripLandingView: View {
     // MARK: - Hero Section
 
     private var heroSection: some View {
-        VStack(spacing: RoammateSpacing.md) {
-            Spacer().frame(height: RoammateSpacing.xl)
+        VStack(alignment: .leading, spacing: RoammateSpacing.md) {
+            // Title
+            styledTitle
+                .font(.system(size: 56, weight: .black, design: .default))
+                .tracking(-2)
+                .lineSpacing(-8)
+                .multilineTextAlignment(.leading)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(trip.name)
-                .font(.system(size: 44, design: .serif).weight(.black))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.white, Color.roammateViolet.opacity(0.85), .white],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                )
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, RoammateSpacing.lg)
-
-            // Start date with pencil edit
-            HStack(spacing: 8) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
-
-                if editingDate {
-                    DatePicker("", selection: $dateValue, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                        .colorScheme(.dark)
-
-                    Button {
-                        Task { await saveDate() }
-                        editingDate = false
-                    } label: {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(Color.roammateEmerald)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Text(startDateText)
-                        .font(.system(.title3, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-
-                    if canInvite {
-                        Button {
-                            editingDate = true
-                        } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.6))
-                        }
-                        .buttonStyle(.plain)
+            // Date + duration + timezone pills
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    datePill
+                    if let duration = durationText, !editingDate {
+                        durationPill(duration)
                     }
                 }
-            }
-
-            // Timezone row (display + admin-editable)
-            HStack(spacing: 8) {
-                Image(systemName: "globe")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
-
-                if editingTimezone {
-                    Picker("Timezone", selection: $timezoneValue) {
-                        ForEach(Self.knownTimezones, id: \.self) { tz in
-                            Text(tz).tag(tz)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(.white)
-                    .colorScheme(.dark)
-
-                    Button {
-                        Task { await saveTimezone() }
-                        editingTimezone = false
-                    } label: {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(Color.roammateEmerald)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Text(timezoneValue)
-                        .font(.system(.subheadline, design: .rounded, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.8))
-
-                    if canInvite {
-                        Button {
-                            editingTimezone = true
-                        } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.6))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                timezonePill
             }
 
             // Travellers in rounded rectangle
@@ -227,9 +210,111 @@ struct TripLandingView: View {
                 )
             }
 
-            Spacer().frame(height: RoammateSpacing.md)
+            Spacer().frame(height: RoammateSpacing.sm)
         }
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, RoammateSpacing.lg)
+        .padding(.top, RoammateSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Pills
+
+    private var datePill: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.roammateIndigo)
+
+            if editingDate {
+                DatePicker("", selection: $dateValue, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .colorScheme(.dark)
+
+                Button {
+                    Task { await saveDate() }
+                    editingDate = false
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.roammateEmerald)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(dateRangeText)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+
+                if canInvite {
+                    Button {
+                        editingDate = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .pillBackground()
+    }
+
+    private func durationPill(_ text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.roammateViolet)
+            Text(text)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white.opacity(0.85))
+        }
+        .pillBackground()
+    }
+
+    private var timezonePill: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "globe")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.roammateSky)
+
+            if editingTimezone {
+                Picker("Timezone", selection: $timezoneValue) {
+                    ForEach(Self.knownTimezones, id: \.self) { tz in
+                        Text(tz).tag(tz)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.white)
+                .colorScheme(.dark)
+
+                Button {
+                    Task { await saveTimezone() }
+                    editingTimezone = false
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.roammateEmerald)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(timezoneValue)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.85))
+
+                if canInvite {
+                    Button {
+                        editingTimezone = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .pillBackground()
     }
 
     // MARK: - Navigation Buttons
@@ -403,5 +488,19 @@ struct TripLandingView: View {
         HapticManager.success()
         inviteEmail = ""
         withAnimation { showInvite = false }
+    }
+}
+
+private extension View {
+    func pillBackground() -> some View {
+        self
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                Capsule(style: .continuous).fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                Capsule(style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
     }
 }

@@ -19,6 +19,7 @@ import httpx
 from app.core.config import settings
 from app.services.google_maps.base import (
     BaseMapService,
+    LocationContext,
     RoutePoint,
     encode_polyline,
 )
@@ -59,10 +60,17 @@ class MockMapService(BaseMapService):
         query: str,
         *,
         client: Optional[httpx.AsyncClient] = None,
+        location: Optional[LocationContext] = None,
     ) -> Optional[dict[str, Any]]:
         del client
         await asyncio.sleep(_MOCK_NETWORK_DELAY_S)
         d_lat, d_lng = _stable_offset(query)
+        # When a bias is provided, anchor near its centroid so mock-mode
+        # tests can verify that the same title resolves to different places
+        # under different LocationContexts. Without bias, fall back to the
+        # legacy Bangkok anchor.
+        anchor_lat = location.lat if location and location.has_circle() else self._ANCHOR_LAT
+        anchor_lng = location.lng if location and location.has_circle() else self._ANCHOR_LNG
         return {
             "id": f"mock_id_{_slug(query)}",
             "displayName": {
@@ -70,8 +78,8 @@ class MockMapService(BaseMapService):
                 "languageCode": "en",
             },
             "location": {
-                "latitude": self._ANCHOR_LAT + d_lat,
-                "longitude": self._ANCHOR_LNG + d_lng,
+                "latitude": anchor_lat + d_lat,
+                "longitude": anchor_lng + d_lng,
             },
             "formattedAddress": f"{query.title()}, Mock City",
             "types": ["point_of_interest", "establishment"],

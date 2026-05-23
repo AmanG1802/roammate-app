@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
-import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
+import { isNeedsPlus, useEntitlement, type Entitlement } from '@/hooks/useEntitlement';
+import { clearPlusOnboardingSeen, hasSeenPlusOnboarding, markPlusOnboardingSeen } from '@/lib/plusOnboarding';
 import { FreeUsageStrip, OneTimeExpiryBanner, PastDueBanner, ReEngagementBanner } from '@/components/billing/PlusBanner';
 import { useRouter } from 'next/navigation';
 import NotificationBell, { type NotificationBellHandle } from '@/components/layout/NotificationBell';
@@ -30,7 +31,7 @@ export default function DashboardPage() {
   const { user } = useAuth(true);
   const router = useRouter();
   const toast = useToast();
-  const { requirePlus, refresh: refreshEntitlement } = useEntitlement();
+  const { requirePlus, refresh: refreshEntitlement, entitlement, isLoading: entitlementLoading } = useEntitlement();
   const [tripsError, setTripsError] = useState(false);
   const [section, setSection] = useState<Section>('dashboard');
   const [trips, setTrips] = useState<any[]>([]);
@@ -96,17 +97,9 @@ export default function DashboardPage() {
     }
   };
 
-  const maybeShowPlusOnboarding = () => {
-    if (!user) return;
-    const key = `plus_onboarding_shown_${(user as any).id}`;
-    if (localStorage.getItem(key)) return;
-    localStorage.setItem(key, '1');
-    setShowPlusOnboarding(true);
-  };
-
   const handlePersonaComplete = async (personas: string[]) => {
     const ok = await savePersonas(personas);
-    if (ok) { setShowPersonaModal(false); maybeShowPlusOnboarding(); }
+    if (ok) setShowPersonaModal(false);
   };
 
   const handlePersonaSkip = async () => {
@@ -115,9 +108,31 @@ export default function DashboardPage() {
       setShowPersonaModal(false);
       setShowSkipToast(true);
       setTimeout(() => setShowSkipToast(false), 4000);
-      maybeShowPlusOnboarding();
     }
   };
+
+  // Plus onboarding — shows once per device for free users, independent of the
+  // persona flow. Resets when a Plus subscriber downgrades back to free.
+  const prevTierRef = useRef<Entitlement['tier'] | null>(null);
+  useEffect(() => {
+    if (!user || entitlementLoading) return;
+    const userId = (user as any).id;
+    // Detect plus → free downgrade and clear the seen flag so the pitch can
+    // re-appear on the next free visit.
+    const prev = prevTierRef.current;
+    if (prev === 'plus' && entitlement.tier === 'free') {
+      clearPlusOnboardingSeen(userId);
+    }
+    prevTierRef.current = entitlement.tier;
+
+    if (entitlement.tier !== 'free') return;
+    if (hasSeenPlusOnboarding(userId)) return;
+    // Defer briefly so the persona modal (if it's also opening this session)
+    // doesn't get stacked underneath.
+    if (showPersonaModal) return;
+    markPlusOnboardingSeen(userId);
+    setShowPlusOnboarding(true);
+  }, [user, entitlement.tier, entitlementLoading, showPersonaModal]);
 
   const openCreateModal = () => {
     setNewTripName('');
@@ -395,7 +410,7 @@ export default function DashboardPage() {
           </nav>
 
           {/* Soft persona prompt (shown when no personas set and modal is not open) */}
-          {((user as any)?.personas !== null && (user as any)?.personas?.length === 0) && !showPersonaModal && (
+          {(Array.isArray((user as any)?.personas) && (user as any).personas.length === 0) && !showPersonaModal && (
             <PersonaSoftPrompt />
           )}
 
