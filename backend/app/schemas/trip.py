@@ -149,6 +149,8 @@ class Trip(TripBase):
     id: int
     created_at: datetime
     created_by_id: int
+    is_tutorial: bool = False
+    is_tutorial_completed: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -163,6 +165,8 @@ class TripWithRole(BaseModel):
     created_at: datetime
     created_by_id: int
     my_role: str
+    is_tutorial: bool = False
+    is_tutorial_completed: bool = False
 
     model_config = {"from_attributes": True}
 

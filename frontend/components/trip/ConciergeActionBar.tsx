@@ -121,7 +121,7 @@ export default function ConciergeActionBar() {
           {rippleToast}
         </div>
       )}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 p-2 bg-white/85 backdrop-blur-md border border-slate-200 rounded-2xl shadow-2xl">
+      <div data-tutorial="concierge-button" className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 p-2 bg-white/85 backdrop-blur-md border border-slate-200 rounded-2xl shadow-2xl">
         {/* Running Late */}
         <div className="relative">
           <button

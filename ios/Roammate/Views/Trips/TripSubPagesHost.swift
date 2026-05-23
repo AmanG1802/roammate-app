@@ -28,6 +28,7 @@ struct TripSubPagesHost: View {
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
     @EnvironmentObject var tripStore: TripStore
     @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var tutorial: TutorialStore
     @StateObject private var brainstormStore: BrainstormStore
 
     @State private var currentPage: SubPage
@@ -78,7 +79,9 @@ struct TripSubPagesHost: View {
         .navigationBarHidden(true)
         .onAppear {
             tabBarVisibility.isVisible = false
+            applyTutorialPage()
         }
+        .onChange(of: tutorial.currentStep) { _, _ in applyTutorialPage() }
         .alert("Delete trip?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 Task {
@@ -99,6 +102,16 @@ struct TripSubPagesHost: View {
             brainstormStore.onIdeasTimeUpdated = { [weak detailStore] in
                 await detailStore?.reloadIdeas()
             }
+        }
+    }
+
+    /// Tutorial: switch the visible sub-page to match the current step (the pane
+    /// slider within each page is driven by Plan/BrainstormPaneView).
+    private func applyTutorialPage() {
+        guard tutorial.isActive else { return }
+        let loc = TutorialScript.location(for: tutorial.currentStep)
+        if let sp = loc.subPage, currentPage != sp {
+            withAnimation(.easeInOut(duration: 0.3)) { currentPage = sp }
         }
     }
 
@@ -248,7 +261,7 @@ struct TripSubPagesHost: View {
                 PeoplePaneView()
             }
         }
-        .transition(.opacity.animation(.easeInOut(duration: 0.18)))
+        .transition(.opacity.animation(.easeInOut(duration: 0.3)))
         .id(currentPage)
         .environmentObject(detailStore)
         .environmentObject(brainstormStore)

@@ -36,6 +36,55 @@ final class PlanTripStore: ObservableObject {
         messages = []
     }
 
+    /// Tutorial: simulate a full plan turn — typewriter the prompt, sit in the
+    /// planning state, then drop a canned NYC preview — without touching the
+    /// LLM. Mirrors the web `runTutorialPlanDemo`.
+    func runTutorialDemo() async {
+        reset()
+        let sample = "A 3-day New York City trip with iconic landmarks, food, and parks"
+        for ch in sample {
+            prompt.append(ch)
+            try? await Task.sleep(nanoseconds: 18_000_000)
+        }
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        messages.append(PlanTripMessage(role: "user", text: sample))
+        prompt = ""
+        phase = .planning
+        try? await Task.sleep(nanoseconds: 2_600_000_000)
+        let canned = Self.tutorialPreview
+        preview = canned
+        if let out = canned.userOutput, !out.isEmpty {
+            messages.append(PlanTripMessage(role: "assistant", text: out))
+        }
+        phase = .previewing
+        HapticManager.success()
+    }
+
+    /// Canned NYC preview shown during the tutorial (keyed to the seeded trip).
+    static let tutorialPreview: PlanTripPreview = {
+        func item(_ title: String, _ category: String, _ time: String) -> BrainstormItem {
+            BrainstormItem(
+                title: title, description: nil, category: category, placeId: nil,
+                lat: nil, lng: nil, address: nil, photoUrl: nil, rating: nil,
+                priceLevel: nil, types: nil, timeCategory: time, addedBy: nil
+            )
+        }
+        return PlanTripPreview(
+            tripName: "Welcome to Roammate — New York",
+            startDate: nil,
+            durationDays: 3,
+            items: [
+                item("Times Square", "landmark", "morning"),
+                item("Museum of Modern Art", "museum", "afternoon"),
+                item("Central Park Picnic", "park", "midday"),
+                item("Brooklyn Bridge Sunset Walk", "landmark", "evening"),
+                item("Joe's Pizza", "restaurant", "midday"),
+            ],
+            userOutput: "Three days in NYC: anchor Day 1 in Midtown (Times Square + MoMA), Day 2 in Central Park + Brooklyn Bridge at sunset, Day 3 around the Village with a Joe's Pizza stop.",
+            timezone: "America/New_York"
+        )
+    }()
+
     func plan() async {
         let p = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !p.isEmpty else { return }

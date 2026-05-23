@@ -23,17 +23,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>GIDClientID</key>
-	<string>376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh</string>
-			</array>
-		</dict>
-	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

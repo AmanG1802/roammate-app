@@ -224,6 +224,19 @@ function TripPlannerPageContent() {
     refreshTripData();
   }, [tripId, setActiveTrip, refreshTripData]);
 
+  // Keep `mode` in sync with the URL. `mode` is seeded once from the query
+  // param at mount; without this, an external navigation (e.g. the tutorial
+  // driver pushing ?mode=concierge while already on /trips) updates the URL
+  // but leaves the pane unchanged until a hard reload.
+  useEffect(() => {
+    const resolved: Mode =
+      rawMode === 'concierge' ? 'concierge'
+      : rawMode === 'people' ? 'people'
+      : rawMode === 'brainstorm' ? 'brainstorm'
+      : 'plan';
+    setMode((prev) => (prev === resolved ? prev : resolved));
+  }, [rawMode]);
+
   // Re-fetch when user navigates back to this tab/page (tab switch, bfcache restore).
   // Skip if a mutation (delete day, etc.) is in progress to avoid stale data races.
   useEffect(() => {

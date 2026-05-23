@@ -192,7 +192,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div data-tutorial="brainstorm-bin-list" className="flex-1 overflow-y-auto p-4">
         {loading && items.length === 0 ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 text-slate-300 animate-spin" />

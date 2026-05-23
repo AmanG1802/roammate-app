@@ -58,18 +58,32 @@ export default function BrainstormChat({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, sending, failedMessage]);
 
-  const send = async (retryMsg?: string) => {
-    const msg = retryMsg ?? input.trim();
+  // Tutorial: send a canned sample message so the exchange animates in.
+  useEffect(() => {
+    const onSample = (e: Event) => {
+      const text = (e as CustomEvent).detail?.message as string | undefined;
+      if (text) void send(text, true);
+    };
+    window.addEventListener('tutorial:brainstorm-send', onSample as EventListener);
+    return () => window.removeEventListener('tutorial:brainstorm-send', onSample as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, sending]);
+
+  const send = async (presetMsg?: string, addOptimistic = false) => {
+    const msg = presetMsg ?? input.trim();
     if (!msg || sending) return;
     setSending(true);
     setFailedMessage(null);
 
-    if (!retryMsg) {
+    // Show the user's bubble immediately for fresh sends (typed or tutorial),
+    // but not for retries where it's already on screen.
+    const optimistic = presetMsg ? addOptimistic : true;
+    if (optimistic) {
       setMessages((prev) => [
         ...prev,
         { id: Date.now(), role: 'user', content: msg, created_at: new Date().toISOString() },
       ]);
-      setInput('');
+      if (!presetMsg) setInput('');
     }
 
     try {
@@ -81,7 +95,7 @@ export default function BrainstormChat({
       if (res.status === 402) {
         // Roll back the optimistic message and open the paywall. If the user
         // subscribes, automatically retry the send.
-        if (!retryMsg) setMessages((prev) => prev.slice(0, -1));
+        if (optimistic) setMessages((prev) => prev.slice(0, -1));
         const body = await res.json().catch(() => null);
         const needs = isNeedsPlus(body);
         const subscribed = await requirePlus(needs?.feature ?? 'brainstorm_quota');
@@ -89,7 +103,7 @@ export default function BrainstormChat({
         if (subscribed) {
           await refreshEntitlement();
           send(msg);
-        } else if (!retryMsg) {
+        } else if (!presetMsg) {
           setInput(msg);
         }
         return;
@@ -97,8 +111,8 @@ export default function BrainstormChat({
       if (res.ok) {
         const data = await res.json();
         const history: Msg[] = data.history;
-        if (retryMsg) {
-          // Retry had no optimistic message; use full history to restore state
+        if (!optimistic) {
+          // No optimistic bubble was shown; use full history to restore state
           setMessages(history);
         } else {
           // Normal send: optimistic user message already in state.
@@ -282,6 +296,7 @@ export default function BrainstormChat({
         </AnimatePresence>
         <div className="flex items-end gap-2">
           <textarea
+            data-tutorial="brainstorm-chat-input"
             rows={2}
             value={input}
             onChange={(e) => setInput(e.target.value)}

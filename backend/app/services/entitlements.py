@@ -178,7 +178,15 @@ def _raise_needs_plus(feature: Feature, **extra) -> None:
     raise HTTPException(status_code=402, detail=payload)
 
 
-async def enforce_active_trip(db: AsyncSession, user: User) -> None:
+def _is_tutorial(trip: Optional[Trip]) -> bool:
+    return bool(trip is not None and getattr(trip, "is_tutorial", False))
+
+
+async def enforce_active_trip(
+    db: AsyncSession, user: User, *, is_tutorial: bool = False
+) -> None:
+    if is_tutorial:
+        return
     ent = await get_entitlement(db, user)
     if not ent.can_create_active_trip:
         _raise_needs_plus(
@@ -188,7 +196,11 @@ async def enforce_active_trip(db: AsyncSession, user: User) -> None:
         )
 
 
-async def enforce_brainstorm(db: AsyncSession, user: User) -> None:
+async def enforce_brainstorm(
+    db: AsyncSession, user: User, *, trip: Optional[Trip] = None
+) -> None:
+    if _is_tutorial(trip):
+        return
     ent = await get_entitlement(db, user)
     if ent.brainstorm_remaining is None:
         return  # Plus = unlimited
@@ -200,17 +212,26 @@ async def enforce_brainstorm(db: AsyncSession, user: User) -> None:
         )
 
 
-async def enforce_concierge(db: AsyncSession, user: User) -> None:
+async def enforce_concierge(
+    db: AsyncSession, user: User, *, trip: Optional[Trip] = None
+) -> None:
+    if _is_tutorial(trip):
+        return
     if not _is_active(user):
         _raise_needs_plus("concierge")
 
 
-async def bump_brainstorm_counter(db: AsyncSession, user: User) -> None:
+async def bump_brainstorm_counter(
+    db: AsyncSession, user: User, *, trip: Optional[Trip] = None
+) -> None:
     """Atomic upsert of the user's current-period counter.
 
     For Plus users this is a no-op (counter would be inaccurate after
     downgrade — and we don't enforce against it for Plus anyway).
+    Tutorial trips also skip — they must not consume free-tier quota.
     """
+    if _is_tutorial(trip):
+        return
     if _is_active(user):
         return
     period = _current_period()

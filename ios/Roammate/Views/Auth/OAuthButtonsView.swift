@@ -83,11 +83,12 @@ struct OAuthButtonsView: View {
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
             if let error = error as NSError? {
                 if error.code == GIDSignInError.canceled.rawValue { return }
-                authManager.error = error.localizedDescription
+                let message = error.localizedDescription
+                Task { @MainActor in authManager.error = message }
                 return
             }
             guard let result else {
-                authManager.error = "Google sign-in failed: no result"
+                Task { @MainActor in authManager.error = "Google sign-in failed: no result" }
                 return
             }
             if let idToken = result.user.idToken?.tokenString {
@@ -96,12 +97,14 @@ struct OAuthButtonsView: View {
             }
             result.user.refreshTokensIfNeeded { refreshed, refreshError in
                 if let refreshError {
-                    authManager.error = "Google sign-in failed: \(refreshError.localizedDescription)"
+                    let message = "Google sign-in failed: \(refreshError.localizedDescription)"
+                    Task { @MainActor in authManager.error = message }
                     return
                 }
                 guard let idToken = refreshed?.idToken?.tokenString else {
                     let hasAccess = result.user.accessToken.tokenString.isEmpty == false
-                    authManager.error = "Google sign-in failed: no ID token (accessToken present: \(hasAccess))"
+                    let message = "Google sign-in failed: no ID token (accessToken present: \(hasAccess))"
+                    Task { @MainActor in authManager.error = message }
                     return
                 }
                 Task { await authManager.signInWithGoogle(idToken: idToken) }

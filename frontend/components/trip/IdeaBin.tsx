@@ -266,7 +266,7 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-3 relative">
+      <div data-tutorial="idea-bin-list" className="flex-1 overflow-y-auto p-5 space-y-3 relative">
         <AnimatePresence initial={false}>
           {ideas.length === 0 && isLoadingIdeas ? (
             <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">

@@ -72,6 +72,7 @@ struct BrainstormChatView: View {
             }
 
             inputBar
+                .tutorialAnchor("brainstorm-chat-input")
         }
         .background(
             LinearGradient(
@@ -80,6 +81,13 @@ struct BrainstormChatView: View {
                 endPoint: .bottom
             )
         )
+        .onReceive(NotificationCenter.default.publisher(for: .tutorialBrainstormSend)) { note in
+            guard let text = note.userInfo?["message"] as? String, !store.isSending else { return }
+            Task {
+                await store.send(text)
+                await subscriptionStore.refresh()
+            }
+        }
     }
 
     // MARK: - Empty State

@@ -59,6 +59,13 @@ class User(Base):
     last_one_time_purchase_at = Column(DateTime(timezone=True), nullable=True)
     last_one_time_external_id = Column(String, nullable=True)
 
+    # Tutorial / onboarding tour state. Per-platform so iOS and Web tours
+    # progress independently (see docs/[33]).
+    tutorial_status_web = Column(String(20), nullable=False, default="not_started", server_default="not_started")
+    tutorial_status_ios = Column(String(20), nullable=False, default="not_started", server_default="not_started")
+    tutorial_step_web = Column(Integer, nullable=False, default=0, server_default="0")
+    tutorial_step_ios = Column(Integer, nullable=False, default=0, server_default="0")
+
     trips = relationship("TripMember", back_populates="user")
 
 class Trip(Base):
@@ -77,6 +84,11 @@ class Trip(Base):
     country_code = Column(String(2), nullable=True)
     destination_lat = Column(Float, nullable=True)
     destination_lng = Column(Float, nullable=True)
+
+    # Tutorial seeded trip. is_tutorial gates all canned/bypass behavior;
+    # is_tutorial_completed flips it read-only after the tour ends.
+    is_tutorial = Column(Boolean, nullable=False, default=False, server_default="false")
+    is_tutorial_completed = Column(Boolean, nullable=False, default=False, server_default="false")
 
     members = relationship("TripMember", back_populates="trip")
     timeline_items = relationship("TimelineItem", back_populates="trip")

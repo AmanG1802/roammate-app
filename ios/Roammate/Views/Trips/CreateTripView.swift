@@ -3,7 +3,9 @@ import SwiftUI
 struct CreateTripView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var tripStore: TripStore
-    let onCreated: () -> Void
+    /// Fires after a successful POST /trips. Caller pushes the new trip's
+    /// landing view onto its NavigationStack.
+    let onCreated: (Trip) -> Void
 
     @State private var name = ""
     @State private var startDate = Date()
@@ -117,17 +119,14 @@ struct CreateTripView: View {
             timezone: timezoneId
         )
         let result = await tripStore.create(payload)
-        if result != nil {
+        if let created = result {
             HapticManager.success()
-            onCreated()
             dismiss()
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            onCreated(created)
         } else if let storeError = tripStore.error {
             HapticManager.error()
             self.error = storeError
-        } else {
-            HapticManager.success()
-            onCreated()
-            dismiss()
         }
     }
 }

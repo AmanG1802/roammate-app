@@ -210,7 +210,7 @@ struct TimelineRow: View {
                                 timeCategory: nil,
                                 isSkipped: nil
                             )
-                            try? await EventService.updateEvent(id: event.id, update: update)
+                            _ = try? await EventService.updateEvent(id: event.id, update: update)
                             await store.loadAll()
                         }
                         editingTime = false

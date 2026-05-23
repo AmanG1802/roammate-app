@@ -10,6 +10,8 @@ struct Trip: Codable, Identifiable, Hashable {
     let createdById: Int?
     /// Present when the server returns `TripWithRole` (e.g. `GET /trips`).
     let myRole: String?
+    let isTutorial: Bool?
+    let isTutorialCompleted: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, name, timezone
@@ -18,6 +20,8 @@ struct Trip: Codable, Identifiable, Hashable {
         case createdAt = "created_at"
         case createdById = "created_by_id"
         case myRole = "my_role"
+        case isTutorial = "is_tutorial"
+        case isTutorialCompleted = "is_tutorial_completed"
     }
 
     var dateRangeText: String {

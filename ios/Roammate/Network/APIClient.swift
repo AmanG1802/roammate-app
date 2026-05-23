@@ -130,9 +130,9 @@ final class APIClient {
         refreshLock.lock(); defer { refreshLock.unlock() }
         if let t = refreshTask { return t }
         let t = Task<Bool, Never> {
-            defer {
-                self.refreshLock.lock(); self.refreshTask = nil; self.refreshLock.unlock()
-            }
+            // Clear via a synchronous helper — NSLock's lock()/unlock() are
+            // unavailable directly from an async context (Swift 6 error).
+            defer { self.clearRefreshTask() }
             guard let raw = KeychainHelper.loadRefreshToken() else { return false }
             do {
                 let pair = try await AuthService.refresh(refreshToken: raw)
@@ -145,6 +145,10 @@ final class APIClient {
         }
         refreshTask = t
         return t
+    }
+
+    private func clearRefreshTask() {
+        refreshLock.lock(); refreshTask = nil; refreshLock.unlock()
     }
 
     private func perform<T: Decodable>(

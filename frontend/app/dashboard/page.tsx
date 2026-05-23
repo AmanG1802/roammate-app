@@ -18,6 +18,7 @@ import UserMenu from '@/components/UserMenu';
 import PersonaSoftPrompt from '@/components/PersonaSoftPrompt';
 import OnboardingPersonaModal from '@/components/OnboardingPersonaModal';
 import { OnboardingPlusModal } from '@/components/billing/OnboardingPlusModal';
+import { useTutorial } from '@/hooks/useTutorial';
 import { useToast } from '@/components/ui/Toast';
 import { toastBus } from '@/lib/toast-bus';
 
@@ -32,6 +33,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const toast = useToast();
   const { requirePlus, refresh: refreshEntitlement, entitlement, isLoading: entitlementLoading } = useEntitlement();
+  const { status: tutorialStatus, isLoading: tutorialLoading } = useTutorial();
+  const tutorialBlocksOnboarding =
+    tutorialLoading || tutorialStatus === 'not_started' || tutorialStatus === 'in_progress';
   const [tripsError, setTripsError] = useState(false);
   const [section, setSection] = useState<Section>('dashboard');
   const [trips, setTrips] = useState<any[]>([]);
@@ -66,6 +70,7 @@ export default function DashboardPage() {
   // Show persona onboarding modal once per login session when no persona is set
   useEffect(() => {
     if (!user) return;
+    if (tutorialBlocksOnboarding) return;
     const shownKey = `persona_modal_shown_${(user as any).id}`;
     if (sessionStorage.getItem(shownKey)) return;
     const p = (user as any).personas;
@@ -73,7 +78,7 @@ export default function DashboardPage() {
       sessionStorage.setItem(shownKey, '1');
       setShowPersonaModal(true);
     }
-  }, [user]);
+  }, [user, tutorialBlocksOnboarding]);
 
   const savePersonas = async (personas: string[]): Promise<boolean> => {
     const token = getToken();
@@ -116,6 +121,7 @@ export default function DashboardPage() {
   const prevTierRef = useRef<Entitlement['tier'] | null>(null);
   useEffect(() => {
     if (!user || entitlementLoading) return;
+    if (tutorialBlocksOnboarding) return;
     const userId = (user as any).id;
     // Detect plus → free downgrade and clear the seen flag so the pitch can
     // re-appear on the next free visit.
@@ -132,7 +138,7 @@ export default function DashboardPage() {
     if (showPersonaModal) return;
     markPlusOnboardingSeen(userId);
     setShowPlusOnboarding(true);
-  }, [user, entitlement.tier, entitlementLoading, showPersonaModal]);
+  }, [user, entitlement.tier, entitlementLoading, showPersonaModal, tutorialBlocksOnboarding]);
 
   const openCreateModal = () => {
     setNewTripName('');
@@ -170,6 +176,7 @@ export default function DashboardPage() {
       const token = getToken();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
         signal,
       });
       if (response.status === 401) {
@@ -286,16 +293,19 @@ export default function DashboardPage() {
             body: JSON.stringify(body),
           });
           if (retry.ok) {
+            const created = await retry.json().catch(() => null);
             setNewTripName('');
             setNewTripStartDate('');
             setCreateError('');
             setIsModalOpen(false);
             onTripMutated();
+            if (created?.id) router.push(`/trips/${created.id}`);
           }
         }
         return;
       }
       if (response.ok) {
+        const created = await response.json().catch(() => null);
         setNewTripName('');
         setNewTripStartDate('');
         setNewTripTimezone(
@@ -304,6 +314,7 @@ export default function DashboardPage() {
         setCreateError('');
         setIsModalOpen(false);
         onTripMutated();
+        if (created?.id) router.push(`/trips/${created.id}`);
       } else {
         const err = await response.json().catch(() => null);
         setCreateError(typeof err?.detail === 'string' ? err.detail : `Failed to create trip (${response.status})`);
@@ -476,7 +487,9 @@ export default function DashboardPage() {
                   <ReEngagementBanner tripCount={trips.length} />
                   <FreeUsageStrip />
                 </div>
-                <DashboardTripPlanner onTripCreated={refreshDashboard} />
+                <div data-tutorial="new-trip-btn">
+                  <DashboardTripPlanner onTripCreated={refreshDashboard} />
+                </div>
                 <TodayWidget ref={widgetRef} onNewTrip={openCreateModal} />
                 <TripGrid
                   trips={currentAndUpcoming.slice(0, 6)}
@@ -911,6 +924,7 @@ function TripGrid({
   return (
     <>
       <motion.div
+        data-tutorial="dashboard-trips-grid"
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
         initial="initial"
         animate="animate"

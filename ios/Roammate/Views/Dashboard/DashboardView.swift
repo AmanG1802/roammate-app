@@ -6,12 +6,21 @@ struct DashboardView: View {
     @EnvironmentObject var notificationStore: NotificationStore
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
+    @EnvironmentObject var tutorial: TutorialStore
 
     @State private var showPlanTrip = false
     @State private var showNotifications = false
     @State private var notifShadowVisible = false
     @State private var path = NavigationPath()
     @State private var activeTripEvents: [Event] = []
+    // id of the tutorial trip we've pushed onto `path`, so we push/pop exactly once.
+    @State private var tutorialTripPushed: Int? = nil
+    // True while the Plan-a-trip sheet is running the tutorial's canned demo.
+    @State private var planDemoMode = false
+    // Set when the demo's "Create Trip" is tapped so the tour advances (and the
+    // trip is pushed) only after the sheet has fully dismissed — pushing onto the
+    // stack while the sheet is still animating away intermittently drops the push.
+    @State private var advanceAfterDemoDismiss = false
 
     private var firstName: String {
         authManager.currentUser?.name
@@ -64,6 +73,7 @@ struct DashboardView: View {
                     HapticManager.medium()
                     showPlanTrip = true
                 }
+                .tutorialAnchor("new-trip-btn")
                 .padding(.trailing, RoammateSpacing.lg)
                 .padding(.bottom, RoammateLayout.tabBarHeight + RoammateLayout.tabBarBottomInset + 12)
 
@@ -81,15 +91,54 @@ struct DashboardView: View {
                 await notificationStore.load()
                 await loadActiveTripEvents()
             }
-            .sheet(isPresented: $showPlanTrip) {
-                PlanTripDrawer { Task { await tripStore.load() } }
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+            .sheet(isPresented: $showPlanTrip, onDismiss: {
+                planDemoMode = false
+                // Advance only after the sheet is fully gone, so applyTutorialNav
+                // pushes the trip onto a settled NavigationStack rather than
+                // racing the sheet's dismiss animation (which sometimes left
+                // Step 4 floating over the dashboard). A plain swipe-to-dismiss
+                // never sets the flag, so it just closes the planner.
+                if advanceAfterDemoDismiss {
+                    advanceAfterDemoDismiss = false
+                    Task { await tutorial.advance(to: TutorialScript.number(of: .tripOverview)) }
+                }
+            }) {
+                PlanTripDrawer(
+                    onTripCreated: { created in
+                        Task { await tripStore.load() }
+                        // Push the newly created trip's landing view.
+                        path.append(created)
+                    },
+                    demoMode: planDemoMode,
+                    onDemoPreviewShown: {
+                        Task { await tutorial.advance(to: TutorialScript.number(of: .planPreview)) }
+                    },
+                    onDemoCreate: {
+                        // Skip the real POST — the seeded tutorial trip already
+                        // exists. Just close the sheet; the advance + trip push
+                        // happen in onDismiss once the sheet has fully dismissed.
+                        advanceAfterDemoDismiss = true
+                        planDemoMode = false
+                        showPlanTrip = false
+                    }
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .tutorialStartPlanDemo)) { _ in
+                planDemoMode = true
+                showPlanTrip = true
             }
             .onChange(of: path) { _, newPath in
                 if newPath.isEmpty {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                         tabBarVisibility.isVisible = true
+                    }
+                    // If the stack was emptied (back-swipe etc.) while the tour
+                    // still wants the trip open, clear the flag and re-push.
+                    if tutorialTripPushed != nil {
+                        tutorialTripPushed = nil
+                        applyTutorialNav()
                     }
                     Task {
                         await tripStore.load()
@@ -97,6 +146,43 @@ struct DashboardView: View {
                     }
                 }
             }
+            // Tutorial: open / close the tutorial trip on this stack as the tour
+            // advances. The tour runs entirely on the Dashboard tab.
+            .onChange(of: tutorial.currentStep) { _, _ in applyTutorialNav() }
+            .onChange(of: tutorial.status) { _, _ in applyTutorialNav() }
+            .onChange(of: tutorial.tutorialTripId) { _, _ in applyTutorialNav() }
+            .onChange(of: tripStore.trips.count) { _, _ in applyTutorialNav() }
+            .onAppear { applyTutorialNav() }
+        }
+    }
+
+    /// Push or pop the tutorial trip on the Dashboard stack to match the current
+    /// step. Pushes exactly once (tracked by `tutorialTripPushed`); if the seeded
+    /// trip isn't loaded yet it triggers a load and re-runs via the trips onChange.
+    private func applyTutorialNav() {
+        let loc = TutorialScript.location(for: tutorial.currentStep)
+        let wantTrip = tutorial.isActive && loc.openTrip
+        if wantTrip {
+            guard let tid = tutorial.tutorialTripId,
+                  let trip = tripStore.trips.first(where: { $0.id == tid }) else {
+                // Seeded trip not in the store yet — load and let the trips /
+                // tripId onChange re-run this.
+                if !tripStore.isLoading { Task { await tripStore.load() } }
+                return
+            }
+            // Push if we haven't pushed this trip, or the stack was cleared out
+            // from under us (keeps Step 3 reliable rather than trusting the flag).
+            if tutorialTripPushed != tid || path.isEmpty {
+                path.removeLast(path.count)
+                path.append(trip)
+                tutorialTripPushed = tid
+            }
+        } else if tutorialTripPushed != nil || (tutorial.isActive && !path.isEmpty) {
+            // Steps 1–2, going Back to the dashboard, or the tour ending (incl.
+            // deleting the trip) — return to the dashboard root. Guarded so a
+            // non-tutorial user browsing a trip is never yanked back.
+            path.removeLast(path.count)
+            tutorialTripPushed = nil
         }
     }
 
@@ -383,7 +469,7 @@ struct DashboardView: View {
         case "idea_bin_item_added":
             let count = p["count"]?.intValue ?? 1
             if count == 1 {
-                let title = (p["titles"] as? [String])?.first ?? "an idea"
+                let title = p["titles"]?.arrayValue?.first?.stringValue ?? "an idea"
                 return ("💡", "\(actorName) added \(title) to \(tripName)'s idea bin.")
             }
             return ("💡", "\(actorName) added \(count) ideas to \(tripName)'s idea bin.")
@@ -418,6 +504,7 @@ struct DashboardView: View {
     private var tripListSection: some View {
         VStack(alignment: .leading, spacing: RoammateSpacing.sm) {
             SectionHeader(title: "My Trips")
+                .tutorialAnchor("dashboard-trips")
 
             if tripStore.trips.isEmpty {
                 EmptyState(

@@ -82,6 +82,7 @@ struct TimelineDrawerContent: View {
                 } else {
                     let events = displayEvents
                     LazyVStack(spacing: 0) {
+                        Color.clear.frame(height: 1).tutorialAnchor("timeline-day-1")
                         ForEach(events) { event in
                             VStack(spacing: 0) {
                                 TimelineRow(event: event, isExpanded: false, isConflict: conflictIds.contains(event.id))
