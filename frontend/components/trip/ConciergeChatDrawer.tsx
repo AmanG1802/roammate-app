@@ -12,6 +12,7 @@ import { getToken } from '@/lib/auth';
 import { formatTimeOfDay, timeOfDayFromDate } from '@/lib/time';
 import clsx from 'clsx';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
+import VoiceInputButton from '@/components/common/VoiceInputButton';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -657,6 +658,12 @@ export default function ConciergeChatDrawer({
                   placeholder="Ask anything about your trip..."
                   disabled={sending}
                   className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none disabled:opacity-50"
+                />
+                <VoiceInputButton
+                  value={input}
+                  onChange={setInput}
+                  disabled={sending}
+                  className="p-1.5 rounded-lg"
                 />
                 <button
                   onClick={() => handleSend()}

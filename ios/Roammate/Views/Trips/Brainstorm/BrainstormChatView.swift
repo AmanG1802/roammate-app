@@ -45,6 +45,7 @@ struct BrainstormChatView: View {
     @Binding var page: Int
 
     @State private var inputText = ""
+    @StateObject private var speech = SpeechRecognizer()
 
     /// True when the user has run out of free brainstorms. Plus users have
     /// `brainstormRemaining == nil` (unlimited), so this stays false for them.
@@ -303,6 +304,10 @@ struct BrainstormChatView: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(Color.roammateBorder, lineWidth: 1)
             )
+
+            if !isQuotaExhausted {
+                MicButton(text: $inputText, recognizer: speech, disabled: store.isSending)
+            }
 
             Button {
                 if isQuotaExhausted {

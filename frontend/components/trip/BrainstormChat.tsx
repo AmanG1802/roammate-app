@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { getToken } from '@/lib/auth';
 import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
 import { BrainstormQuotaPill } from '@/components/billing/QuotaPill';
+import VoiceInputButton from '@/components/common/VoiceInputButton';
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string; created_at: string };
 
@@ -319,6 +320,8 @@ export default function BrainstormChat({
               <Lock className="w-4 h-4" />
             </button>
           ) : (
+            <>
+            <VoiceInputButton value={input} onChange={setInput} disabled={sending} />
             <button
               onClick={() => send()}
               disabled={sending || !input.trim()}
@@ -327,6 +330,7 @@ export default function BrainstormChat({
             >
               {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
+            </>
           )}
         </div>
       </div>

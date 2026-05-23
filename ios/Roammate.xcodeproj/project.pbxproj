@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		048932EE74DFADEB6293CDCF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED8F985328CD4CCAA07BEF7C /* ContentView.swift */; };
+		A1B2C3D4E5F6071829304151 /* MicButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829304152 /* MicButton.swift */; };
+		A1B2C3D4E5F6071829304153 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071829304154 /* SpeechRecognizer.swift */; };
 		070CC6279CE4807CA047E1DA /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89FC891E7B6142DA9C9D7A8C /* HapticManager.swift */; };
 		09452ED018323F3F1F42853B /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6C988158033E1C7C54E0D0 /* Config.swift */; };
 		0AB8D895B5EF67824130371D /* ForgotPasswordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEAB7638C3426BBE1E47609A /* ForgotPasswordView.swift */; };
@@ -135,6 +137,8 @@
 
 /* Begin PBXFileReference section */
 		02F13363AC46609B3D03EF79 /* Brainstorm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Brainstorm.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829304152 /* MicButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicButton.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6071829304154 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
 		0381844EBC7F6EC2F5562D67 /* AddToTimelineSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToTimelineSheet.swift; sourceTree = "<group>"; };
 		03ED040FF77E4F08D8E66B7E /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
 		105F680817D1EDE2CDEA696F /* QuickActionsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionsBar.swift; sourceTree = "<group>"; };
@@ -322,12 +326,21 @@
 			path = Network;
 			sourceTree = "<group>";
 		};
+		A1B2C3D4E5F6071829304155 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6071829304154 /* SpeechRecognizer.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
 		2B372ABC3229C241B7028150 /* Roammate */ = {
 			isa = PBXGroup;
 			children = (
 				6CC4A424002F54BFD4B931F4 /* App */,
 				8BE7B9F7446135AF0E899ECA /* Models */,
 				24A5677AA386291327A3AC5C /* Network */,
+				A1B2C3D4E5F6071829304155 /* Services */,
 				618EF211C8116CA3407BA83B /* Store */,
 				3E0D6E5D4C71E7783E5276C6 /* Subscription */,
 				46066C3CF76E5EC626C2A596 /* Theme */,
@@ -492,6 +505,7 @@
 			children = (
 				76E5C89AC813B0A9B23DBE87 /* AIChatDrawer.swift */,
 				D86D5AFBF2385AE4E9D0A40C /* ChatMessageBubble.swift */,
+				A1B2C3D4E5F6071829304152 /* MicButton.swift */,
 				934033C513577CEC95E58C0B /* PlanTripDrawer.swift */,
 				105F680817D1EDE2CDEA696F /* QuickActionsBar.swift */,
 			);
@@ -726,6 +740,8 @@
 				6662B68D9FD888FF40001028 /* MainShell.swift in Sources */,
 				95A824F15A14B541CF2911F9 /* MapCalloutSheet.swift in Sources */,
 				0F9A859BEEB55F2892A26316 /* MapMarker.swift in Sources */,
+				A1B2C3D4E5F6071829304151 /* MicButton.swift in Sources */,
+				A1B2C3D4E5F6071829304153 /* SpeechRecognizer.swift in Sources */,
 				B07C4CD0DDD9518CC057409A /* MapPinView.swift in Sources */,
 				C27272053B41C58FED1BF7C0 /* MapService.swift in Sources */,
 				5163CF41EA3E84935227BCC3 /* MemberService.swift in Sources */,

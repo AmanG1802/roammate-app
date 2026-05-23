@@ -7,6 +7,7 @@ import { getToken } from '@/lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
 import { useTutorial } from '@/hooks/useTutorial';
+import VoiceInputButton from '@/components/common/VoiceInputButton';
 
 // Witty messages shown while the AI is planning. Cycled every ~1.8s so the
 // user has something to read instead of a static spinner.
@@ -291,6 +292,12 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
           onChange={(e) => setPrompt(e.target.value)}
           placeholder='e.g. "5-day Thailand itinerary with street food and temples"'
           className="flex-1 px-4 py-3 text-sm font-medium bg-slate-50 border border-slate-100 rounded-xl resize-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+        />
+        <VoiceInputButton
+          value={prompt}
+          onChange={setPrompt}
+          disabled={planning}
+          className="self-center bg-slate-50 hover:bg-white border border-slate-100"
         />
         <motion.button
           onClick={plan}

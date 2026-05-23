@@ -13,6 +13,7 @@ struct PlanTripDrawer: View {
     var onDemoCreate: (() -> Void)? = nil
 
     @StateObject private var store = PlanTripStore()
+    @StateObject private var speech = SpeechRecognizer()
     @Environment(\.dismiss) private var dismiss
     @FocusState private var promptFocused: Bool
     @State private var wittyIndex = 0
@@ -374,6 +375,14 @@ struct PlanTripDrawer: View {
                 // Demo: show the typewriter prompt but block user editing.
                 .disabled(demoMode)
                 .allowsHitTesting(!demoMode)
+
+                if !demoMode {
+                    MicButton(
+                        text: $store.prompt,
+                        recognizer: speech,
+                        disabled: store.phase == .planning || store.phase == .creating
+                    )
+                }
 
                 if (store.phase == .previewing || store.phase == .creating) && !demoMode {
                     Button {
