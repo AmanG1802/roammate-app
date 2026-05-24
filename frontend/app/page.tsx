@@ -464,16 +464,16 @@ export default function Home() {
       </section>
 
       {/* ── FEATURE 4 — CONCIERGE ─────────────────────────────────────── */}
-      <section id="how-it-works" aria-labelledby="concierge-h" className="bg-slate-900 text-white pt-10 pb-20 md:pt-14 md:pb-28 px-6 md:px-10 overflow-hidden scroll-mt-20">
+      <section id="how-it-works" aria-labelledby="concierge-h" className="bg-indigo-50 pt-10 pb-20 md:pt-14 md:pb-28 px-6 md:px-10 overflow-hidden scroll-mt-20">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
           <div>
-            <div className="reveal opacity-0 translate-y-4 inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-[10px] font-bold uppercase tracking-widest mb-5">
+            <div className="reveal opacity-0 translate-y-4 inline-flex items-center gap-2 px-3 py-1 bg-indigo-100 text-indigo-600 rounded-full text-[10px] font-bold uppercase tracking-widest mb-5">
               <Wand2 className="w-3 h-3" /> Concierge
             </div>
-            <h2 id="concierge-h" className="reveal opacity-0 translate-y-4 text-3xl md:text-5xl font-black tracking-tighter mb-4">
-              Plans change. So does <span className="text-indigo-400">your day.</span>
+            <h2 id="concierge-h" className="reveal opacity-0 translate-y-4 text-3xl md:text-5xl font-black tracking-tighter mb-4 text-slate-900">
+              Plans change. So does <span className="text-indigo-600">your day.</span>
             </h2>
-            <p className="reveal opacity-0 translate-y-4 text-lg text-slate-300 font-medium leading-relaxed mb-6 max-w-xl">
+            <p className="reveal opacity-0 translate-y-4 text-lg text-slate-500 font-medium leading-relaxed mb-6 max-w-xl">
               Running late by 45 minutes? Tap once. Roammate reflows the day, finds a coffee near you, and pings the group. Your co-pilot during the trip — not just before it.
             </p>
             <div className="reveal opacity-0 translate-y-4 grid grid-cols-2 gap-3 max-w-lg">
@@ -483,11 +483,11 @@ export default function Home() {
                 { icon: Coffee, label: 'Find X near me' },
                 { icon: MessageSquare, label: 'Free-form chat' },
               ].map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-xl border border-white/10 hover:border-indigo-400/40 hover:bg-white/10 transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
+                <div key={label} className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
                     <Icon className="w-4 h-4" />
                   </div>
-                  <span className="text-sm font-semibold">{label}</span>
+                  <span className="text-sm font-semibold text-slate-900">{label}</span>
                 </div>
               ))}
             </div>
@@ -834,13 +834,13 @@ function ConciergeStoryboard() {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: i * 0.15, ease: [0.22, 1, 0.36, 1] }}
             viewport={{ once: true }}
-            className="rounded-2xl bg-indigo-500/10 border border-indigo-400/20 p-5 flex flex-col items-start gap-3 hover:bg-indigo-500/15 hover:border-indigo-400/40 transition-colors"
+            className="rounded-2xl bg-white border border-slate-200 p-5 flex flex-col items-start gap-3 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
           >
             <div className="w-10 h-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/40">
               <f.icon className="w-5 h-5" />
             </div>
-            <div className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Step {i + 1}</div>
-            <div className="text-base font-bold text-white">{f.label}</div>
+            <div className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">Step {i + 1}</div>
+            <div className="text-base font-bold text-slate-900">{f.label}</div>
           </motion.div>
         ))}
       </div>
@@ -863,15 +863,15 @@ function ConciergeChatPreview() {
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
       viewport={{ once: true }}
-      className="rounded-2xl bg-white/[0.04] border border-white/10 p-5 backdrop-blur-sm"
+      className="rounded-2xl bg-white border border-slate-200 p-5"
     >
-      <div className="flex items-center gap-2 pb-4 mb-4 border-b border-white/10">
+      <div className="flex items-center gap-2 pb-4 mb-4 border-b border-slate-200">
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
           <Wand2 className="w-4 h-4" />
         </div>
         <div>
-          <div className="text-[13px] font-black text-white tracking-tight">Concierge · Live</div>
-          <div className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="text-[13px] font-black text-slate-900 tracking-tight">Concierge · Live</div>
+          <div className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Watching your trip
           </div>
@@ -887,8 +887,8 @@ function ConciergeChatPreview() {
             viewport={{ once: true }}
             className={`max-w-[85%] px-3.5 py-2.5 text-[13px] leading-snug rounded-2xl ${
               m.from === 'user'
-                ? 'ml-auto bg-white/10 text-white rounded-br-sm'
-                : 'bg-indigo-500/20 border border-indigo-400/30 text-indigo-50 rounded-tl-sm'
+                ? 'ml-auto bg-indigo-600 text-white rounded-br-sm'
+                : 'bg-indigo-50 border border-indigo-200 text-slate-900 rounded-tl-sm'
             }`}
           >
             {m.text}

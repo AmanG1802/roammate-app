@@ -9,6 +9,10 @@ extension Color {
     static let roammateIndigoDark = Color(red: 67/255, green: 56/255, blue: 202/255)
     /// #EDE9FE — subtle indigo tint (badges, hover states)
     static let roammateIndigoTint = Color(red: 237/255, green: 233/255, blue: 254/255)
+    /// #A5B4FC — light indigo (accent text / icons on dark surfaces)
+    static let roammateIndigo300 = Color(red: 165/255, green: 180/255, blue: 252/255)
+    /// #C7D2FE — lighter indigo (accent text on the indigo finale card)
+    static let roammateIndigo200 = Color(red: 199/255, green: 210/255, blue: 254/255)
 
     /// #0F172A — primary text
     static let roammateInk = Color(red: 15/255, green: 23/255, blue: 42/255)
@@ -30,6 +34,11 @@ extension Color {
     static let roammateAmber = Color(red: 245/255, green: 158/255, blue: 11/255)
     /// Amber tint for brainstorm bin header
     static let roammateAmberTint = Color(red: 255/255, green: 251/255, blue: 235/255)
+
+    /// #F43F5E — rose (Idea Bin accent; same hue as danger, semantic name for marketing surfaces)
+    static let roammateRose = Color(red: 244/255, green: 63/255, blue: 94/255)
+    /// #FFF1F2 — rose tint (Idea Bin eyebrow pill background)
+    static let roammateRoseTint = Color(red: 255/255, green: 241/255, blue: 242/255)
 
     /// #8B5CF6 — violet
     static let roammateViolet = Color(red: 139/255, green: 92/255, blue: 246/255)

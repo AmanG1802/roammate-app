@@ -1,119 +1,153 @@
 import SwiftUI
 
-// MARK: - Per-card model
-
-private struct IntroCardSpec {
-    let icon: String
-    let accent: Color
-    let headline: String
-    let body: String
-    let flourish: Flourish
-
-    enum Flourish {
-        case none
-        case roleChips
-        case planMiniCards
-        case conciergeStoryboard
-    }
-}
-
 // MARK: - IntroCardsView
+//
+// Once-per-install onboarding carousel. Mirrors the web landing page:
+// Welcome → Brainstorm → Idea Bin → Plan Mode → Concierge → Personas →
+// Roammate Plus → Ready to Roam. Each card has a web-matched eyebrow,
+// heavy tracking-tight headline with a colored accent phrase, body copy,
+// and a high-fidelity mini-mockup.
 
 struct IntroCardsView: View {
     let onFinish: () -> Void
+    var onAnimatedFinish: (() -> Void)? = nil
+    var safeAreaTop: CGFloat = 0
+    var safeAreaBottom: CGFloat = 0
 
     @State private var page: Int = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let cards: [IntroCardSpec] = [
+        // Card 1 — Welcome
         IntroCardSpec(
-            icon: "airplane.circle.fill",
             accent: .roammateIndigo,
-            headline: "Welcome to Roammate.",
-            body: "The travel planner that travels with you. Swipe to see how.",
-            flourish: .none
+            accentTint: .roammateIndigoTint,
+            headlineLead: "The travel planner that ",
+            headlineAccent: "travels with you.",
+            background: .lightTint(.roammateIndigo),
+            mockup: .welcome,
+            headlineSize: 36,
+            centered: true,
+            showLogoLockup: true,
+            showMockup: false
         ),
+        // Card 2 — Brainstorm
         IntroCardSpec(
-            icon: "sparkles.rectangle.stack.fill",
-            accent: .roammateViolet,
-            headline: "From a thought to a plan.",
-            body: "Tell our AI what you're craving. It turns loose ideas into a real list of places — with photos, ratings, and addresses ready to schedule.",
-            flourish: .none
+            eyebrow: "Brainstorm", eyebrowIcon: "sparkles",
+            accent: .roammateViolet, accentTint: .roammateVioletTint,
+            headlineLead: "Turn loose ideas into ",
+            headlineAccent: "a real plan.",
+            body: "Tell our AI what you're craving. It comes back with real places.",
+            background: .lightTint(.roammateViolet),
+            mockup: .brainstorm,
+            headlineSize: 36
         ),
+        // Card 3 — Idea Bin
         IntroCardSpec(
-            icon: "person.3.fill",
-            accent: .roammateDanger,
-            headline: "Everyone has a voice. One person owns the plan.",
-            body: "Invite friends as Admin, Editor, Voter, or Viewer. Vote ideas up. The plan reflects the group — not the loudest chat message.",
-            flourish: .roleChips
+            eyebrow: "Idea Bin + Voting",
+            accent: .roammateIndigo, accentTint: .roammateIndigoTint,
+            headlineLead: "Group input without ",
+            headlineAccent: "group chat chaos.",
+            body: "Everyone's ideas land in one shared bin. Vote them up — or down. The plan reflects the group, not the loudest voice on WhatsApp.",
+            background: .lightTint(.roammateIndigo),
+            mockup: .ideaBin
         ),
+        // Card 4 — Plan Mode
         IntroCardSpec(
-            icon: "square.grid.3x1.below.line.grid.1x2",
-            accent: .roammateEmerald,
-            headline: "Timeline. Map. Ideas. One canvas.",
-            body: "Drag an idea onto a day. Watch the route appear. Switch days with one tap. Conflicts flag themselves.",
-            flourish: .planMiniCards
+            eyebrow: "Plan Mode", eyebrowIcon: "square.stack.3d.up.fill",
+            accent: .roammateIndigo, accentTint: .roammateIndigoTint,
+            headlineLead: "Timeline. Map. Ideas. ",
+            headlineAccent: "One canvas.",
+            body: "Drag an idea onto a day. Pick a time. The route emerges on the map. That's it.",
+            background: .lightTint(.roammateIndigo),
+            mockup: .planMode
         ),
+        // Card 5 — Concierge
         IntroCardSpec(
-            icon: "wand.and.sparkles",
-            accent: .roammateAmber,
-            headline: "Plans change. So does your day.",
-            body: "Running late by 45 minutes? Tap once. Roammate reflows the day, finds a coffee near you, and pings the group. Your co-pilot during the trip — not just before it.",
-            flourish: .conciergeStoryboard
+            eyebrow: "Concierge", eyebrowIcon: "wand.and.sparkles",
+            accent: .roammateIndigo, accentTint: .roammateIndigoTint,
+            headlineLead: "Plans change. So does ",
+            headlineAccent: "your day.",
+            subtitle: "Your co-pilot during the trip.",
+            background: .conciergeLight,
+            mockup: .concierge,
+            headlineSize: 36
         ),
+        // Card 6 — Personas
         IntroCardSpec(
-            icon: "person.crop.circle.badge.checkmark",
-            accent: .roammateFuchsia,
-            headline: "AI that knows your style.",
-            body: "Foodie? Slow traveler? Cultural deep-diver? Pick a persona — the AI tailors every suggestion to you. You can change it anytime.",
-            flourish: .none
+            eyebrow: "Personas", eyebrowIcon: "sparkles",
+            accent: .roammateFuchsia, accentTint: .roammateFuchsiaTint,
+            headlineLead: "AI that knows ",
+            headlineAccent: "your style.",
+            body: "Foodie, cultural deep-diver, slow traveler — pick a persona and every suggestion tilts to match. Same prompt, different answer.",
+            background: .lightTint(.roammateFuchsia),
+            mockup: .personas
+        ),
+        // Card 7 — Roammate Plus
+        IntroCardSpec(
+            eyebrow: "Roammate Plus", eyebrowIcon: "sparkles",
+            accent: .roammateIndigo, accentTint: .roammateIndigoTint,
+            headlineLead: "Free to start. ",
+            headlineAccent: "Plus when you outgrow it.",
+            body: "Every core feature works for free. Plus removes the limits.",
+            background: .lightTint(.roammateIndigo),
+            mockup: .plus
+        ),
+        // Card 8 — Ready to Roam
+        IntroCardSpec(
+            accent: .roammateIndigo200,
+            headlineLead: "Ready to ",
+            headlineAccent: "Roam?",
+            accentItalic: true,
+            background: .indigo,
+            mockup: .ready,
+            headlineSize: 64,
+            centered: true,
+            showMockup: false
         ),
     ]
 
     private var totalPages: Int { cards.count }
     private var isLastPage: Bool { page == totalPages - 1 }
-    private var currentAccent: Color { cards[page].accent }
+    private var currentBackground: IntroBackground { cards[page].background }
+    private var isDark: Bool { currentBackground.isDark }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            LinearGradient(
-                colors: [Color.roammateSurface, currentAccent.opacity(0.08)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.35), value: page)
+        ZStack {
+            currentBackground.fill()
+                .ignoresSafeArea()
+                .transition(.opacity)
+                .id(page)
 
             VStack(spacing: 0) {
                 topBar
                     .padding(.horizontal, RoammateSpacing.lg)
-                    .padding(.top, RoammateSpacing.sm)
+                    .padding(.top, safeAreaTop + RoammateSpacing.sm)
 
                 TabView(selection: $page) {
                     ForEach(Array(cards.enumerated()), id: \.offset) { idx, spec in
-                        IntroCard(spec: spec, indexLabel: "Card \(idx + 1) of \(totalPages)")
+                        IntroCardView(spec: spec, index: idx, total: totalPages, isActive: page == idx)
                             .tag(idx)
                             .padding(.horizontal, RoammateSpacing.lg)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.85), value: page)
+                .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 0.85), value: page)
 
                 pageDots
                     .padding(.vertical, RoammateSpacing.md)
 
                 bottomCTA
                     .padding(.horizontal, RoammateSpacing.lg)
-                    .padding(.bottom, RoammateSpacing.lg)
+                    .padding(.bottom, max(safeAreaBottom, RoammateSpacing.lg) + RoammateSpacing.lg)
             }
         }
-        .onChange(of: page) { _, _ in
-            HapticManager.light()
-        }
+        .animation(.easeInOut(duration: 0.4), value: page)
+        .onChange(of: page) { _, _ in HapticManager.light() }
         .accessibilityValue("Page \(page + 1) of \(totalPages)")
     }
 
-    // MARK: - Subviews
+    // MARK: - Top bar (Skip)
 
     private var topBar: some View {
         HStack {
@@ -122,7 +156,7 @@ struct IntroCardsView: View {
                 Button(action: finish) {
                     Text("Skip")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color.roammateMuted)
+                        .foregroundStyle(isDark ? Color.white.opacity(0.85) : Color.roammateMuted)
                 }
                 .accessibilityLabel("Skip intro")
             } else {
@@ -130,13 +164,16 @@ struct IntroCardsView: View {
             }
         }
         .frame(height: 28)
+        .animation(.easeInOut(duration: 0.3), value: isDark)
     }
+
+    // MARK: - Page dots
 
     private var pageDots: some View {
         HStack(spacing: 8) {
             ForEach(0..<totalPages, id: \.self) { idx in
                 Capsule()
-                    .fill(idx == page ? Color.roammateIndigo : Color.roammateMuted.opacity(0.3))
+                    .fill(dotColor(active: idx == page))
                     .frame(width: idx == page ? 22 : 8, height: 8)
                     .animation(.spring(response: 0.35, dampingFraction: 0.85), value: page)
             }
@@ -144,28 +181,38 @@ struct IntroCardsView: View {
         .accessibilityHidden(true)
     }
 
+    private func dotColor(active: Bool) -> Color {
+        if active { return isDark ? .white : .roammateIndigo }
+        return (isDark ? Color.white : Color.roammateMuted).opacity(0.3)
+    }
+
+    // MARK: - Bottom CTA
+
     private var bottomCTA: some View {
         Group {
             if isLastPage {
-                Button("Get started", action: finish)
-                    .buttonStyle(RoammatePrimaryButtonStyle())
-            } else {
-                Button(action: advance) {
-                    Text("Next")
+                Button(action: handleFinish) {
+                    HStack(spacing: 8) {
+                        Text("Start Your First Trip")
+                        Image(systemName: "safari")
+                    }
                 }
-                .buttonStyle(RoammateSecondaryButtonStyle())
+                .buttonStyle(IntroFinishButtonStyle())
+            } else {
+                Button("Next", action: advance)
+                    .buttonStyle(IntroNextButtonStyle(isDark: isDark))
             }
         }
     }
+
+    // MARK: - Actions
 
     private func advance() {
         guard page < totalPages - 1 else { return }
         if reduceMotion {
             page += 1
         } else {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                page += 1
-            }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { page += 1 }
         }
     }
 
@@ -173,148 +220,48 @@ struct IntroCardsView: View {
         HapticManager.light()
         onFinish()
     }
+
+    private func handleFinish() {
+        HapticManager.light()
+        if let animated = onAnimatedFinish {
+            animated()
+        } else {
+            onFinish()
+        }
+    }
 }
 
-// MARK: - Single card
+// MARK: - Adaptive button styles
 
-private struct IntroCard: View {
-    let spec: IntroCardSpec
-    let indexLabel: String
+/// "Next" button — outlined; adapts to light vs dark (Concierge) backgrounds.
+private struct IntroNextButtonStyle: ButtonStyle {
+    let isDark: Bool
 
-    var body: some View {
-        VStack(spacing: RoammateSpacing.xl) {
-            Spacer(minLength: 0)
-
-            // Icon orb
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [spec.accent.opacity(0.85), spec.accent.opacity(0.55)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .shadow(
-                        color: spec.accent.opacity(0.35),
-                        radius: 16, x: 0, y: 4
-                    )
-                Image(systemName: spec.icon)
-                    .font(.system(size: 56, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-
-            VStack(spacing: RoammateSpacing.md) {
-                Text(spec.headline)
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.roammateInk)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(spec.body)
-                    .font(.system(size: 17, design: .rounded))
-                    .foregroundStyle(Color.roammateMuted)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, RoammateSpacing.sm)
-
-            flourishView
-                .padding(.top, RoammateSpacing.sm)
-
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(indexLabel). \(spec.headline). \(spec.body)")
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, design: .rounded, weight: .semibold))
+            .foregroundStyle(isDark ? Color.white : Color.roammateInk)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Capsule().fill(isDark ? Color.white.opacity(0.12) : Color.roammateSurface))
+            .overlay(Capsule().stroke(isDark ? Color.white.opacity(0.4) : Color.roammateBorder, lineWidth: 1.5))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
+}
 
-    @ViewBuilder
-    private var flourishView: some View {
-        switch spec.flourish {
-        case .none:
-            EmptyView()
-        case .roleChips:
-            roleChips
-        case .planMiniCards:
-            planMiniCards
-        case .conciergeStoryboard:
-            conciergeStoryboard
-        }
-    }
-
-    private var roleChips: some View {
-        HStack(spacing: 8) {
-            ForEach(["Admin", "Editor", "Voter", "Viewer"], id: \.self) { role in
-                Text(role)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(spec.accent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(spec.accent.opacity(0.12)))
-                    .overlay(Capsule().stroke(spec.accent.opacity(0.25), lineWidth: 1))
-            }
-        }
-    }
-
-    private var planMiniCards: some View {
-        VStack(spacing: 8) {
-            ForEach(0..<3, id: \.self) { i in
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(spec.accent.opacity(0.85))
-                        .frame(width: 8, height: 8)
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.roammateMuted.opacity(0.25))
-                        .frame(width: 80 + CGFloat(i * 20), height: 8)
-                    Spacer()
-                    Text(["09:00", "11:30", "14:00"][i])
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.roammateMuted)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.roammateSurface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.roammateBorder, lineWidth: 1)
-                )
-            }
-        }
-        .frame(maxWidth: 280)
-    }
-
-    private var conciergeStoryboard: some View {
-        HStack(spacing: 8) {
-            storyboardFrame(icon: "clock.badge.exclamationmark", label: "+45 min")
-            Image(systemName: "arrow.right")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.roammateMuted.opacity(0.6))
-            storyboardFrame(icon: "arrow.up.arrow.down", label: "Reflow")
-            Image(systemName: "arrow.right")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.roammateMuted.opacity(0.6))
-            storyboardFrame(icon: "bell.fill", label: "Pinged")
-        }
-    }
-
-    private func storyboardFrame(icon: String, label: String) -> some View {
-        VStack(spacing: 6) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(spec.accent.opacity(0.15))
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(spec.accent)
-            }
-            .frame(width: 64, height: 64)
-            Text(label)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(Color.roammateMuted)
-        }
+/// Final CTA on the indigo finale — white fill, indigo text (matches web).
+private struct IntroFinishButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, design: .rounded, weight: .bold))
+            .foregroundStyle(configuration.isPressed ? Color.roammateIndigoDark : Color.roammateIndigo)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Capsule().fill(Color.white))
+            .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
