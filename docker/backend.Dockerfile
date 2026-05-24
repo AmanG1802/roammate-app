@@ -12,4 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production default (Railway): trust the TLS-terminating proxy's X-Forwarded-*
+# headers so FastAPI builds https:// redirects, not http://. No --reload in prod.
+# docker-compose overrides this with --reload for local dev.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips=*"]
