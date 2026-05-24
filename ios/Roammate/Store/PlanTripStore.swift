@@ -70,7 +70,7 @@ final class PlanTripStore: ObservableObject {
             )
         }
         return PlanTripPreview(
-            tripName: "Welcome to Roammate — New York",
+            tripName: "New York and its Skylines",
             startDate: nil,
             durationDays: 3,
             items: [

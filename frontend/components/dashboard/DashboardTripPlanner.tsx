@@ -50,7 +50,7 @@ type BufferedMessage = { role: 'user' | 'assistant'; content: string };
 // Canned preview used by the tutorial demo — mirrors the seeded backend
 // fixture so the screen reads as a real planner output.
 const CANNED_NYC_PREVIEW: Preview = {
-  trip_name: 'Welcome to Roammate — New York',
+  trip_name: 'New York and its Skylines',
   start_date: null,
   duration_days: 3,
   destination_city: 'New York',

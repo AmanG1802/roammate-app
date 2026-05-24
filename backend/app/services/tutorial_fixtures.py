@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-TRIP_NAME = "Welcome to Roammate — New York"
+TRIP_NAME = "New York and its Skylines"
 TRIP_TIMEZONE = "America/New_York"
 DESTINATION_CITY = "New York"
 COUNTRY_CODE = "US"
