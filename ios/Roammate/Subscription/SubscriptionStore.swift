@@ -11,6 +11,12 @@ import SwiftUI
 final class SubscriptionStore: ObservableObject {
     @Published private(set) var entitlement: Entitlement = .freeDefault
     @Published private(set) var isLoading: Bool = false
+    /// True only once a `/billing/status` (or purchase/verify) response has been
+    /// applied at least once. Until then `entitlement` is the optimistic
+    /// free-tier placeholder, NOT a confirmed fact — upsell UI must gate on this
+    /// so we never pitch Plus to a paying user whose status hasn't loaded or
+    /// whose fetch failed.
+    @Published private(set) var isConfirmed: Bool = false
     @Published private(set) var product: Product?
     @Published var lastError: String?
 
@@ -36,6 +42,7 @@ final class SubscriptionStore: ObservableObject {
     /// Forget all subscription state — called from logout.
     func reset() {
         entitlement = .freeDefault
+        isConfirmed = false
         product = nil
     }
 
@@ -52,10 +59,13 @@ final class SubscriptionStore: ObservableObject {
                 method: "GET"
             )
             entitlement = dto
+            isConfirmed = true
             NotificationCenter.default.post(name: .subscriptionUpdated, object: nil)
         } catch {
             // Keep the previous entitlement on failure — don't fail closed
-            // and re-lock features the user has already paid for.
+            // and re-lock features the user has already paid for. We also leave
+            // isConfirmed untouched: a failed fetch must never be treated as
+            // "confirmed free", which would surface upsell UI to a Plus user.
         }
     }
 
@@ -134,6 +144,7 @@ final class SubscriptionStore: ObservableObject {
                     )
                     if resp.granted, let e = resp.entitlement {
                         entitlement = e
+                        isConfirmed = true
                         NotificationCenter.default.post(name: .subscriptionUpdated, object: nil)
                         return true
                     }
@@ -182,6 +193,7 @@ final class SubscriptionStore: ObservableObject {
                 body: body
             )
             entitlement = dto
+            isConfirmed = true
             NotificationCenter.default.post(name: .subscriptionUpdated, object: nil)
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? "Could not verify purchase"

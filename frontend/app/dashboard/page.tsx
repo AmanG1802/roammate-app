@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const { user } = useAuth(true);
   const router = useRouter();
   const toast = useToast();
-  const { requirePlus, refresh: refreshEntitlement, entitlement, isLoading: entitlementLoading } = useEntitlement();
+  const { requirePlus, refresh: refreshEntitlement, entitlement, isConfirmed: entitlementConfirmed } = useEntitlement();
   const { status: tutorialStatus, isLoading: tutorialLoading } = useTutorial();
   const tutorialBlocksOnboarding =
     tutorialLoading || tutorialStatus === 'not_started' || tutorialStatus === 'in_progress';
@@ -120,7 +120,10 @@ export default function DashboardPage() {
   // persona flow. Resets when a Plus subscriber downgrades back to free.
   const prevTierRef = useRef<Entitlement['tier'] | null>(null);
   useEffect(() => {
-    if (!user || entitlementLoading) return;
+    // Wait for a confirmed entitlement. The optimistic default is tier "free",
+    // so triggering off the unconfirmed state would pitch Plus to a paying user
+    // whose status hasn't loaded (or whose status fetch failed).
+    if (!user || !entitlementConfirmed) return;
     if (tutorialBlocksOnboarding) return;
     const userId = (user as any).id;
     // Detect plus → free downgrade and clear the seen flag so the pitch can
@@ -138,7 +141,7 @@ export default function DashboardPage() {
     if (showPersonaModal) return;
     markPlusOnboardingSeen(userId);
     setShowPlusOnboarding(true);
-  }, [user, entitlement.tier, entitlementLoading, showPersonaModal, tutorialBlocksOnboarding]);
+  }, [user, entitlement.tier, entitlementConfirmed, showPersonaModal, tutorialBlocksOnboarding]);
 
   const openCreateModal = () => {
     setNewTripName('');

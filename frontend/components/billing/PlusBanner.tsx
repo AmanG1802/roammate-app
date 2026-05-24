@@ -51,10 +51,11 @@ export function PastDueBanner() {
  * yet). Dismissible. Counter and dismissal state both live in localStorage.
  */
 export function ReEngagementBanner({ tripCount }: { tripCount: number }) {
-  const { entitlement, requirePlus } = useEntitlement();
+  const { entitlement, isConfirmed, requirePlus } = useEntitlement();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    if (!isConfirmed) return; // don't nudge until we've confirmed the user is free
     if (entitlement.tier !== 'free') return;
     if (tripCount < 1) return;
     if (typeof window === 'undefined') return;
@@ -64,7 +65,7 @@ export function ReEngagementBanner({ tripCount }: { tripCount: number }) {
     const count = Number(localStorage.getItem(KEY_COUNT) || '0') + 1;
     localStorage.setItem(KEY_COUNT, String(count));
     if (count >= 3) setVisible(true);
-  }, [entitlement.tier, tripCount]);
+  }, [isConfirmed, entitlement.tier, tripCount]);
 
   const dismiss = () => {
     localStorage.setItem('plus_reengagement_dismissed', '1');
@@ -162,7 +163,10 @@ export function OneTimeExpiryBanner() {
  * users. Hides entirely for Plus.
  */
 export function FreeUsageStrip() {
-  const { entitlement, requirePlus } = useEntitlement();
+  const { entitlement, isConfirmed, requirePlus } = useEntitlement();
+  // Suppress until confirmed — the unconfirmed default is also tier "free" and
+  // would render placeholder 0/15 · 0/2 counts to a paying user.
+  if (!isConfirmed) return null;
   if (entitlement.tier !== 'free') return null;
   const bsLeft = entitlement.brainstorm_remaining ?? 0;
   const bsCap = entitlement.brainstorm_cap ?? 15;
