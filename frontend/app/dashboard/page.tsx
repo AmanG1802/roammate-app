@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 import Link from 'next/link';
 import { Plus, Map, Calendar, Users, ChevronRight, Search, LayoutGrid, Loader2, X, MailOpen, Plane, Check, XCircle, Trash2, Pencil, AlertTriangle, History, Rocket, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -81,15 +81,8 @@ export default function DashboardPage() {
   }, [user, tutorialBlocksOnboarding]);
 
   const savePersonas = async (personas: string[]): Promise<boolean> => {
-    const token = getToken();
-    const API = process.env.NEXT_PUBLIC_API_URL ?? '';
     try {
-      const res = await fetch(`${API}/users/me/personas`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personas }),
-      });
-      if (!res.ok) throw new Error(`status ${res.status}`);
+      await api('/api/users/me/personas', { method: 'PUT', json: { personas } });
       const saved = localStorage.getItem('user');
       if (saved) {
         const u = JSON.parse(saved);
@@ -176,26 +169,10 @@ export default function DashboardPage() {
   const fetchTrips = async (signal?: AbortSignal) => {
     setTripsError(false);
     try {
-      const token = getToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-        signal,
-      });
-      if (response.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        router.push('/login');
-        return;
-      }
-      if (response.ok) {
-        setTrips(await response.json());
-      } else {
-        setTripsError(true);
-      }
+      const data = await api<any[]>('/api/trips/', { signal });
+      setTrips(data);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
-      console.error(err);
       setTripsError(true);
     } finally {
       setIsLoading(false);
@@ -205,12 +182,8 @@ export default function DashboardPage() {
   const fetchInvitations = async (signal?: AbortSignal) => {
     setInvitationsLoading(true);
     try {
-      const token = getToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/pending`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal,
-      });
-      if (res.ok) setInvitations(await res.json());
+      const data = await api<any[]>('/api/trips/invitations/pending', { signal });
+      setInvitations(data);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
     } finally {
@@ -221,20 +194,12 @@ export default function DashboardPage() {
   const handleAcceptInvite = async (memberId: number) => {
     setRespondingTo(memberId);
     try {
-      const token = getToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/accept`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
-        onTripMutated();
-        toast.show('Invitation accepted', { kind: 'success' });
-      } else {
-        toast.show("Couldn't accept invitation — please try again", { kind: 'error' });
-      }
+      await api(`/api/trips/invitations/${memberId}/accept`, { method: 'POST' });
+      setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
+      onTripMutated();
+      toast.show('Invitation accepted', { kind: 'success' });
     } catch {
-      toast.show('Network error — could not accept invitation', { kind: 'error' });
+      toast.show("Couldn't accept invitation — please try again", { kind: 'error' });
     } finally {
       setRespondingTo(null);
     }
@@ -243,18 +208,10 @@ export default function DashboardPage() {
   const handleDeclineInvite = async (memberId: number) => {
     setRespondingTo(memberId);
     try {
-      const token = getToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/invitations/${memberId}/decline`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok || res.status === 204) {
-        setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
-      } else {
-        toast.show("Couldn't decline invitation — please try again", { kind: 'error' });
-      }
+      await api(`/api/trips/invitations/${memberId}/decline`, { method: 'DELETE' });
+      setInvitations((prev) => prev.filter((inv) => inv.id !== memberId));
     } catch {
-      toast.show('Network error — could not decline invitation', { kind: 'error' });
+      toast.show("Couldn't decline invitation — please try again", { kind: 'error' });
     } finally {
       setRespondingTo(null);
     }
@@ -265,65 +222,41 @@ export default function DashboardPage() {
     if (!newTripName.trim() || !newTripStartDate) return;
     setIsCreating(true);
     setCreateError('');
+    const body: Record<string, unknown> = { name: newTripName };
+    body.start_date = `${newTripStartDate}T00:00:00`;
+    if (newTripTimezone) body.timezone = newTripTimezone;
     try {
-      const token = getToken();
-      const body: Record<string, unknown> = { name: newTripName };
-      body.start_date = `${newTripStartDate}T00:00:00`;
-      if (newTripTimezone) body.timezone = newTripTimezone;
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      if (response.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        router.push('/login');
-        return;
-      }
-      if (response.status === 402) {
-        const errBody = await response.json().catch(() => null);
-        const needs = isNeedsPlus(errBody);
+      const created = await api<any>('/api/trips/', { method: 'POST', json: body });
+      setNewTripName('');
+      setNewTripStartDate('');
+      setNewTripTimezone(
+        typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
+      );
+      setCreateError('');
+      setIsModalOpen(false);
+      onTripMutated();
+      if (created?.id) router.push(`/trips/${created.id}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        const needs = isNeedsPlus(err.data);
         setIsCreating(false);
         const ok = await requirePlus(needs?.feature ?? 'active_trips');
         if (ok) {
           await refreshEntitlement();
-          // Re-submit by triggering the same handler with a fake event;
-          // simplest is to call the API again inline.
-          const retry = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify(body),
-          });
-          if (retry.ok) {
-            const created = await retry.json().catch(() => null);
+          try {
+            const created = await api<any>('/api/trips/', { method: 'POST', json: body });
             setNewTripName('');
             setNewTripStartDate('');
             setCreateError('');
             setIsModalOpen(false);
             onTripMutated();
             if (created?.id) router.push(`/trips/${created.id}`);
-          }
+          } catch { /* silently ignore retry failure */ }
         }
         return;
       }
-      if (response.ok) {
-        const created = await response.json().catch(() => null);
-        setNewTripName('');
-        setNewTripStartDate('');
-        setNewTripTimezone(
-          typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
-        );
-        setCreateError('');
-        setIsModalOpen(false);
-        onTripMutated();
-        if (created?.id) router.push(`/trips/${created.id}`);
-      } else {
-        const err = await response.json().catch(() => null);
-        setCreateError(typeof err?.detail === 'string' ? err.detail : `Failed to create trip (${response.status})`);
-      }
-    } catch (err) {
-      setCreateError('Network error — please try again');
+      const detail = err instanceof ApiError ? err.message : 'Network error — please try again';
+      setCreateError(detail);
     } finally {
       setIsCreating(false);
     }
@@ -806,30 +739,18 @@ function TripGrid({
     if (warmedRef.current.has(tripId)) return;
     warmedRef.current.add(tripId);
     try { router.prefetch(`/trips/${tripId}`); } catch { /* ignore */ }
-    const token = getToken();
-    if (!token) return;
-    const headers = { Authorization: `Bearer ${token}` };
-    const base = process.env.NEXT_PUBLIC_API_URL ?? '';
     // Fire-and-forget; browser HTTP cache holds the response for the click.
-    fetch(`${base}/trips/${tripId}`, { headers }).catch(() => {});
-    fetch(`${base}/trips/${tripId}/members`, { headers }).catch(() => {});
+    fetch(`/api/trips/${tripId}`, { credentials: 'include' }).catch(() => {});
+    fetch(`/api/trips/${tripId}/members`, { credentials: 'include' }).catch(() => {});
   }, [router]);
 
   const handleDeleteTrip = useCallback(async (tripId: number) => {
     setDeleteLoading(true);
     try {
-      const token = getToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok || res.status === 204) {
-        onTripUpdate?.();
-      } else {
-        toastBus("Couldn't delete trip — please try again", { kind: 'error' });
-      }
+      await api(`/api/trips/${tripId}`, { method: 'DELETE' });
+      onTripUpdate?.();
     } catch {
-      toastBus('Network error — could not delete trip', { kind: 'error' });
+      toastBus("Couldn't delete trip — please try again", { kind: 'error' });
     } finally {
       setDeleteLoading(false);
       setDeleteConfirm(null);
@@ -839,57 +760,30 @@ function TripGrid({
   const handleSaveName = useCallback(async (tripId: number) => {
     if (!editingNameVal.trim()) { setEditingNameId(null); return; }
     try {
-      const token = getToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: editingNameVal.trim() }),
-      });
-      if (res.ok) {
-        onTripUpdate?.();
-      } else {
-        toastBus("Couldn't rename trip", { kind: 'error' });
-      }
+      await api(`/api/trips/${tripId}`, { method: 'PATCH', json: { name: editingNameVal.trim() } });
+      onTripUpdate?.();
     } catch {
-      toastBus('Network error — name not updated', { kind: 'error' });
+      toastBus("Couldn't rename trip", { kind: 'error' });
     } finally { setEditingNameId(null); }
   }, [editingNameVal, onTripUpdate]);
 
   const handleSaveTz = useCallback(async (tripId: number) => {
     if (!editingTzVal) { setEditingTzId(null); return; }
     try {
-      const token = getToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ timezone: editingTzVal }),
-      });
-      if (res.ok) {
-        onTripUpdate?.();
-      } else {
-        toastBus("Couldn't update timezone", { kind: 'error' });
-      }
+      await api(`/api/trips/${tripId}`, { method: 'PATCH', json: { timezone: editingTzVal } });
+      onTripUpdate?.();
     } catch {
-      toastBus('Network error — timezone not updated', { kind: 'error' });
+      toastBus("Couldn't update timezone", { kind: 'error' });
     } finally { setEditingTzId(null); }
   }, [editingTzVal, onTripUpdate]);
 
   const handleSaveDate = useCallback(async (tripId: number) => {
     if (!editingDateVal) { setEditingDateId(null); return; }
     try {
-      const token = getToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ start_date: `${editingDateVal}T00:00:00` }),
-      });
-      if (res.ok) {
-        onTripUpdate?.();
-      } else {
-        toastBus("Couldn't update start date", { kind: 'error' });
-      }
+      await api(`/api/trips/${tripId}`, { method: 'PATCH', json: { start_date: `${editingDateVal}T00:00:00` } });
+      onTripUpdate?.();
     } catch {
-      toastBus('Network error — date not updated', { kind: 'error' });
+      toastBus("Couldn't update start date", { kind: 'error' });
     } finally { setEditingDateId(null); }
   }, [editingDateVal, onTripUpdate]);
 

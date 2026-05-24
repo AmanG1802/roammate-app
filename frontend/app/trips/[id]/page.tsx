@@ -11,7 +11,7 @@ import {
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import useAuth, { ProtectedRoute } from '@/hooks/useAuth';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 
 // ── Framer Motion variants ────────────────────────────────────────────────────
 // "Slight cinematic": elements fade-up with a snappy stagger (~600ms total),
@@ -132,35 +132,26 @@ function TripHubContent() {
   // ── Fetch trip + members ────────────────────────────────────────────────────
   useEffect(() => {
     if (!tripId) return;
-    const token = getToken();
-    if (!token) { router.push('/login'); return; }
 
     const fetchData = async () => {
       try {
-        const [tripRes, membersRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [tripData, membersData] = await Promise.all([
+          api<any>(`/api/trips/${tripId}`),
+          api<any[]>(`/api/trips/${tripId}/members`),
         ]);
-
-        if (tripRes.status === 403 || tripRes.status === 404) {
+        setTrip(tripData);
+        setMembers(membersData);
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
           setNotFound(true);
-          return;
         }
-        if (tripRes.ok) setTrip(await tripRes.json());
-        if (membersRes.ok) setMembers(await membersRes.json());
-      } catch {
-        // silently fail — data stays null
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchData();
-  }, [tripId, router]);
+  }, [tripId]);
 
   // ── Reduced motion + planner prefetch ───────────────────────────────────────
   const reduceMotion = useReducedMotion();
@@ -178,30 +169,18 @@ function TripHubContent() {
     if (!inviteEmail.trim() || !inviteRole) return;
     setInviteStatus('loading');
     setInviteError('');
-    const token = getToken();
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/invite`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
-        }
-      );
-      if (res.ok) {
-        const newMember = await res.json();
-        setMembers((prev) => [...prev, newMember]);
-        setInviteEmail('');
-        setInviteRole('');
-        setInviteStatus('success');
-        setTimeout(() => { setInviteStatus('idle'); setShowInvite(false); }, 2000);
-      } else {
-        const err = await res.json();
-        setInviteError(err.detail ?? 'Could not invite user');
-        setInviteStatus('error');
-      }
-    } catch {
-      setInviteError('Network error — please try again');
+      const newMember = await api<any>(`/api/trips/${tripId}/invite`, {
+        method: 'POST',
+        json: { email: inviteEmail, role: inviteRole },
+      });
+      setMembers((prev) => [...prev, newMember]);
+      setInviteEmail('');
+      setInviteRole('');
+      setInviteStatus('success');
+      setTimeout(() => { setInviteStatus('idle'); setShowInvite(false); }, 2000);
+    } catch (err) {
+      setInviteError(err instanceof ApiError ? err.message : 'Network error — please try again');
       setInviteStatus('error');
     }
   };
@@ -209,20 +188,12 @@ function TripHubContent() {
   // ── Save timezone ──────────────────────────────────────────────────────────
   const handleSaveTimezone = async () => {
     if (!tzValue) return;
-    const token = getToken();
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ timezone: tzValue }),
-        }
-      );
-      if (res.ok) {
-        const updated = await res.json();
-        setTrip(updated);
-      }
+      const updated = await api<any>(`/api/trips/${tripId}`, {
+        method: 'PATCH',
+        json: { timezone: tzValue },
+      });
+      setTrip(updated);
     } catch {
       // silently fail
     }
@@ -232,20 +203,12 @@ function TripHubContent() {
   // ── Save start date ────────────────────────────────────────────────────────
   const handleSaveDate = async () => {
     if (!dateValue) return;
-    const token = getToken();
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ start_date: `${dateValue}T00:00:00` }),
-        }
-      );
-      if (res.ok) {
-        const updated = await res.json();
-        setTrip(updated);
-      }
+      const updated = await api<any>(`/api/trips/${tripId}`, {
+        method: 'PATCH',
+        json: { start_date: `${dateValue}T00:00:00` },
+      });
+      setTrip(updated);
     } catch {
       // silently fail
     }
