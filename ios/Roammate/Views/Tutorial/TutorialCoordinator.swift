@@ -69,7 +69,7 @@ struct TutorialCoordinator<Content: View>: View {
                 step: step,
                 isLast: isLast,
                 onNext: { Task { await advance(from: step, isLast: isLast) } },
-                onPrev: { Task { await tutorial.advance(to: max(1, step.number - 1)) } },
+                onPrev: { Task { await tutorial.advance(to: max(1, step.backTo ?? step.number - 1)) } },
                 onSkip: { Task { await tutorial.skip() } },
                 onTryIt: step.tryItAction.map { action in
                     { Task { await runTryIt(action) } }

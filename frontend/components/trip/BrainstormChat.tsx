@@ -295,9 +295,8 @@ export default function BrainstormChat({
             </motion.button>
           )}
         </AnimatePresence>
-        <div className="flex items-end gap-2">
+        <div data-tutorial="brainstorm-chat-input" className="flex items-end gap-2">
           <textarea
-            data-tutorial="brainstorm-chat-input"
             rows={2}
             value={input}
             onChange={(e) => setInput(e.target.value)}

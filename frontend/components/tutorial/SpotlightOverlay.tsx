@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X } from 'lucide-react';
+import { Info, Sparkles, X } from 'lucide-react';
 
 type TargetRect = { x: number; y: number; width: number; height: number };
 
@@ -27,6 +27,25 @@ export type SpotlightOverlayProps = {
   hideNext?: boolean;
   tryIt?: { label: string; onClick: () => void; loading?: boolean };
 };
+
+// Render a step body, swapping the `{info}` token for the inline tooltip
+// (info) icon so copy can reference the in-app control by its glyph.
+function renderBody(body: string): React.ReactNode {
+  if (!body.includes('{info}')) return body;
+  const parts = body.split('{info}');
+  return parts.map((part, i) => (
+    <span key={i}>
+      {part}
+      {i < parts.length - 1 && (
+        <Info
+          size={14}
+          className="inline-block align-text-bottom mx-0.5 text-indigo-600"
+          aria-label="info"
+        />
+      )}
+    </span>
+  ));
+}
 
 export default function SpotlightOverlay({
   open,
@@ -140,14 +159,23 @@ export default function SpotlightOverlay({
       }
     : null;
 
-  // Popover position: prefer to the right of the target, else below, else center.
+  // Popover position: prefer right of the target, then left, then below, else
+  // above/clamped. Left placement keeps right-edge targets (the brainstorm bin,
+  // the Concierge panel) from being covered by the popover.
   let popoverStyle: React.CSSProperties;
   if (cutout) {
     const fitsRight = cutout.x + cutout.width + POPOVER_GAP + POPOVER_WIDTH < vw - 16;
+    const fitsLeft = cutout.x - POPOVER_GAP - POPOVER_WIDTH > 16;
     const fitsBelow = cutout.y + cutout.height + POPOVER_GAP + 220 < vh - 16;
     if (fitsRight) {
       popoverStyle = {
         left: cutout.x + cutout.width + POPOVER_GAP,
+        top: Math.min(cutout.y, vh - 280),
+        width: POPOVER_WIDTH,
+      };
+    } else if (fitsLeft) {
+      popoverStyle = {
+        left: cutout.x - POPOVER_GAP - POPOVER_WIDTH,
         top: Math.min(cutout.y, vh - 280),
         width: POPOVER_WIDTH,
       };
@@ -261,7 +289,7 @@ export default function SpotlightOverlay({
               </button>
             </div>
             <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-            <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{body}</p>
+            <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{renderBody(body)}</p>
 
             {tryIt && (
               <button

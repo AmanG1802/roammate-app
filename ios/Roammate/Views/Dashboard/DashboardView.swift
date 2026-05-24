@@ -126,8 +126,12 @@ struct DashboardView: View {
                 .presentationDragIndicator(.visible)
             }
             .onReceive(NotificationCenter.default.publisher(for: .tutorialStartPlanDemo)) { _ in
+                // Commit `planDemoMode` first, then present on the next runloop.
+                // Flipping both in the same update let the sheet capture a stale
+                // `demoMode = false`, so the drawer opened without running the
+                // demo on the first "Try Now" tap.
                 planDemoMode = true
-                showPlanTrip = true
+                DispatchQueue.main.async { showPlanTrip = true }
             }
             .onChange(of: path) { _, newPath in
                 if newPath.isEmpty {

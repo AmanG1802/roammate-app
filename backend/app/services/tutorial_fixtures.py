@@ -246,6 +246,10 @@ CANNED_BRAINSTORM_REPLIES: list[str] = [
     "Good call thinking ahead. For rainy NYC days, I'd bookmark the Met and the Tenement Museum — both are big enough to spend hours indoors and not feel rushed.",
 ]
 
+# The tour's "Send a sample message" asks about a rainy-day plan, so we pin its
+# reply rather than relying on the round-robin counter landing here.
+TUTORIAL_RAINY_DAY_REPLY: str = CANNED_BRAINSTORM_REPLIES[3]
+
 
 # Seeded user/assistant pairs forming the initial chat history.
 INITIAL_BRAINSTORM_HISTORY: list[dict[str, str]] = [

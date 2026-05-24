@@ -157,7 +157,7 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
   const openItem = openId != null ? items.find((i) => i.id === openId) ?? null : null;
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div data-tutorial="brainstorm-bin" className="flex flex-col h-full bg-white">
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
         <div className="p-2.5 bg-gradient-to-br from-amber-400 to-orange-500 text-white rounded-xl shadow-sm shadow-amber-200/60 shrink-0">
