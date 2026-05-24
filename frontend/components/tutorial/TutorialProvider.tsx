@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
@@ -22,7 +22,7 @@ import {
  * "delete tutorial trip?" prompt; advances the backend step on each step
  * change so we can resume after reloads.
  */
-export default function TutorialDriver() {
+function TutorialDriverInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -279,5 +279,16 @@ export default function TutorialDriver() {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+// `useSearchParams()` forces a client-side bailout during static prerender.
+// Since this driver is mounted in the root layout (every route), it must sit
+// behind a Suspense boundary or it breaks the build for all pages.
+export default function TutorialDriver() {
+  return (
+    <Suspense fallback={null}>
+      <TutorialDriverInner />
+    </Suspense>
   );
 }
