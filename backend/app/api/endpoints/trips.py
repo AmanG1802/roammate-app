@@ -20,9 +20,11 @@ def _parse_time(v: Any) -> time | None:
             raise HTTPException(status_code=422, detail=f"Invalid time format: {v!r}") from exc
     raise HTTPException(status_code=422, detail=f"Invalid time value type: {type(v).__name__}")
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+
+from app.api import pagination
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func as sa_func
+from sqlalchemy import select, update, delete, func as sa_func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from app.db.session import get_db
@@ -36,6 +38,7 @@ from app.schemas.trip import (
 from app.services.idea_bin import idea_bin_service
 from app.services import notification_service
 from app.services import entitlements
+from app.services.vote_tally import tally_votes
 from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
 
@@ -56,8 +59,11 @@ router = APIRouter()
 
 @router.get("/", response_model=List[TripWithRole])
 async def get_my_trips(
+    response: Response,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    limit: int | None = None,
+    cursor: str | None = None,
 ):
     """
     Get all trips where the current user is an accepted member,
@@ -68,7 +74,20 @@ async def get_my_trips(
         .join(TripMember)
         .where(TripMember.user_id == current_user.id, TripMember.status == "accepted")
     )
-    rows = (await db.execute(stmt)).all()
+    # Opt-in cursor pagination (D3). Default (no params) returns the full list,
+    # unchanged for current clients; the body stays a bare array either way and
+    # the next cursor is advertised via response headers.
+    if pagination.is_paginated(limit, cursor):
+        eff_limit = pagination.clamp_limit(limit)
+        stmt = pagination.apply_keyset(stmt, Trip.id, cursor=cursor, limit=eff_limit, descending=True)
+        rows = (await db.execute(stmt)).all()
+        page, has_more = pagination.page_slice(rows, eff_limit)
+        response.headers["X-Has-More"] = "true" if has_more else "false"
+        if page and has_more:
+            response.headers["X-Next-Cursor"] = pagination.encode_cursor(page[-1][0].id)
+        rows = page
+    else:
+        rows = (await db.execute(stmt)).all()
     return [
         TripWithRole(
             id=trip.id,
@@ -154,14 +173,22 @@ async def get_my_invitations(
     )
     members = (await db.execute(stmt)).scalars().all()
 
+    # Load every relevant trip's admin (with user) in one query rather than one
+    # per invitation (D5); first admin per trip wins, matching prior behaviour.
+    trip_ids = [m.trip_id for m in members]
+    admins_by_trip: dict[int, TripMember] = {}
+    if trip_ids:
+        admin_rows = (await db.execute(
+            select(TripMember)
+            .where(TripMember.trip_id.in_(trip_ids), TripMember.role == "admin")
+            .options(selectinload(TripMember.user))
+        )).scalars().all()
+        for a in admin_rows:
+            admins_by_trip.setdefault(a.trip_id, a)
+
     results: list[dict] = []
     for m in members:
-        admin_stmt = (
-            select(TripMember)
-            .where(TripMember.trip_id == m.trip_id, TripMember.role == "admin")
-            .options(selectinload(TripMember.user))
-        )
-        owner_member = (await db.execute(admin_stmt)).scalars().first()
+        owner_member = admins_by_trip.get(m.trip_id)
         inviter = None
         if owner_member and owner_member.user:
             inviter = InviterSummary(name=owner_member.user.name or "", email=owner_member.user.email)
@@ -306,6 +333,18 @@ async def update_trip(
         new_start = update.start_date.date() if hasattr(update.start_date, 'date') else update.start_date
         old_start = trip.start_date.date() if trip.start_date and hasattr(trip.start_date, 'date') else trip.start_date
 
+        # Preload every event for the trip once and bucket by day_date, instead
+        # of issuing one SELECT per day inside the shift loop (D9 — removes the
+        # N per-day event subqueries). The careful per-day ordering + flush is
+        # kept so the (trip_id, date) unique constraint never collides mid-shift.
+        events_by_day: dict = {}
+        if old_start is None or new_start != old_start:
+            all_events = (await db.execute(
+                select(EventModel).where(EventModel.trip_id == trip_id)
+            )).scalars().all()
+            for evt in all_events:
+                events_by_day.setdefault(evt.day_date, []).append(evt)
+
         if old_start and new_start != old_start:
             date_changed = True
             delta = new_start - old_start
@@ -322,12 +361,7 @@ async def update_trip(
             for d in days:
                 old_day_date = d.date
                 new_day_date = old_day_date + delta
-                evt_stmt = select(EventModel).where(
-                    EventModel.trip_id == trip_id,
-                    EventModel.day_date == old_day_date,
-                )
-                day_events = (await db.execute(evt_stmt)).scalars().all()
-                for evt in day_events:
+                for evt in events_by_day.get(old_day_date, []):
                     evt.day_date = new_day_date
                 d.date = new_day_date
                 await db.flush()
@@ -348,12 +382,7 @@ async def update_trip(
                 new_day_date = new_start + timedelta(days=max(d.day_number, 1) - 1)
                 if old_day_date == new_day_date:
                     continue
-                evt_stmt = select(EventModel).where(
-                    EventModel.trip_id == trip_id,
-                    EventModel.day_date == old_day_date,
-                )
-                day_events = (await db.execute(evt_stmt)).scalars().all()
-                for evt in day_events:
+                for evt in events_by_day.get(old_day_date, []):
                     evt.day_date = new_day_date
                 d.date = new_day_date
                 await db.flush()
@@ -483,14 +512,13 @@ async def delete_trip(
         update(Notification).where(Notification.trip_id == trip_id).values(trip_id=None)
     )
 
-    for events in (await db.execute(select(EventModel).where(EventModel.trip_id == trip_id))).scalars().all():
-        await db.delete(events)
-    for idea in (await db.execute(select(IdeaBinItemModel).where(IdeaBinItemModel.trip_id == trip_id))).scalars().all():
-        await db.delete(idea)
-    for day in (await db.execute(select(TripDay).where(TripDay.trip_id == trip_id))).scalars().all():
-        await db.delete(day)
-    for member in (await db.execute(select(TripMember).where(TripMember.trip_id == trip_id))).scalars().all():
-        await db.delete(member)
+    # Bulk-delete children in one statement each rather than looping per row
+    # (D7). Children before parent so FK constraints hold; vote rows cascade
+    # from their event/idea FK (ON DELETE CASCADE) as before.
+    await db.execute(delete(EventModel).where(EventModel.trip_id == trip_id))
+    await db.execute(delete(IdeaBinItemModel).where(IdeaBinItemModel.trip_id == trip_id))
+    await db.execute(delete(TripDay).where(TripDay.trip_id == trip_id))
+    await db.execute(delete(TripMember).where(TripMember.trip_id == trip_id))
 
     await db.delete(trip)
     await db.commit()
@@ -517,34 +545,13 @@ async def get_idea_bin(
     if not idea_ids:
         return []
 
-    up_stmt = (
-        select(IdeaVote.idea_id, sa_func.count(IdeaVote.id))
-        .where(IdeaVote.idea_id.in_(idea_ids), IdeaVote.value == 1)
-        .group_by(IdeaVote.idea_id)
-    )
-    up_map = dict((await db.execute(up_stmt)).all())
-
-    down_stmt = (
-        select(IdeaVote.idea_id, sa_func.count(IdeaVote.id))
-        .where(IdeaVote.idea_id.in_(idea_ids), IdeaVote.value == -1)
-        .group_by(IdeaVote.idea_id)
-    )
-    down_map = dict((await db.execute(down_stmt)).all())
-
-    my_stmt = (
-        select(IdeaVote.idea_id, IdeaVote.value)
-        .where(IdeaVote.idea_id.in_(idea_ids), IdeaVote.user_id == current_user.id)
-    )
-    my_map = dict((await db.execute(my_stmt)).all())
+    tallies = await tally_votes(db, IdeaVote, IdeaVote.idea_id, idea_ids, current_user.id)
 
     results = []
     for i in ideas:
+        up, down, mine = tallies.get(i.id, (0, 0, 0))
         data = IdeaBinItem.model_validate(i, from_attributes=True).model_dump()
-        data.update(
-            up=up_map.get(i.id, 0),
-            down=down_map.get(i.id, 0),
-            my_vote=my_map.get(i.id, 0),
-        )
+        data.update(up=up, down=down, my_vote=mine)
         results.append(IdeaBinItem.model_validate(data))
     return results
 
@@ -990,8 +997,11 @@ async def delete_trip_day(
                 db.add(IdeaVote(idea_id=idea.id, user_id=v.user_id, value=v.value))
             await db.delete(evt)
     else:
-        for evt in day_events:
-            await db.delete(evt)
+        # Permanent delete: one bulk statement instead of per-event deletes (D7).
+        await db.execute(delete(EventModel).where(
+            EventModel.trip_id == trip_id,
+            EventModel.day_date == deleted_date,
+        ))
 
     await db.delete(day)
     # Flush the delete first so the unique constraint on (trip_id, date)

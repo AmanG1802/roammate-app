@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.core.config import settings
+
 log = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
@@ -64,12 +66,31 @@ class BaseLLMModel(ABC):
     def model_name(self) -> str:
         ...
 
-    async def _retry(self, coro_factory, *, retries: int = MAX_RETRIES):
-        """Call *coro_factory()* with exponential back-off on transient errors."""
+    async def _retry(
+        self,
+        coro_factory,
+        *,
+        retries: int = MAX_RETRIES,
+        timeout_s: float | None = None,
+    ):
+        """Call *coro_factory()* with exponential back-off on transient errors.
+
+        Each attempt is bounded by ``timeout_s`` (default ``LLM_TIMEOUT_S``) so a
+        black-holed provider connection fails fast instead of pinning a worker
+        until OS TCP keep-alive fires. A timeout is *not* retried — it raises
+        immediately so the total call stays bounded. See docs/[31] A7.
+        """
+        timeout_s = timeout_s if timeout_s is not None else settings.LLM_TIMEOUT_S
         last_exc: Exception | None = None
         for attempt in range(retries):
             try:
-                return await coro_factory()
+                return await asyncio.wait_for(coro_factory(), timeout=timeout_s)
+            except asyncio.TimeoutError:
+                log.warning(
+                    "LLM call timed out after %.0fs (provider=%s, model=%s)",
+                    timeout_s, self.provider_name(), self.model_name(),
+                )
+                raise
             except Exception as exc:
                 last_exc = exc
                 status = getattr(exc, "status_code", None) or getattr(exc, "status", None)

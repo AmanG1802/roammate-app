@@ -281,7 +281,7 @@ async def login_with_google(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        ident = oauth_google.verify(body.id_token, platform=body.platform)
+        ident = await oauth_google.verify(body.id_token, platform=body.platform)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

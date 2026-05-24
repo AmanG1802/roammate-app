@@ -14,9 +14,12 @@ can be distinguished from "not in cache".
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Any, Hashable, Optional, Tuple
 
 from cachetools import TTLCache
+
+from app.services.cache import redis_cache
 
 
 class _CacheMiss:
@@ -50,6 +53,39 @@ def _normalize_query(query: str) -> str:
     return query.strip().casefold()
 
 
+# ── Redis key builders (shared cross-process namespace). Mirror the local key
+#    shapes so a value cached by one process is found by another. ──────────────
+def _rk_find_place(query: str, bias_fp: Optional[str]) -> str:
+    h = hashlib.sha1(f"{_normalize_query(query)}|{bias_fp or ''}".encode()).hexdigest()
+    return f"gmap:find_place:{h}"
+
+
+def _rk_place_details(place_id: str, fields_sig: str) -> str:
+    return f"gmap:place_details:{place_id}:{fields_sig}"
+
+
+def _rk_directions(waypoint_idents: list[str], mode: str) -> str:
+    h = hashlib.sha1("|".join(waypoint_idents).encode()).hexdigest()
+    return f"gmap:directions:{mode}:{h}"
+
+
+def _rk_timezone(lat: float, lng: float) -> str:
+    la, ln = _timezone_key(lat, lng)
+    return f"gmap:timezone:{la},{ln}"
+
+
+def _from_redis(val: Any, state: str):
+    """Map a redis_cache.get() result to a public ``(value, state)`` tuple, or
+    ``None`` when Redis was unavailable so the caller falls back to TTLCache."""
+    if state == "down":
+        return None
+    if state == "hit":
+        return val, "hit"
+    if state == "negative_hit":
+        return None, "negative_hit"
+    return MISS, "miss"
+
+
 def _find_place_key(query: str, bias_fp: Optional[str]) -> Tuple[str, Optional[str]]:
     """Build the cache key. ``bias_fp=None`` preserves the legacy key shape
     so existing un-biased entries are still hit after this change."""
@@ -60,6 +96,9 @@ async def get_find_place(
     query: str, bias_fp: Optional[str] = None,
 ) -> Tuple[Any, str]:
     """Return ``(value, state)`` where state is ``hit|negative_hit|miss``."""
+    r = _from_redis(*await redis_cache.backend.get(_rk_find_place(query, bias_fp)))
+    if r is not None:
+        return r
     key = _find_place_key(query, bias_fp)
     async with _lock:
         if key in _find_place_cache:
@@ -74,6 +113,10 @@ async def set_find_place(
     value: Optional[dict[str, Any]],
     bias_fp: Optional[str] = None,
 ) -> None:
+    if await redis_cache.backend.set(
+        _rk_find_place(query, bias_fp), value, _FIND_PLACE_TTL, _NEGATIVE_TTL
+    ):
+        return
     key = _find_place_key(query, bias_fp)
     async with _lock:
         if value is None:
@@ -117,6 +160,9 @@ async def set_city_centroid(
 
 
 async def get_place_details(place_id: str, fields_sig: str) -> Tuple[Any, str]:
+    r = _from_redis(*await redis_cache.backend.get(_rk_place_details(place_id, fields_sig)))
+    if r is not None:
+        return r
     key = (place_id, fields_sig)
     async with _lock:
         if key in _place_details_cache:
@@ -129,6 +175,10 @@ async def get_place_details(place_id: str, fields_sig: str) -> Tuple[Any, str]:
 async def set_place_details(
     place_id: str, fields_sig: str, value: Optional[dict[str, Any]]
 ) -> None:
+    if await redis_cache.backend.set(
+        _rk_place_details(place_id, fields_sig), value, _PLACE_DETAILS_TTL, _NEGATIVE_TTL
+    ):
+        return
     key = (place_id, fields_sig)
     async with _lock:
         if value is None:
@@ -142,6 +192,9 @@ def _directions_key(waypoint_idents: list[str], mode: str) -> Hashable:
 
 
 async def get_directions(waypoint_idents: list[str], mode: str) -> Tuple[Any, str]:
+    r = _from_redis(*await redis_cache.backend.get(_rk_directions(waypoint_idents, mode)))
+    if r is not None:
+        return r
     key = _directions_key(waypoint_idents, mode)
     async with _lock:
         if key in _directions_cache:
@@ -154,6 +207,10 @@ async def get_directions(waypoint_idents: list[str], mode: str) -> Tuple[Any, st
 async def set_directions(
     waypoint_idents: list[str], mode: str, value: Optional[dict[str, Any]]
 ) -> None:
+    if await redis_cache.backend.set(
+        _rk_directions(waypoint_idents, mode), value, _DIRECTIONS_TTL, _NEGATIVE_TTL
+    ):
+        return
     key = _directions_key(waypoint_idents, mode)
     async with _lock:
         if value is None:
@@ -168,6 +225,9 @@ def _timezone_key(lat: float, lng: float) -> Tuple[float, float]:
 
 
 async def get_timezone(lat: float, lng: float) -> Tuple[Any, str]:
+    r = _from_redis(*await redis_cache.backend.get(_rk_timezone(lat, lng)))
+    if r is not None:
+        return r
     key = _timezone_key(lat, lng)
     async with _lock:
         if key in _timezone_cache:
@@ -178,6 +238,10 @@ async def get_timezone(lat: float, lng: float) -> Tuple[Any, str]:
 
 
 async def set_timezone(lat: float, lng: float, value: Optional[str]) -> None:
+    if await redis_cache.backend.set(
+        _rk_timezone(lat, lng), value, _TIMEZONE_TTL, _NEGATIVE_TTL
+    ):
+        return
     key = _timezone_key(lat, lng)
     async with _lock:
         if value is None:

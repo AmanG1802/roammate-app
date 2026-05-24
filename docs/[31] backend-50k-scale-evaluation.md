@@ -19,7 +19,7 @@ The 50k benchmark is not arbitrary: at this size, single-process state (in-memor
 The backend is **architecturally sound** (async-first, AsyncSession, AsyncClient, async LLM SDKs, bounded concurrency for Maps). The issues are concentrated in three layers:
 
 1. **Process-local state that should be shared** — caches, circuit breakers, rate limits, fire-and-forget trackers. Multi-replica deployment multiplies API costs and weakens protection.
-2. **Synchronous request lifetime for slow operations** — LLM endpoints (5–40s), trip cascade deletes, webhook handlers all block a worker slot. At 1k concurrent users, this is the dominant latency source.
+2. **Synchronous request lifetime for slow operations** — LLM endpoints (5–40s), trip cascade deletes, webhook handlers each hold a pooled DB connection (and socket) for the full duration. At 1k concurrent users this exhausts the connection pool and is the dominant latency source. (Note: with async handlers the *worker* is not pinned during the `await` — the held resource is the connection, not a worker slot. See A4.)
 3. **DB ergonomics built for small trips** — unbounded list endpoints, N+1 vote/actor/group queries, default pool size, full-table dedup scans. Each is a future timeout.
 
 The roadmap below is ordered by **risk-adjusted impact** — the work that prevents an outage or hard-failure mode comes before latency polish.
@@ -92,23 +92,31 @@ def _fire(coro):
 
 ---
 
-### A4. Synchronous LLM endpoints block worker slots (HIGH — capacity)
+### A4. Long LLM requests hold a pooled DB connection for their full duration (HIGH — capacity)
 **Files:** `/api/llm/plan-trip`, `/api/brainstorm/chat`, `/api/brainstorm/extract`, `/api/concierge/chat`
 
-These take **5–40 seconds** and hold a worker, a DB connection, and a TCP socket for the full duration. At 1500 concurrent users and ~10% LLM-bound traffic = 150 simultaneous slow requests. With 20 uvicorn workers, **all slots are LLM-bound** within seconds.
+These take **5–40 seconds**. The handlers are `async def`, so the slow `await ...chat(...)` does **not** pin the uvicorn worker — the event loop yields and services other requests while the LLM call is in flight. What *is* held for the full request lifetime is the **DB connection** acquired via `Depends(get_db)`, plus a TCP socket. At 1500 concurrent users and ~10% LLM-bound traffic = ~150 simultaneous slow requests, each holding a pooled connection for 5–40s. With `pool_size=20` (see D1), the pool is exhausted and every other request silently queues on connection acquisition. **The bottleneck is the connection pool, not worker slots.**
 
-**Solution — two complementary moves:**
+**Solution — two moves that address *different* problems:**
 
-1. **Stream responses** (immediate). All three providers expose `stream=True`. Convert the four endpoints above to `StreamingResponse` (SSE). First token lands in <1s — perceived latency drops 10×. Token tracking persists from the streaming finalizer, not after.
-   - `claude_model.py`, `openai_model.py`, `gemini_model.py`: add `stream_chat()` returning an `AsyncIterator[str]`.
-   - Endpoint handlers yield SSE-formatted chunks.
-   - iOS/Web already have streaming-capable HTTP clients; UI work is small.
-
-2. **Move `/extract` and `/plan-trip` enrichment to a job queue** (Celery + Redis broker). Return `{job_id, status: "pending"}` immediately; client polls or subscribes to a status channel. This is mandatory for `/extract` because it does LLM + N Maps calls + dedup — easily 30s+.
+1. **Move `/extract` and `/plan-trip` to a job queue** (Celery + Redis broker) — *this is the capacity fix*. Return `{job_id, status: "pending"}` immediately; the handler releases its DB connection in <100ms while the Celery worker does the slow LLM + Maps + dedup work on its own connection. Mandatory for `/extract` because it does LLM + N Maps calls + dedup — easily 30s+. `/plan-trip` follows the same pattern.
    - Celery already has a natural home: Redis is configured, the worker process is cheap.
    - `BrainstormJob` and `PlanTripJob` tables track state.
 
-**Evaluation:** Streaming alone removes the worker-pinning problem for chat — workers free up between tokens. Queueing extract/plan-trip is the only way to keep p99 latency bounded under burst. Together they triple effective capacity at the same hardware.
+2. **Stream the prose-only replies** (perceived-latency polish, *not* a capacity lever). This applies to **exactly two paths**:
+   - `/api/brainstorm/chat` — returns only `assistant_message`, free text.
+   - `/api/concierge/chat` **when `message_type == "text"`** — the conversational reply with no action/place card.
+
+   For these, token-by-token `StreamingResponse` (SSE) lands the first token in <1s — perceived latency drops ~10× on replies that are pure prose.
+   - `claude_model.py`, `openai_model.py`, `gemini_model.py`: add `stream_chat()` returning an `AsyncIterator[str]`.
+   - Endpoint handlers yield SSE-formatted chunks; persist token tracking from the streaming finalizer, not after.
+
+**Explicitly NOT streamed:**
+- **`/extract`** — the LLM returns a single `{user_message, items[]}` object. The items are only usable once complete, the user-facing prose is a one-line confirmation, and the slow tail is the *post-generation* Maps enrichment + dedup, which streaming doesn't touch. Use the job queue.
+- **`/plan-trip`** — structured itinerary output; same reasoning. Job queue.
+- **Concierge `action_card` / `place_card` paths** — the value is the structured card, which must be complete to render. Streaming the short prose around it buys nothing.
+
+**Evaluation:** Backgrounding `/extract` and `/plan-trip` is what keeps p99 bounded under burst — it returns the pooled DB connection in milliseconds instead of holding it for 30s+. Streaming the two prose paths is a UX win (first-token <1.5s) but does **not** change capacity: the event loop was already free during the await, and a streamed response holds its DB connection at least as long. Don't conflate the two.
 
 ---
 
@@ -148,7 +156,7 @@ Anthropic/OpenAI/Gemini SDKs *should* time out internally, but transient TCP bla
 
 **Solution:** Wrap `create()` calls in `asyncio.wait_for(..., timeout=60)`. Surface `asyncio.TimeoutError` as 504 with provider tag.
 
-**Evaluation:** Cheap insurance. Combine with A4 streaming — streaming has its own per-chunk timeout consideration.
+**Evaluation:** Cheap insurance. For the two streamed prose paths (A4), the `wait_for` wraps the stream open / first chunk rather than the whole call — streaming has its own per-chunk idle-timeout consideration.
 
 ---
 
@@ -375,13 +383,13 @@ Use `slowapi` or a custom `Depends(rate_limit("plan-trip", 10, 60))`.
 
 ---
 
-### R3. Streaming everywhere LLM speaks to user
-Already in A4 — listing here for completeness. Requires:
-- Backend: `StreamingResponse` + provider `.stream()` adapters
-- Frontend: SSE consumer + incremental rendering (iOS already supports this via `URLSession.bytes`, Web via `EventSource` or `fetch().body.getReader()`)
+### R3. Streaming for prose-only LLM replies
+Already in A4 — listing here for completeness. **Scope: only the two prose-only paths** — `/api/brainstorm/chat` and `/api/concierge/chat` when `message_type == "text"`. Structured-output endpoints (`/extract`, `/plan-trip`) and the concierge card paths are deliberately excluded — they go through the Celery job queue (R1), not SSE. Requires:
+- Backend: `StreamingResponse` + provider `.stream()` adapters **on the two prose paths only**
+- Frontend: SSE consumer + incremental rendering — **gated on client work** (iOS `URLSession.bytes`, Web `fetch().body.getReader()`); neither client is SSE-ready today (see Decisions Locked In)
 - Token tracking: persist on stream finalize, not on first response
 
-**Evaluation:** Single largest perceived-latency improvement available. p95 first-token <1.5s vs current p95 full-response ~12s.
+**Evaluation:** Largest perceived-latency improvement available *for conversational replies* — p95 first-token <1.5s vs current p95 full-response ~12s. **Not a capacity lever** (see A4): the async event loop is already free during the LLM await, and the capacity unlock is backgrounding the structured endpoints, not streaming.
 
 ---
 
@@ -450,7 +458,7 @@ Ordered by **risk-adjusted value** (impact ÷ effort, weighted by severity of fa
 ### Phase 4 — Streaming + queueing (2 weeks)
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
-| 15 | **A4 / R3** Streaming LLM endpoints | 1 week | Chat first, then extract preview |
+| 15 | **A4 / R3** Streaming prose-only replies | 1 week | Brainstorm chat + concierge `text` reply only; NOT extract/plan-trip |
 | 16 | **R1** Celery + email/webhook offload | 0.5 week | Phase A only |
 | 17 | **R1** Celery for `/extract` + `/plan-trip` jobs | 1 week | Frontend polling/SSE |
 
@@ -470,7 +478,7 @@ Each phase ships with verification gates. Don't skip these — silent regression
 1. **Phase 1 sanity:** Full pytest pass (~480 tests). Hand-verify token_usage rows persist after `/api/llm/plan-trip` under simulated load (`ab -n 50 -c 10`).
 2. **Phase 2 query plans:** `EXPLAIN ANALYZE` the rewritten dedup and vote-tally queries on a seeded DB of 10k users × 50 trips × 200 ideas. Latency budget: <50ms p95.
 3. **Phase 3 Redis:** Bring up two backend replicas locally via docker-compose, confirm cache hits cross-process. Kill Redis mid-request — verify graceful fallback path.
-4. **Phase 4 streaming:** First-token <1.5s p95 on `/brainstorm/chat`. Worker slot held only while streaming, not for the full LLM call. Verify token tracker still persists on stream completion + on client disconnect.
+4. **Phase 4 streaming:** First-token <1.5s p95 on `/brainstorm/chat` and the concierge `message_type == "text"` path — the only two streamed endpoints. Verify token tracker still persists on stream completion *and* on client disconnect. Confirm `/extract` and `/plan-trip` were **not** converted to SSE — they must return via the job-polling path. Streaming is verified as a perceived-latency win, not a capacity win (capacity is covered by the job-queue gate).
 5. **Phase 5 load test:** k6 or Locust script — ramp to 1500 concurrent virtual users hitting dashboard/today + brainstorm/messages + concierge/chat. Acceptance: p95 < 2s for cached reads, p95 < 5s first-token for chat.
 
 ---
@@ -489,7 +497,7 @@ Each phase ships with verification gates. Don't skip these — silent regression
 
 - **Single replica today** → A1 (Redis Maps cache) and A2 (Redis breaker) stay in Phase 3, **not** urgent. Process-local state is acceptable at current scale; revisit the day we add a second replica.
 - **Celery + Redis** is the chosen job runner. R1 phases (A → D) proceed as written.
-- **Neither iOS nor Web client is SSE-ready today.** Streaming (A4 / R3) is **deferred to Phase 4b** behind a frontend prerequisite. Phase 4a stays focused on Celery offload (`/extract`, `/plan-trip`, emails, webhooks) using request-response + job polling — which already removes the worker-pinning problem without needing streaming. Streaming becomes a UX polish layer once clients are updated.
+- **Neither iOS nor Web client is SSE-ready today.** Streaming (A4 / R3) is **deferred to Phase 4b** behind a frontend prerequisite, and is **scoped to the two prose-only paths only** — `/api/brainstorm/chat` and the concierge `message_type == "text"` reply. `/extract` and `/plan-trip` are never streamed; they go through the job queue. Phase 4a stays focused on Celery offload (`/extract`, `/plan-trip`, emails, webhooks) using request-response + job polling — which already relieves the connection-pool pressure without needing streaming. Streaming becomes a perceived-latency polish layer for conversational replies once clients are updated.
 
 ## Revised Phase 4
 
@@ -498,9 +506,9 @@ Each phase ships with verification gates. Don't skip these — silent regression
 | 15a | **R1** Celery + email/webhook offload (Phase A) | 0.5 week | Auth verify, password reset, Razorpay webhook follow-ups |
 | 15b | **R1** Celery for `/extract` + `/plan-trip` as polling jobs | 1 week | Endpoint returns `{job_id}`; client polls `/jobs/{id}` |
 | 15c | **R1** Trip cascade delete as background job | 2 days | After 15b infra lands |
-| 16 (deferred) | **A4 / R3** Streaming LLM endpoints | 1 week BE + 1 week FE | Blocked on iOS `URLSession.bytes` + Web SSE reader work |
+| 16 (deferred) | **A4 / R3** Streaming prose-only replies (brainstorm chat + concierge `text`) | 1 week BE + 1 week FE | Blocked on iOS `URLSession.bytes` + Web SSE reader work; NOT extract/plan-trip |
 
-The polling-job pattern (15b) gives 80% of the capacity win that streaming provides — workers free up as soon as the job hands off to Celery. Streaming is the perceived-latency polish, not the capacity unlock.
+The polling-job pattern (15b) is the capacity unlock — the handler hands off to Celery and releases its DB connection in milliseconds. Streaming provides **no** capacity benefit (the async event loop is already free during the LLM await, and a streamed response holds its DB connection at least as long); it is purely perceived-latency polish, and only for the two prose-only replies — `/api/brainstorm/chat` and the concierge `message_type == "text"` path.
 
 ## Still Open
 

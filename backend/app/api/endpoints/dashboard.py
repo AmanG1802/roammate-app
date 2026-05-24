@@ -102,11 +102,30 @@ async def get_today_widget(
 
     pages: list[TodayWidgetPage] = []
 
+    # Batch per-trip event counts for past trips into one grouped query (D5) —
+    # this is the unbounded N+1 (a user can accumulate many past trips).
+    past_event_counts: dict[int, int] = {}
+    if past:
+        past_event_counts = dict((await db.execute(
+            select(TimelineItem.trip_id, sa_func.count(TimelineItem.id))
+            .where(TimelineItem.trip_id.in_([t.id for t in past]))
+            .group_by(TimelineItem.trip_id)
+        )).all())
+
+    # Preload all TripDay rows for active trips once, grouped by trip (D5).
+    days_by_trip: dict[int, list] = {}
+    if active:
+        for d in (await db.execute(
+            select(TripDay)
+            .where(TripDay.trip_id.in_([t.id for t in active]))
+            .order_by(TripDay.date)
+        )).scalars().all():
+            days_by_trip.setdefault(d.trip_id, []).append(d)
+
     for t in reversed(past):
         sd = _to_date(t.start_date)
         ed = _to_date(t.end_date) or sd
-        count_stmt = select(sa_func.count(TimelineItem.id)).where(TimelineItem.trip_id == t.id)
-        total_events = (await db.execute(count_stmt)).scalar_one()
+        total_events = past_event_counts.get(t.id, 0)
         total_days = ((ed - sd).days + 1) if sd and ed else None
         pages.append(TodayWidgetPage(
             state="post_trip", trip=TodayTrip.model_validate(t),
@@ -157,9 +176,7 @@ async def get_today_widget(
             for i, e in enumerate(events)
         ]
 
-        trip_days = list((await db.execute(
-            select(TripDay).where(TripDay.trip_id == t.id).order_by(TripDay.date)
-        )).scalars().all())
+        trip_days = days_by_trip.get(t.id, [])
         ed = _to_date(t.end_date)
         total_days = ((ed - sd).days + 1) if sd and ed else (len(trip_days) or None)
         day_number = None

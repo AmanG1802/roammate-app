@@ -44,7 +44,11 @@ class OpenAIModel(BaseLLMModel):
     def _get_client(self):
         if self._client is None:
             from openai import AsyncOpenAI
-            self._client = AsyncOpenAI(api_key=self._api_key)
+            from app.services.llm.models._clients import get_shared_client
+            self._client = get_shared_client(
+                "openai", self._api_key,
+                lambda: AsyncOpenAI(api_key=self._api_key),
+            )
         return self._client
 
     def provider_name(self) -> str:

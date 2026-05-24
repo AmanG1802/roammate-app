@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api import pagination
 from app.api.deps import get_admin
 from app.core.config import settings
 from app.core.security import ALGORITHM
@@ -50,11 +51,31 @@ async def admin_login(body: LoginRequest):
 # ── Users ─────────────────────────────────────────────────────────────────────
 
 @router.get("/users", dependencies=[Depends(get_admin)])
-async def list_users(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).order_by(User.created_at.desc()))
-    users = result.scalars().all()
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    limit: int | None = None,
+    cursor: str | None = None,
+):
+    # Opt-in cursor pagination (D3). Without limit/cursor the response is the
+    # full list as before; with them, return one keyset page + next_cursor.
+    if pagination.is_paginated(limit, cursor):
+        eff_limit = pagination.clamp_limit(limit)
+        stmt = pagination.apply_keyset(
+            select(User), User.id, cursor=cursor, limit=eff_limit, descending=True,
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        page, has_more = pagination.page_slice(rows, eff_limit)
+        total = (await db.execute(select(func.count(User.id)))).scalar_one()
+        next_cursor = pagination.encode_cursor(page[-1].id) if (page and has_more) else None
+    else:
+        page = (await db.execute(select(User).order_by(User.created_at.desc()))).scalars().all()
+        has_more = False
+        next_cursor = None
+        total = len(page)
     return {
-        "total": len(users),
+        "total": total,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
         "users": [
             {
                 "id": u.id,
@@ -62,7 +83,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
                 "email": u.email,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
             }
-            for u in users
+            for u in page
         ],
     }
 

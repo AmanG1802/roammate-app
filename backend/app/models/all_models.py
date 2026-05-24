@@ -175,6 +175,12 @@ class BrainstormBinItem(PlaceColumnsMixin, Base):
     user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Composite for the per-(user, trip) dedup lookup in /brainstorm/extract
+    # (D6) — avoids relying on two single-column indexes being bitmap-and'd.
+    __table_args__ = (
+        Index("ix_brainstorm_bin_user_trip", "user_id", "trip_id"),
+    )
+
     trip = relationship("Trip", back_populates="brainstorm_bin_items")
     user = relationship("User")
 
@@ -191,6 +197,12 @@ class BrainstormMessage(Base):
     # subsequent extracts skip stamped rows so promoted/deleted items don't
     # re-materialize from the same chat turn.
     extracted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    # Composite for the /brainstorm/extract filter
+    # (trip_id, user_id, extracted_at IS NULL).
+    __table_args__ = (
+        Index("ix_brainstorm_msg_trip_user_extracted", "trip_id", "user_id", "extracted_at"),
+    )
 
     trip = relationship("Trip", back_populates="brainstorm_messages")
     user = relationship("User")
@@ -247,6 +259,9 @@ class Notification(Base):
     __table_args__ = (
         Index("ix_notification_user_created", "user_id", "created_at"),
         Index("ix_notification_user_unread", "user_id", "read_at"),
+        # Paginated feed: filter by (user_id, read_at) and order by created_at.
+        # btree is scannable in reverse so this serves ORDER BY created_at DESC.
+        Index("ix_notification_user_read_created", "user_id", "read_at", "created_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -286,6 +301,8 @@ class TimelineItem(PlaceColumnsMixin, Base):
             "ix_timeline_item_trip_day_start",
             "trip_id", "day_date", "start_time",
         ),
+        # Ripple engine scans a trip's non-skipped events (D8).
+        Index("ix_timeline_item_trip_skipped", "trip_id", "is_skipped"),
     )
 
     trip = relationship("Trip", back_populates="timeline_items")

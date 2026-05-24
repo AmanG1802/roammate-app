@@ -38,8 +38,12 @@ TestSessionLocal = sessionmaker(
 
 async def override_get_db():
     async with TestSessionLocal() as session:
-        yield session
-        await session.commit()
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)

@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.services.google_maps import cache as gmap_cache
 from app.services.google_maps.base import BaseMapService, LocationContext, RoutePoint
 from app.services.google_maps.breaker import breaker
+from app.services.google_maps.http import get_shared_client
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +107,7 @@ class MapServiceV1(BaseMapService):
                 params["region"] = location.country_code.lower()
             if location.language_code:
                 params["language"] = location.language_code
+        client = client or get_shared_client()
         try:
             if client is not None:
                 data, attempts, http_status = await self._request_with_retry(
@@ -198,6 +200,7 @@ class MapServiceV1(BaseMapService):
             "fields": detail_fields,
             "key": self.api_key,
         }
+        client = client or get_shared_client()
         try:
             if client is not None:
                 data, attempts, http_status = await self._request_with_retry(
@@ -328,11 +331,17 @@ class MapServiceV1(BaseMapService):
             }
 
         t0 = __import__("time").monotonic()
+        shared = get_shared_client()
         try:
-            async with httpx.AsyncClient() as client:
+            if shared is not None:
                 data, attempts, http_status = await self._request_with_retry(
-                    client, url, params=params, op="nearby_or_text_search",
+                    shared, url, params=params, op="nearby_or_text_search",
                 )
+            else:
+                async with httpx.AsyncClient() as client:
+                    data, attempts, http_status = await self._request_with_retry(
+                        client, url, params=params, op="nearby_or_text_search",
+                    )
         except Exception as exc:
             self._track(
                 op="nearby_or_text_search", status="error",
@@ -395,10 +404,16 @@ class MapServiceV1(BaseMapService):
         if len(waypoints) > 2:
             params["waypoints"] = "|".join(_wp_str(w) for w in waypoints[1:-1])
 
-        async with httpx.AsyncClient() as client:
+        shared = get_shared_client()
+        if shared is not None:
             data, _attempts, http_status = await self._request_with_retry(
-                client, _DIRECTIONS_URL, params=params, op="directions",
+                shared, _DIRECTIONS_URL, params=params, op="directions",
             )
+        else:
+            async with httpx.AsyncClient() as client:
+                data, _attempts, http_status = await self._request_with_retry(
+                    client, _DIRECTIONS_URL, params=params, op="directions",
+                )
         if not data or data.get("status") != "OK":
             raise RuntimeError(
                 f"Directions failed: status="

@@ -36,7 +36,11 @@ class ClaudeModel(BaseLLMModel):
     def _get_client(self):
         if self._client is None:
             from anthropic import AsyncAnthropic
-            self._client = AsyncAnthropic(api_key=self._api_key)
+            from app.services.llm.models._clients import get_shared_client
+            self._client = get_shared_client(
+                "claude", self._api_key,
+                lambda: AsyncAnthropic(api_key=self._api_key),
+            )
         return self._client
 
     def provider_name(self) -> str:
