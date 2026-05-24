@@ -15,7 +15,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 
 export type PaywallFeature =
   | 'concierge'
@@ -73,6 +73,15 @@ interface PaywallRequest {
 interface EntitlementContextValue {
   entitlement: Entitlement;
   isLoading: boolean;
+  /**
+   * True only once a `/billing/status` fetch has succeeded at least once.
+   * Until then `entitlement` is the optimistic free-tier placeholder, NOT a
+   * confirmed fact — so upsell UI (banners, the onboarding pitch) must gate on
+   * this to avoid pitching Plus to a paying user whose status hasn't loaded or
+   * whose fetch failed. Stays true after the first success (we keep the last
+   * known value across later transient failures rather than reverting to free).
+   */
+  isConfirmed: boolean;
   refresh: () => Promise<void>;
   requirePlus: (feature: PaywallFeature, opts?: PaywallOptions) => Promise<boolean>;
   /** Internal use by PaywallModal — current pending paywall request. */
@@ -84,14 +93,12 @@ interface EntitlementContextValue {
 const EntitlementContext = createContext<EntitlementContextValue | null>(null);
 
 async function fetchStatus(): Promise<Entitlement | null> {
-  const token = getToken();
+  // Go through the cookie-aware client so we inherit the one-shot 401 →
+  // /auth/refresh → retry behaviour. A raw fetch here would be the only call
+  // in the app that gives up on an expired access cookie, silently leaving the
+  // user on the free-tier default.
   try {
-    const res = await fetch('/api/billing/status', {
-      credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as Entitlement;
+    return await api<Entitlement>('/api/billing/status');
   } catch {
     return null;
   }
@@ -101,11 +108,18 @@ async function fetchStatus(): Promise<Entitlement | null> {
 export function EntitlementProvider({ children }: { children: ReactNode }) {
   const [entitlement, setEntitlement] = useState<Entitlement>(FREE_DEFAULT);
   const [isLoading, setIsLoading] = useState(true);
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const [pendingPaywall, setPendingPaywall] = useState<PaywallRequest | null>(null);
 
   const refresh = useCallback(async () => {
     const s = await fetchStatus();
-    if (s) setEntitlement(s);
+    if (s) {
+      setEntitlement(s);
+      setIsConfirmed(true);
+    }
+    // Note: a failed fetch deliberately does NOT flip isConfirmed. We keep the
+    // last known entitlement (or the free placeholder on first load) but never
+    // treat an unconfirmed/errored state as "confirmed free" for upsell gating.
     setIsLoading(false);
   }, []);
 
@@ -137,6 +151,7 @@ export function EntitlementProvider({ children }: { children: ReactNode }) {
           const s = await fetchStatus();
           if (s && s.tier === 'plus') {
             setEntitlement(s);
+            setIsConfirmed(true);
             return;
           }
         }
@@ -148,11 +163,12 @@ export function EntitlementProvider({ children }: { children: ReactNode }) {
   const value = useMemo<EntitlementContextValue>(() => ({
     entitlement,
     isLoading,
+    isConfirmed,
     refresh,
     requirePlus,
     pendingPaywall,
     resolvePaywall,
-  }), [entitlement, isLoading, refresh, requirePlus, pendingPaywall, resolvePaywall]);
+  }), [entitlement, isLoading, isConfirmed, refresh, requirePlus, pendingPaywall, resolvePaywall]);
 
   return (
     <EntitlementContext.Provider value={value}>
@@ -171,6 +187,9 @@ export function useEntitlement(): EntitlementContextValue {
     return {
       entitlement: FREE_DEFAULT,
       isLoading: false,
+      // Outside the provider we can't confirm anything — never claim "confirmed
+      // free" so upsell surfaces stay suppressed.
+      isConfirmed: false,
       refresh: async () => {},
       requirePlus: async () => false,
       pendingPaywall: null,

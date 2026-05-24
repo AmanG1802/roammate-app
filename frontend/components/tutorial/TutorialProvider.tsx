@@ -144,7 +144,7 @@ function TutorialDriverInner() {
 
   const handlePrev = useCallback(async () => {
     if (!currentStep) return;
-    const target = Math.max(1, currentStep.step - 1);
+    const target = Math.max(1, currentStep.backTo ?? currentStep.step - 1);
     await tutorial.advance(target);
   }, [currentStep, tutorial]);
 
@@ -152,11 +152,14 @@ function TutorialDriverInner() {
     if (!currentStep) return;
     if (currentStep.step >= TUTORIAL_TOTAL) {
       await tutorial.complete();
+      // Finish leaves the trip and lands the user back on the dashboard, where
+      // the keep/remove prompt for the tutorial trip appears.
+      router.push('/dashboard');
       setFinishPromptOpen(true);
       return;
     }
     await tutorial.advance(currentStep.step + 1);
-  }, [currentStep, tutorial]);
+  }, [currentStep, tutorial, router]);
 
   const handleTryIt = useCallback(async () => {
     if (!currentStep?.tryIt) return;
@@ -207,7 +210,7 @@ function TutorialDriverInner() {
   if (tutorial.isLoading) return null;
 
   const isLast = currentStep?.step === TUTORIAL_TOTAL;
-  const hideNextChrome = !!currentStep?.manualAdvance;
+  const hideNextChrome = !!currentStep?.manualAdvance || !!currentStep?.hideNext;
 
   return (
     <>

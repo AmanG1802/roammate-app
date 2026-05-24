@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-TRIP_NAME = "Welcome to Roammate — New York"
+TRIP_NAME = "New York and its Skylines"
 TRIP_TIMEZONE = "America/New_York"
 DESTINATION_CITY = "New York"
 COUNTRY_CODE = "US"
@@ -245,6 +245,10 @@ CANNED_BRAINSTORM_REPLIES: list[str] = [
     "If you've got a half-day free, the High Line + Chelsea Market combo is hard to beat. Easy walking, lots of food, photogenic the whole way.",
     "Good call thinking ahead. For rainy NYC days, I'd bookmark the Met and the Tenement Museum — both are big enough to spend hours indoors and not feel rushed.",
 ]
+
+# The tour's "Send a sample message" asks about a rainy-day plan, so we pin its
+# reply rather than relying on the round-robin counter landing here.
+TUTORIAL_RAINY_DAY_REPLY: str = CANNED_BRAINSTORM_REPLIES[3]
 
 
 # Seeded user/assistant pairs forming the initial chat history.

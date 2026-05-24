@@ -112,7 +112,10 @@ struct FreeUsageStrip: View {
 
     var body: some View {
         let ent = subscriptionStore.entitlement
-        if ent.tier == "free",
+        // Suppress until confirmed — the unconfirmed default is also tier "free"
+        // and would render placeholder 0/15 · 0/2 counts to a paying user.
+        if subscriptionStore.isConfirmed,
+           ent.tier == "free",
            let bsCap = ent.brainstormCap,
            let tripCap = ent.activeTripCap {
             let bsLeft = ent.brainstormRemaining ?? bsCap

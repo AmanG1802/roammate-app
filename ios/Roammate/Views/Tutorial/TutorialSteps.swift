@@ -24,6 +24,8 @@ struct TutorialStep: Identifiable {
     // the popover hides the "Next" button and renders Try Now as the filled CTA,
     // because completing the try-it (e.g. the plan demo) advances the tour itself.
     var advanceViaTryIt: Bool = false
+    // Overrides the step "Back" jumps to (1-based). Defaults to number - 1.
+    var backTo: Int? = nil
 }
 
 enum PopoverPlacement {
@@ -58,7 +60,7 @@ enum TutorialScript {
               title: "Your trip at a glance",
               body: "Members, dates, and a quick summary live here.",
               anchorID: "trip-overview-header", tryItLabel: nil, tryItAction: nil,
-              placement: .bottom),
+              placement: .bottom, backTo: 2),
         .init(id: .brainstormChat, number: 5,
               title: "Brainstorm with AI",
               body: "Chat to discover places. The tutorial uses canned replies — no quota burned.",
@@ -67,7 +69,7 @@ enum TutorialScript {
               placement: .top),
         .init(id: .brainstormBin, number: 6,
               title: "Your brainstorm bin",
-              body: "Saved ideas land here. Promote them into the shared Idea Bin.",
+              body: "Ideas you save from brainstorming land. Tap on any item to view more details. Select and promote the good ones into the shared Idea Bin.",
               anchorID: "brainstorm-bin-list", tryItLabel: nil, tryItAction: nil,
               placement: .bottom, spotlightHeight: 330),
         .init(id: .timeline, number: 7,

@@ -64,6 +64,10 @@ struct MainShell: View {
             previousTier = newTier
             evaluateOnboarding()
         }
+        // A genuine free user's tier never changes from the default "free", so
+        // the tier onChange above won't fire for them — re-evaluate once the
+        // entitlement is actually confirmed.
+        .onChange(of: subscriptionStore.isConfirmed) { _, _ in evaluateOnboarding() }
         .sheet(isPresented: $showPersonaOnboarding) {
             OnboardingPersonasSheet(
                 onComplete: { _ in
@@ -126,11 +130,16 @@ struct MainShell: View {
         // 2. Plus onboarding — only for free users, once per device. Defer if
         // the persona sheet is currently open.
         guard !showPersonaOnboarding else { return }
+        // Require a confirmed entitlement: the optimistic default is tier "free",
+        // so pitching off the unconfirmed state would upsell a paying user whose
+        // status hasn't loaded (or whose fetch failed).
+        guard subscriptionStore.isConfirmed else { return }
         guard subscriptionStore.entitlement.tier == "free" else { return }
         guard !PlusOnboardingFlag.hasSeen(userId: user.id) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             // Re-check after the delay — the user's state may have changed.
-            guard subscriptionStore.entitlement.tier == "free",
+            guard subscriptionStore.isConfirmed,
+                  subscriptionStore.entitlement.tier == "free",
                   !PlusOnboardingFlag.hasSeen(userId: user.id) else { return }
             PlusOnboardingFlag.markSeen(userId: user.id)
             showPlusOnboarding = true

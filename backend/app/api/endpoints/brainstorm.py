@@ -199,9 +199,17 @@ async def chat(
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
     if trip is not None and trip.is_tutorial:
-        from app.services.tutorial_fixtures import CANNED_BRAINSTORM_REPLIES
-        idx = len(history_rows) // 2  # one reply per turn
-        assistant_content = CANNED_BRAINSTORM_REPLIES[idx % len(CANNED_BRAINSTORM_REPLIES)]
+        from app.services.tutorial_fixtures import (
+            CANNED_BRAINSTORM_REPLIES,
+            TUTORIAL_RAINY_DAY_REPLY,
+        )
+        if "rainy" in body.message.lower():
+            # The tour's sample message asks about a rainy-day plan — pin the
+            # matching reply instead of whatever the round-robin counter lands on.
+            assistant_content = TUTORIAL_RAINY_DAY_REPLY
+        else:
+            idx = len(history_rows) // 2  # one reply per turn
+            assistant_content = CANNED_BRAINSTORM_REPLIES[idx % len(CANNED_BRAINSTORM_REPLIES)]
     else:
         client = get_brainstorm_client()
         try:

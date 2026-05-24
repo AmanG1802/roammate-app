@@ -36,6 +36,12 @@ export type TutorialStep = {
   /** Show a "Next" button when true; otherwise the step is advanced by an
    *  external signal (e.g. plan-trip preview shown, Create-trip clicked). */
   manualAdvance?: boolean;
+  /** Hide the "Next" button but keep Back/Skip. Used when the only forward
+   *  path is the "Try Now" action (matches the iOS tour). */
+  hideNext?: boolean;
+  /** Override the step the "Back" button jumps to (1-based). Defaults to the
+   *  previous step. */
+  backTo?: number;
   tryIt?: { label: string; action: TryItAction };
 };
 
@@ -55,6 +61,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     body: 'Every trip starts here — give the planner a vibe or a city and it sketches the bones. Hit Try Now to watch it work.',
     target: '[data-tutorial="new-trip-btn"]',
     route: '/dashboard',
+    hideNext: true,
     tryIt: { label: 'Try Now', action: 'plan-trip-demo' },
   },
   {
@@ -73,6 +80,9 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     body: 'Members, dates, and the trip summary live here. Tap a sub-page to dive in.',
     target: '[data-tutorial="trip-overview-header"]',
     route: 'trip:landing',
+    // Back returns to the Plan-Trip step so the user can re-run the AI chat —
+    // step 3 (the preview) only makes sense right after generating one.
+    backTo: 2,
   },
   {
     id: 'brainstorm-chat',
@@ -87,8 +97,9 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: 'brainstorm-bin',
     step: 6,
     title: 'Your brainstorm bin',
-    body: 'Ideas you save from chat land here. Promote the good ones into the shared Idea Bin.',
-    target: '[data-tutorial="brainstorm-bin-list"]',
+    // `{info}` is replaced with the tooltip (info) icon by the overlay.
+    body: 'Ideas you save from brainstorming land here. Click on the {info} to see more details. Select and promote the good ones into the shared Idea Bin.',
+    target: '[data-tutorial="brainstorm-bin"]',
     route: 'trip:brainstorm',
   },
   {
@@ -120,8 +131,10 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: 'wrap-up',
     step: 10,
     title: 'You’re all set',
-    body: 'That’s the tour. Keep the tutorial trip around or remove it now?',
-    route: '/dashboard',
+    body: 'That’s the tour. Hit Finish and we’ll take you back to your dashboard.',
+    // Stays on the trip (Concierge view) where step 9 left off; "Finish"
+    // routes to the dashboard and asks about removing the tutorial trip.
+    route: 'trip:concierge',
   },
 ];
 
