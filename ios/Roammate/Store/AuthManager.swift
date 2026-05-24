@@ -31,7 +31,19 @@ final class AuthManager: NSObject, ObservableObject {
     // MARK: - Session boot
 
     func checkAuth() async {
-        guard KeychainHelper.loadToken() != nil else { return }
+        // If the access token is missing but a refresh token exists, attempt a
+        // silent refresh before giving up (covers Keychain eviction edge cases).
+        if KeychainHelper.loadToken() == nil {
+            guard let raw = KeychainHelper.loadRefreshToken() else { return }
+            do {
+                let pair = try await AuthService.refresh(refreshToken: raw)
+                KeychainHelper.saveToken(pair.access_token)
+                KeychainHelper.saveRefreshToken(pair.refresh_token)
+            } catch {
+                KeychainHelper.clearAll()
+                return
+            }
+        }
         do {
             currentUser = try await AuthService.getMe()
             isAuthenticated = true
