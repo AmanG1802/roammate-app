@@ -79,6 +79,8 @@ async def get_my_trips(
             created_at=trip.created_at,
             created_by_id=trip.created_by_id,
             my_role=role,
+            is_tutorial=bool(trip.is_tutorial),
+            is_tutorial_completed=bool(trip.is_tutorial_completed),
         )
         for trip, role in rows
     ]

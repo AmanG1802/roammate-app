@@ -45,6 +45,7 @@ struct BrainstormChatView: View {
     @Binding var page: Int
 
     @State private var inputText = ""
+    @StateObject private var speech = SpeechRecognizer()
 
     /// True when the user has run out of free brainstorms. Plus users have
     /// `brainstormRemaining == nil` (unlimited), so this stays false for them.
@@ -72,6 +73,7 @@ struct BrainstormChatView: View {
             }
 
             inputBar
+                .tutorialAnchor("brainstorm-chat-input")
         }
         .background(
             LinearGradient(
@@ -80,6 +82,13 @@ struct BrainstormChatView: View {
                 endPoint: .bottom
             )
         )
+        .onReceive(NotificationCenter.default.publisher(for: .tutorialBrainstormSend)) { note in
+            guard let text = note.userInfo?["message"] as? String, !store.isSending else { return }
+            Task {
+                await store.send(text)
+                await subscriptionStore.refresh()
+            }
+        }
     }
 
     // MARK: - Empty State
@@ -295,6 +304,10 @@ struct BrainstormChatView: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(Color.roammateBorder, lineWidth: 1)
             )
+
+            if !isQuotaExhausted {
+                MicButton(text: $inputText, recognizer: speech, disabled: store.isSending)
+            }
 
             Button {
                 if isQuotaExhausted {

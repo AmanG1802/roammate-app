@@ -389,6 +389,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
   return (
     <div
       data-testid="timeline-container"
+      data-tutorial="timeline-day-1"
       className="flex-1 overflow-y-auto p-5"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDropFromBin}

@@ -52,8 +52,11 @@ struct TripsTabView: View {
                 if tripStore.trips.isEmpty { await tripStore.load() }
             }
             .sheet(isPresented: $showCreate) {
-                CreateTripView { Task { await tripStore.load() } }
-                    .environmentObject(tripStore)
+                CreateTripView { created in
+                    Task { await tripStore.load() }
+                    path.append(created)
+                }
+                .environmentObject(tripStore)
             }
             .onChange(of: path) { _, newPath in
                 if newPath.isEmpty {

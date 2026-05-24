@@ -12,6 +12,7 @@ struct IdeaBinView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .tutorialAnchor("idea-bin-list")
 
             if store.ideas.isEmpty {
                 Spacer()

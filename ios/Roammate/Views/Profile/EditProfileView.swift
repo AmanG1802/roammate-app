@@ -43,7 +43,7 @@ struct EditProfileView: View {
             Color.roammateBackground.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: RoammateSpacing.lg) {
-                    avatarHero
+                    avatarHero(avatarUrl: authManager.currentUser?.avatarUrl)
 
                     nameCard
                     homeCard
@@ -81,7 +81,10 @@ struct EditProfileView: View {
 
     // MARK: - Sub-views
 
-    private var avatarHero: some View {
+    // `avatarUrl` is read by the caller in `body` (main-actor-isolated) and
+    // passed in, so this builder doesn't touch the main-actor-isolated
+    // `authManager.currentUser` from its own nonisolated context.
+    private func avatarHero(avatarUrl: String?) -> some View {
         VStack(spacing: 10) {
             PhotosPicker(selection: $selectedPhoto, matching: .images) {
                 ZStack(alignment: .bottomTrailing) {
@@ -91,7 +94,7 @@ struct EditProfileView: View {
                             .scaledToFill()
                             .frame(width: 96, height: 96)
                             .clipShape(Circle())
-                    } else if let url = authManager.currentUser?.avatarUrl,
+                    } else if let url = avatarUrl,
                               !url.isEmpty,
                               let imageURL = URL(string: url) {
                         AsyncImage(url: imageURL) { phase in

@@ -22,6 +22,7 @@ struct BrainstormBinView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .tutorialAnchor("brainstorm-bin-list")
 
             if store.items.isEmpty {
                 Spacer()

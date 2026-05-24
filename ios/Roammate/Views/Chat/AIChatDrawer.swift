@@ -5,6 +5,7 @@ struct AIChatDrawer: View {
     @StateObject private var store: ConciergeStore
     @Environment(\.dismiss) private var dismiss
     @State private var input: String = ""
+    @StateObject private var speech = SpeechRecognizer()
     @FocusState private var inputFocused: Bool
 
     init(trip: Trip) {
@@ -155,6 +156,8 @@ struct AIChatDrawer: View {
                 .focused($inputFocused)
                 .submitLabel(.send)
                 .onSubmit(send)
+
+            MicButton(text: $input, recognizer: speech, disabled: store.isThinking)
 
             Button {
                 send()

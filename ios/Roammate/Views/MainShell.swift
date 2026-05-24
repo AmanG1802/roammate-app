@@ -7,12 +7,20 @@ struct MainShell: View {
     @StateObject private var tabBarVisibility = TabBarVisibility()
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @StateObject private var tutorialStore = TutorialStore()
     @State private var showPersonaOnboarding = false
     @State private var personaSheetShownThisSession = false
     @State private var showPlusOnboarding = false
     @State private var previousTier: String?
 
     var body: some View {
+        TutorialCoordinator {
+            shellBody
+        }
+        .environmentObject(tutorialStore)
+    }
+
+    private var shellBody: some View {
         ZStack(alignment: .bottom) {
             Color.roammateBackground.ignoresSafeArea()
 
@@ -42,6 +50,11 @@ struct MainShell: View {
             evaluateOnboarding()
         }
         .onChange(of: authManager.currentUser?.id) { _, _ in evaluateOnboarding() }
+        // The guided tour runs on the Dashboard tab — jump there when it starts
+        // so steps 1–2 (and the trip we push) land on the right screen.
+        .onChange(of: tutorialStore.status) { _, newStatus in
+            if newStatus == .inProgress { selection = .dashboard }
+        }
         .onChange(of: subscriptionStore.entitlement.tier) { _, newTier in
             // Detect plus → free downgrade; clear the seen flag so the pitch
             // can re-appear on the next free launch.
@@ -94,6 +107,11 @@ struct MainShell: View {
     /// precedence; the Plus pitch waits until the persona flow is done.
     private func evaluateOnboarding() {
         guard let user = authManager.currentUser else { return }
+
+        // Tutorial gate: block persona + Plus pitches until the tour ends.
+        if tutorialStore.status == .notStarted || tutorialStore.status == .inProgress {
+            return
+        }
 
         // 1. Persona picker — once per session when personas are unset/empty.
         let needsPersona = (user.personas?.isEmpty ?? true)

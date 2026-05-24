@@ -6,6 +6,8 @@ import { Sparkles, Loader2, Rocket, X, Compass, AlertTriangle } from 'lucide-rea
 import { getToken } from '@/lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
+import { useTutorial } from '@/hooks/useTutorial';
+import VoiceInputButton from '@/components/common/VoiceInputButton';
 
 // Witty messages shown while the AI is planning. Cycled every ~1.8s so the
 // user has something to read instead of a static spinner.
@@ -45,6 +47,27 @@ type Preview = {
 
 type BufferedMessage = { role: 'user' | 'assistant'; content: string };
 
+// Canned preview used by the tutorial demo — mirrors the seeded backend
+// fixture so the screen reads as a real planner output.
+const CANNED_NYC_PREVIEW: Preview = {
+  trip_name: 'Welcome to Roammate — New York',
+  start_date: null,
+  duration_days: 3,
+  destination_city: 'New York',
+  country_code: 'US',
+  timezone: 'America/New_York',
+  user_output:
+    "Three days in NYC: anchor Day 1 in Midtown (Times Square + MoMA), Day 2 in Central Park + Brooklyn Bridge at sunset, Day 3 around the Village with a Joe's Pizza stop.",
+  items: [
+    { title: 'Times Square', category: 'landmark', time_category: 'morning' },
+    { title: 'Museum of Modern Art', category: 'museum', time_category: 'afternoon' },
+    { title: 'Central Park Picnic', category: 'park', time_category: 'midday' },
+    { title: 'Brooklyn Bridge Sunset Walk', category: 'landmark', time_category: 'evening' },
+    { title: "Joe's Pizza", category: 'restaurant', time_category: 'midday' },
+  ],
+  enrichment: { status: 'full', total: 5, enriched: 5, skipped: 0 },
+};
+
 function authHeaders(): HeadersInit {
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -62,6 +85,57 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
   // them into the new trip's Brainstorm chat history after createTrip succeeds.
   const planMessagesRef = useRef<BufferedMessage[]>([]);
   const { requirePlus, refresh: refreshEntitlement } = useEntitlement();
+  const tutorial = useTutorial();
+  /** True while we're running the canned planning simulation for the tutorial. */
+  const [tutorialDemoActive, setTutorialDemoActive] = useState(false);
+  /** Briefly flashes the Plan button to draw the eye after auto-fill. */
+  const [planButtonPulse, setPlanButtonPulse] = useState(false);
+
+  // ── Tutorial demo flow ──────────────────────────────────────────────
+  // When the tutorial fires `tutorial:plan-demo`, we simulate a full
+  // plan-trip turn without touching the LLM: type out a sample prompt,
+  // flash the Plan button, sit on the planning overlay for ~3s, then drop
+  // in a canned NYC preview keyed to the user's already-seeded tutorial trip.
+  useEffect(() => {
+    function onDemo() {
+      runTutorialPlanDemo();
+    }
+    window.addEventListener('tutorial:plan-demo', onDemo as EventListener);
+    return () => window.removeEventListener('tutorial:plan-demo', onDemo as EventListener);
+  }, []);
+
+  const runTutorialPlanDemo = () => {
+    setTutorialDemoActive(true);
+    setError(null);
+    setPreview(null);
+
+    // 1. Typewriter-fill the prompt so it feels alive (~14ms/char).
+    const sample = 'A 3-day New York City trip with iconic landmarks, food, and parks';
+    setPrompt('');
+    let i = 0;
+    const tickType = window.setInterval(() => {
+      i += 1;
+      setPrompt(sample.slice(0, i));
+      if (i >= sample.length) window.clearInterval(tickType);
+    }, 18);
+
+    // 2. After typing finishes, pulse the Plan button, then enter the
+    //    planning state for ~3s, then show the canned preview.
+    const totalTyping = sample.length * 18 + 200;
+    window.setTimeout(() => {
+      setPlanButtonPulse(true);
+      window.setTimeout(() => setPlanButtonPulse(false), 700);
+      setPlanning(true);
+      window.setTimeout(() => {
+        setPlanning(false);
+        setPreview(CANNED_NYC_PREVIEW);
+        // Advance to the "preview shown" step.
+        window.dispatchEvent(
+          new CustomEvent('tutorial:advance', { detail: { to: 3 } }),
+        );
+      }, 3000);
+    }, totalTyping);
+  };
 
   // Rotate witty messages while planning is in flight.
   useEffect(() => {
@@ -117,6 +191,23 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
     if (!preview) return;
     setCreating(true);
     setError(null);
+
+    // Tutorial demo: skip the real /trips POST entirely — the user already
+    // has a seeded tutorial trip. Just navigate there and advance the tour.
+    if (tutorialDemoActive && tutorial.trip_id) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('tutorial:advance', { detail: { to: 4 } }),
+        );
+        setPreview(null);
+        setPrompt('');
+        setTutorialDemoActive(false);
+        router.push(`/trips/${tutorial.trip_id}`);
+      } finally {
+        setCreating(false);
+      }
+      return;
+    }
     try {
       const body: Record<string, any> = { name: preview.trip_name };
       if (preview.start_date) body.start_date = preview.start_date;
@@ -159,7 +250,7 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
       planMessagesRef.current = [];
 
       onTripCreated?.();
-      router.push(`/trips?id=${trip.id}&mode=brainstorm`);
+      router.push(`/trips/${trip.id}`);
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong.');
       setCreating(false);
@@ -202,11 +293,22 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
           placeholder='e.g. "5-day Thailand itinerary with street food and temples"'
           className="flex-1 px-4 py-3 text-sm font-medium bg-slate-50 border border-slate-100 rounded-xl resize-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
         />
+        <VoiceInputButton
+          value={prompt}
+          onChange={setPrompt}
+          disabled={planning}
+          className="self-center bg-slate-50 hover:bg-white border border-slate-100"
+        />
         <motion.button
           onClick={plan}
           disabled={planning || !prompt.trim()}
           whileTap={{ scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+          animate={
+            planButtonPulse
+              ? { scale: [1, 1.08, 0.96, 1], boxShadow: '0 0 0 8px rgba(99,102,241,0.25)' }
+              : { scale: 1 }
+          }
+          transition={{ type: 'spring', stiffness: 380, damping: 18 }}
           className="self-stretch px-6 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 disabled:opacity-40 transition-colors whitespace-nowrap flex items-center gap-2 shadow-lg shadow-indigo-100"
         >
           {planning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -217,7 +319,10 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
       {error && <p className="text-rose-500 text-sm font-bold mt-3">{error}</p>}
 
       {preview && (
-        <div className="mt-5 p-5 bg-slate-50 border border-slate-100 rounded-2xl">
+        <div
+          data-tutorial="plan-preview-card"
+          className="mt-5 p-5 bg-slate-50 border border-slate-100 rounded-2xl"
+        >
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">Preview</p>

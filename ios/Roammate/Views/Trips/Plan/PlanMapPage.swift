@@ -225,7 +225,8 @@ struct PlanMapPage: View {
             // Bottom drawer
             BottomDrawer(
                 detents: [.minimised(140), .fraction(0.6), .fraction(0.9)],
-                current: $drawerDetent
+                current: $drawerDetent,
+                panelAnchorID: "timeline-day-1"
             ) {
                 TimelineDrawerContent(selectedDayIndex: $selectedDayIndex)
                     .environmentObject(store)

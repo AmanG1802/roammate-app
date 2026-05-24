@@ -380,6 +380,15 @@ function TripHubContent() {
         />
       </div>
 
+      {trip?.is_tutorial && (
+        <div className="relative z-40 px-8 py-2 bg-indigo-600/95 text-white text-xs font-medium flex items-center justify-center gap-2 shrink-0">
+          <span className="px-2 py-0.5 rounded-full bg-white/20 uppercase tracking-wider text-[10px]">Tutorial</span>
+          {trip?.is_tutorial_completed
+            ? 'This trip is read-only. Delete it or replay the tour from your profile.'
+            : 'You are inside the canned NYC tutorial trip — feel free to explore.'}
+        </div>
+      )}
+
       {/* Nav */}
       <nav className="relative z-30 flex items-center justify-between px-8 pt-7 pb-3 shrink-0">
         <Link
@@ -399,6 +408,7 @@ function TripHubContent() {
 
         {/* ── LEFT: Trip Identity ────────────────────────────────────────── */}
         <motion.div
+          data-tutorial="trip-overview-header"
           variants={heroContainer}
           className="flex-1 max-w-2xl flex flex-col justify-center min-w-0"
           style={{ perspective: '1200px' }}

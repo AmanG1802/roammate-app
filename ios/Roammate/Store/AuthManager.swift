@@ -54,7 +54,7 @@ final class AuthManager: NSObject, ObservableObject {
             do {
                 let pair = try await AuthService.login(email: email, password: password)
                 self.persist(pair)
-            } catch let APIError.serverError(409, _) {
+            } catch APIError.serverError(409, _) {
                 self.pendingVerificationEmail = email
                 self.pendingPassword = password
                 self.error = "Please verify your email — check your inbox."

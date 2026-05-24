@@ -1,9 +1,19 @@
 import SwiftUI
 
 struct PlanTripDrawer: View {
-    let onTripCreated: () -> Void
+    /// Fires after a successful POST /trips. Caller is expected to push the
+    /// new trip onto its NavigationStack (Trip Landing View).
+    let onTripCreated: (Trip) -> Void
+    /// Tutorial: run the canned planning demo (typewriter prompt → preview)
+    /// instead of waiting for real input.
+    var demoMode: Bool = false
+    /// Called once the canned preview appears (advances the tour to step 3).
+    var onDemoPreviewShown: (() -> Void)? = nil
+    /// Called when the user taps "Create Trip and Take Me There" in demo mode.
+    var onDemoCreate: (() -> Void)? = nil
 
     @StateObject private var store = PlanTripStore()
+    @StateObject private var speech = SpeechRecognizer()
     @Environment(\.dismiss) private var dismiss
     @FocusState private var promptFocused: Bool
     @State private var wittyIndex = 0
@@ -20,7 +30,17 @@ struct PlanTripDrawer: View {
             inputArea
         }
         .background(Color.roammateBackground.ignoresSafeArea())
-        .onAppear { promptFocused = true }
+        .onAppear {
+            if demoMode {
+                // Hands-off demo: don't pop the keyboard, just run the script.
+                Task {
+                    await store.runTutorialDemo()
+                    onDemoPreviewShown?()
+                }
+            } else {
+                promptFocused = true
+            }
+        }
         .onDisappear { wittyTimer?.cancel() }
         .onChange(of: store.phase) { _, newPhase in
             if newPhase == .planning { startWittyRotation() }
@@ -302,6 +322,31 @@ struct PlanTripDrawer: View {
         )
     }
 
+    // MARK: - Tutorial Hint
+
+    /// Inline guidance shown during the tutorial demo (Step 3). The system sheet
+    /// covers the spotlight overlay, so the preview step's guidance lives here.
+    private var tutorialPreviewHint: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.caption.bold())
+                .foregroundStyle(Color.roammateIndigo)
+            Text("Your trip preview is ready — tap **Create Trip and Take Me There** to continue the tour.")
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(Color.roammateInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.roammateIndigoTint)
+        )
+        .transition(.opacity)
+    }
+
     // MARK: - Input Area
 
     private var inputArea: some View {
@@ -327,8 +372,19 @@ struct PlanTripDrawer: View {
                         .stroke(Color.roammateBorder, lineWidth: 1)
                 )
                 .focused($promptFocused)
+                // Demo: show the typewriter prompt but block user editing.
+                .disabled(demoMode)
+                .allowsHitTesting(!demoMode)
 
-                if store.phase == .previewing || store.phase == .creating {
+                if !demoMode {
+                    MicButton(
+                        text: $store.prompt,
+                        recognizer: speech,
+                        disabled: store.phase == .planning || store.phase == .creating
+                    )
+                }
+
+                if (store.phase == .previewing || store.phase == .creating) && !demoMode {
                     Button {
                         HapticManager.light()
                         Task { await store.plan() }
@@ -344,6 +400,10 @@ struct PlanTripDrawer: View {
                     .buttonStyle(.plain)
                     .disabled(store.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+            }
+
+            if demoMode, store.phase == .previewing {
+                tutorialPreviewHint
             }
 
             bottomButton
@@ -383,16 +443,26 @@ struct PlanTripDrawer: View {
 
         case .previewing:
             Button {
+                if demoMode {
+                    // Tutorial: don't POST — hand back to the dashboard, which
+                    // navigates to the already-seeded trip and advances the tour.
+                    HapticManager.success()
+                    onDemoCreate?()
+                    return
+                }
                 Task {
-                    if let _ = await store.createTrip() {
-                        onTripCreated()
+                    if let created = await store.createTrip() {
                         dismiss()
+                        // Give the sheet a moment to dismiss before pushing
+                        // the landing view onto the parent's NavigationStack.
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                        onTripCreated(created)
                     }
                 }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill")
-                    Text("Create Trip")
+                    Text(demoMode ? "Create Trip and Take Me There" : "Create Trip")
                 }
             }
             .buttonStyle(RoammatePrimaryButtonStyle())

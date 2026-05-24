@@ -4,9 +4,11 @@ struct ProfileTabView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
     @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var tutorialStore: TutorialStore
 
     @State private var showDeleteConfirm = false
     @State private var deleteError: String?
+    @State private var replaying = false
 
     var body: some View {
         NavigationStack {
@@ -33,6 +35,25 @@ struct ProfileTabView: View {
                                 destination: AnyView(NotificationsSettingsView().tabBarHiding())
                             )
                             subscriptionRow
+                        }
+
+                        SectionHeader(title: "Help")
+                            .padding(.top, RoammateSpacing.sm)
+
+                        VStack(spacing: 10) {
+                            actionRow(
+                                icon: "arrow.counterclockwise.circle",
+                                title: replaying ? "Resetting tour…" : "Replay tutorial",
+                                tint: Color.roammateIndigo
+                            ) {
+                                guard !replaying else { return }
+                                HapticManager.medium()
+                                replaying = true
+                                Task {
+                                    await tutorialStore.replay()
+                                    replaying = false
+                                }
+                            }
                         }
 
                         SectionHeader(title: "About")

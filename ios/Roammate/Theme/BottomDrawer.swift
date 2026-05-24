@@ -15,6 +15,9 @@ enum DrawerDetent: Equatable {
 struct BottomDrawer<Content: View>: View {
     let detents: [DrawerDetent]
     @Binding var current: DrawerDetent
+    /// Optional tutorial anchor id applied to the visible drawer panel so the
+    /// spotlight can highlight the whole drawer (not the full-screen container).
+    var panelAnchorID: String? = nil
     @ViewBuilder let content: () -> Content
 
     @State private var dragOffset: CGFloat = 0
@@ -63,6 +66,7 @@ struct BottomDrawer<Content: View>: View {
                 .fill(Color.roammateSurface)
                 .shadow(color: .black.opacity(0.08), radius: 16, y: -4)
             )
+            .tutorialAnchorIf(panelAnchorID)
             .frame(maxHeight: .infinity, alignment: .bottom)
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: current)
         }

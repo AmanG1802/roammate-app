@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct LoginView: View {
+    var onReplayIntro: (() -> Void)? = nil
+    var safeAreaTop: CGFloat = 0
+
     @EnvironmentObject var authManager: AuthManager
 
     @State private var email = ""
@@ -18,7 +21,7 @@ struct LoginView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    Spacer(minLength: RoammateSpacing.xxl)
+                    Spacer(minLength: safeAreaTop + RoammateSpacing.xxl)
 
                     VStack(spacing: 8) {
                         Image(systemName: "airplane.circle.fill")
@@ -90,6 +93,15 @@ struct LoginView: View {
                     .padding(.horizontal, RoammateSpacing.lg)
 
                     Spacer(minLength: RoammateSpacing.xl)
+
+                    if let replay = onReplayIntro {
+                        Button(action: { HapticManager.light(); replay() }) {
+                            Label("See What's Inside", systemImage: "play.circle")
+                                .font(.system(.footnote, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.roammateMuted)
+                        }
+                        .padding(.bottom, RoammateSpacing.lg)
+                    }
                 }
             }
         }

@@ -172,7 +172,27 @@ async def concierge_chat(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
-    await entitlements.enforce_concierge(db, current_user)
+    trip = (await db.execute(select(TripModel).where(TripModel.id == trip_id))).scalars().first()
+    if trip is not None and trip.is_tutorial_completed:
+        raise HTTPException(status_code=423, detail={"code": "tutorial_locked"})
+    await entitlements.enforce_concierge(db, current_user, trip=trip)
+
+    if trip is not None and trip.is_tutorial:
+        from app.services.tutorial_fixtures import CANNED_CONCIERGE_REPLIES
+        prior = await _load_history(db, trip_id, current_user.id)
+        idx = len([m for m in prior if m.get("role") == "user"])
+        canned = CANNED_CONCIERGE_REPLIES[idx % len(CANNED_CONCIERGE_REPLIES)]
+        await _persist_message(db, trip_id, current_user.id, "user", body.message)
+        await _persist_message(
+            db, trip_id, current_user.id, "assistant", canned, message_type="text",
+        )
+        return ConciergeChatResponse(
+            intent="chat_only",
+            user_message=canned,
+            params={},
+            requires_confirmation=False,
+            message_type="text",
+        )
 
     trip_tz = await _get_trip_tz(db, trip_id)
     now = utc_now()

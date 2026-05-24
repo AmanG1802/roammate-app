@@ -4,6 +4,8 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { EntitlementProvider } from "@/hooks/useEntitlement";
 import { PaywallModal } from "@/components/billing/PaywallModal";
+import { TutorialProvider } from "@/hooks/useTutorial";
+import TutorialDriver from "@/components/tutorial/TutorialProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,8 +23,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <EntitlementProvider>
-          <ToastProvider>{children}</ToastProvider>
-          <PaywallModal />
+          <TutorialProvider>
+            <ToastProvider>{children}</ToastProvider>
+            <PaywallModal />
+            <TutorialDriver />
+          </TutorialProvider>
         </EntitlementProvider>
       </body>
     </html>

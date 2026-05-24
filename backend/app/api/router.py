@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import trips, events, users, notifications, groups, dashboard, votes, ideas, brainstorm, llm, maps, admin, concierge, billing, auth
+from app.api.endpoints import trips, events, users, notifications, groups, dashboard, votes, ideas, brainstorm, llm, maps, admin, concierge, billing, auth, tutorial
 
 router = APIRouter()
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -17,3 +17,4 @@ router.include_router(maps.router, prefix="/trips", tags=["maps"])
 router.include_router(admin.router, prefix="/admin", tags=["admin"])
 router.include_router(concierge.router, prefix="/concierge", tags=["concierge"])
 router.include_router(billing.router, prefix="/billing", tags=["billing"])
+router.include_router(tutorial.router, prefix="/tutorial", tags=["tutorial"])

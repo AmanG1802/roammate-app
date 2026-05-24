@@ -12,6 +12,7 @@ import { getToken } from '@/lib/auth';
 import { formatTimeOfDay, timeOfDayFromDate } from '@/lib/time';
 import clsx from 'clsx';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
+import VoiceInputButton from '@/components/common/VoiceInputButton';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -236,6 +237,20 @@ export default function ConciergeChatDrawer({
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
+  // Tutorial: send a canned sample message so the user sees a real exchange
+  // animate in. The override path skips the input box entirely.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onSample = (e: Event) => {
+      const text = (e as CustomEvent).detail?.message as string | undefined;
+      if (text) void handleSend(text);
+    };
+    window.addEventListener('tutorial:concierge-send', onSample as EventListener);
+    return () => window.removeEventListener('tutorial:concierge-send', onSample as EventListener);
+    // handleSend closes over activeTripId/sending; re-bind when those change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeTripId, sending]);
+
   // Handle pre-composed actions from action bar buttons.
   // Use a stable id field if present, falling back to a content hash, to avoid
   // re-processing the same action when the parent re-renders.
@@ -272,11 +287,11 @@ export default function ConciergeChatDrawer({
 
   // ── Chat Send ──────────────────────────────────────────────────────────
 
-  const handleSend = async () => {
-    const msg = input.trim();
+  const handleSend = async (override?: string) => {
+    const msg = (override ?? input).trim();
     if (!msg || sending || !activeTripId) return;
     setSending(true);
-    setInput('');
+    if (override === undefined) setInput('');
 
     const userMsgId = `user-${Date.now()}`;
     addMessage({ id: userMsgId, role: 'user', content: msg, type: 'text' });
@@ -565,6 +580,7 @@ export default function ConciergeChatDrawer({
             role="dialog"
             aria-modal="true"
             aria-label="Concierge chat"
+            data-tutorial="concierge-panel"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -643,8 +659,14 @@ export default function ConciergeChatDrawer({
                   disabled={sending}
                   className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none disabled:opacity-50"
                 />
+                <VoiceInputButton
+                  value={input}
+                  onChange={setInput}
+                  disabled={sending}
+                  className="p-1.5 rounded-lg"
+                />
                 <button
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={!input.trim() || sending}
                   className="p-1.5 rounded-lg bg-indigo-600 text-white disabled:opacity-30 hover:bg-indigo-700 transition-colors"
                   aria-label="Send message"

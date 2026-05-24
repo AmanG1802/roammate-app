@@ -70,12 +70,21 @@ async def client():
 
 async def _register_and_login(client: AsyncClient, email: str, name: str, password: str = "password123") -> dict:
     await client.post(
-        "/api/users/register",
+        "/api/auth/signup",
         json={"email": email, "password": password, "name": name},
     )
+    # Email verification is gated on protected routes — flip the flag directly
+    # so tests don't need to roundtrip a verification token.
+    from sqlalchemy import update
+    from app.models.all_models import User as UserModel
+    async with TestSessionLocal() as s:
+        await s.execute(
+            update(UserModel).where(UserModel.email == email).values(email_verified=True)
+        )
+        await s.commit()
     resp = await client.post(
-        "/api/users/login",
-        json={"email": email, "password": password},
+        "/api/auth/login",
+        json={"email": email, "password": password, "skip_verification": True},
     )
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

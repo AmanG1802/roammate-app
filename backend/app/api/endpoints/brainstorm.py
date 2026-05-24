@@ -182,7 +182,10 @@ async def chat(
     current_user: User = Depends(get_current_user),
 ):
     await require_trip_member(db, trip_id, current_user.id)
-    await entitlements.enforce_brainstorm(db, current_user)
+    trip = (await db.execute(select(Trip).where(Trip.id == trip_id))).scalars().first()
+    if trip is not None and trip.is_tutorial_completed:
+        raise HTTPException(status_code=423, detail={"code": "tutorial_locked"})
+    await entitlements.enforce_brainstorm(db, current_user, trip=trip)
 
     stmt = (
         select(BrainstormMessage)
@@ -195,17 +198,22 @@ async def chat(
     history_rows = (await db.execute(stmt)).scalars().all()
     history = [{"role": m.role, "content": m.content} for m in history_rows]
 
-    client = get_brainstorm_client()
-    try:
-        assistant_content = await client.chat(
-            history, body.message, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas
-        )
-    except Exception as exc:
-        log.exception("brainstorm chat LLM call failed")
-        raise HTTPException(
-            status_code=502,
-            detail="AI is temporarily unavailable. Please try again.",
-        ) from exc
+    if trip is not None and trip.is_tutorial:
+        from app.services.tutorial_fixtures import CANNED_BRAINSTORM_REPLIES
+        idx = len(history_rows) // 2  # one reply per turn
+        assistant_content = CANNED_BRAINSTORM_REPLIES[idx % len(CANNED_BRAINSTORM_REPLIES)]
+    else:
+        client = get_brainstorm_client()
+        try:
+            assistant_content = await client.chat(
+                history, body.message, trip_id=trip_id, user_id=current_user.id, personas=current_user.personas
+            )
+        except Exception as exc:
+            log.exception("brainstorm chat LLM call failed")
+            raise HTTPException(
+                status_code=502,
+                detail="AI is temporarily unavailable. Please try again.",
+            ) from exc
 
     user_msg = BrainstormMessage(
         trip_id=trip_id,
@@ -223,7 +231,7 @@ async def chat(
     )
     db.add(assistant_msg)
 
-    await entitlements.bump_brainstorm_counter(db, current_user)
+    await entitlements.bump_brainstorm_counter(db, current_user, trip=trip)
 
     await db.commit()
     await db.refresh(user_msg)

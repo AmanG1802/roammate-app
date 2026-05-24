@@ -75,6 +75,7 @@ struct TripLandingView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
     @EnvironmentObject var tripStore: TripStore
+    @EnvironmentObject var tutorial: TutorialStore
     private var currentUserId: Int { authManager.currentUser?.id ?? -1 }
 
     private let roles: [(value: String, label: String)] = [
@@ -90,6 +91,7 @@ struct TripLandingView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     heroSection
+                        .tutorialAnchor("trip-overview-header")
                     navButtons
                 }
                 .padding(.bottom, RoammateLayout.contentBottomPadding)
@@ -126,6 +128,7 @@ struct TripLandingView: View {
         }
         .task { await store.loadAll() }
         .refreshable { await store.loadAll() }
+        .onChange(of: tutorial.currentStep) { _, _ in applyTutorialSubPage() }
         .onAppear {
             if let s = store.trip?.startDate {
                 dateValue = s
@@ -139,6 +142,27 @@ struct TripLandingView: View {
             }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 tabBarVisibility.isVisible = false
+            }
+            applyTutorialSubPage()
+        }
+    }
+
+    /// Tutorial: push the sub-pages host (Brainstorm/Plan/Concierge) once the
+    /// tour reaches a sub-page step, or pop back to the landing for step 3. The
+    /// host itself drives which pane shows for steps 4–8.
+    private func applyTutorialSubPage() {
+        guard tutorial.isActive else { return }
+        let target = TutorialScript.location(for: tutorial.currentStep).subPage
+        // Defer the navigation-binding mutation to the next runloop tick. Mutating
+        // `subPageDestination` synchronously from inside the currentStep-driven
+        // update transaction can get coalesced/dropped by SwiftUI — most visibly
+        // when going Back, where the sub-page host failed to pop and left the
+        // Step 4 popup floating over the Brainstorm page.
+        DispatchQueue.main.async {
+            if let sp = target {
+                if subPageDestination == nil { subPageDestination = sp }
+            } else if subPageDestination != nil {
+                subPageDestination = nil
             }
         }
     }

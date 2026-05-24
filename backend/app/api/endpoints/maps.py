@@ -124,6 +124,32 @@ async def compute_route(
 ) -> RouteResponse:
     await require_trip_member(db, trip_id, current_user.id)
 
+    # Tutorial trips return the pre-computed DayRoute fixture verbatim and
+    # never invoke the Maps API — see services/tutorial_seed.py.
+    from app.models.all_models import Trip as TripModel
+    trip_row = (await db.execute(select(TripModel).where(TripModel.id == trip_id))).scalars().first()
+    if trip_row is not None and trip_row.is_tutorial:
+        day_date_str = body.day_date.isoformat() if hasattr(body.day_date, "isoformat") else str(body.day_date)
+        cached = (await db.execute(
+            select(DayRoute).where(
+                DayRoute.trip_id == trip_id,
+                DayRoute.day_date == day_date_str,
+            )
+        )).scalars().first()
+        if cached is not None:
+            return RouteResponse(
+                encoded_polyline=cached.encoded_polyline,
+                legs=[],
+                total_duration_s=cached.total_duration_s or 0,
+                total_distance_m=cached.total_distance_m or 0,
+                ordered_event_ids=cached.ordered_event_ids or [],
+                unroutable=[],
+                waypoint_fingerprint=cached.waypoint_fingerprint,
+                computed_at=cached.computed_at,
+                is_stale=False,
+            )
+        return RouteResponse(reason="need_two_points")
+
     stmt = select(EventModel).where(
         EventModel.trip_id == trip_id,
         EventModel.day_date == body.day_date,

@@ -23,6 +23,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Roammate uses the mic so you can speak to the AI travel assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition turns your voice into chat messages.</string>
 	<key>GIDClientID</key>
 	<string>376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>

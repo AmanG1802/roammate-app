@@ -135,12 +135,15 @@ struct AddToTimelineSheet: View {
             }
         }
 
+        // Capture the trip id up front — the addTask closures are Sendable and
+        // must not touch the main-actor-isolated `store`.
+        let tripId = store.tripId
         await withTaskGroup(of: (Event?, Int).self) { group in
             for idea in selectedIdeas {
                 let assignedOrder = ideaSortOrders[idea.id] ?? existing.count
                 group.addTask {
                     let create = EventCreate(
-                        tripId: store.tripId,
+                        tripId: tripId,
                         title: idea.title,
                         description: idea.description,
                         category: idea.category,
