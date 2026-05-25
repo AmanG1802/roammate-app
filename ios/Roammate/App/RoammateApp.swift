@@ -14,7 +14,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
-        GIDSignIn.sharedInstance.handle(url)
+        print("[AppDelegate] 🔗 open(url:) called — \(url.absoluteString.prefix(80))")
+        let handled = GIDSignIn.sharedInstance.handle(url)
+        print("[AppDelegate] 🔗 GIDSignIn.handle returned: \(handled)")
+        return handled
     }
     #endif
 }

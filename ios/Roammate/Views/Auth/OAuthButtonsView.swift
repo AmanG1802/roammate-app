@@ -82,44 +82,54 @@ struct OAuthButtonsView: View {
             .filter({ $0.activationState == .foregroundActive })
             .compactMap({ $0 as? UIWindowScene })
             .first,
-              let root = scene.keyWindow?.rootViewController else { return }
+              let root = scene.keyWindow?.rootViewController else {
+            print("[GoogleSignIn] ❌ No foreground scene / rootViewController found")
+            return
+        }
+        print("[GoogleSignIn] 🟡 Presenting sign-in on \(type(of: root))")
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
             if let error = error as NSError? {
-                // Surface cancellations so they're visible during testing; in production
-                // a canceled sign-in is a no-op the user initiated intentionally.
+                print("[GoogleSignIn] ❌ Error — code:\(error.code) domain:\(error.domain) msg:\(error.localizedDescription)")
                 #if DEBUG
-                let message = error.localizedDescription
-                Task { @MainActor in authManager.error = "Google: \(message)" }
+                let message = "Google (\(error.code)): \(error.localizedDescription)"
+                Task { @MainActor in authManager.error = message }
                 #else
                 if error.code == GIDSignInError.canceled.rawValue { return }
-                let message = error.localizedDescription
-                Task { @MainActor in authManager.error = message }
+                Task { @MainActor in authManager.error = error.localizedDescription }
                 #endif
                 return
             }
             guard let result else {
+                print("[GoogleSignIn] ❌ Callback fired with nil result and nil error")
                 Task { @MainActor in authManager.error = "Google sign-in failed: no result" }
                 return
             }
+            print("[GoogleSignIn] ✅ Got result — user:\(result.user.userID ?? "nil") hasIDToken:\(result.user.idToken != nil)")
             if let idToken = result.user.idToken?.tokenString {
+                print("[GoogleSignIn] ✅ Using idToken directly, calling backend")
                 Task { await authManager.signInWithGoogle(idToken: idToken) }
                 return
             }
+            print("[GoogleSignIn] 🟡 No idToken, attempting refresh")
             result.user.refreshTokensIfNeeded { refreshed, refreshError in
                 if let refreshError {
                     let message = "Google sign-in failed: \(refreshError.localizedDescription)"
+                    print("[GoogleSignIn] ❌ Refresh error: \(message)")
                     Task { @MainActor in authManager.error = message }
                     return
                 }
                 guard let idToken = refreshed?.idToken?.tokenString else {
                     let hasAccess = result.user.accessToken.tokenString.isEmpty == false
                     let message = "Google sign-in failed: no ID token (accessToken present: \(hasAccess))"
+                    print("[GoogleSignIn] ❌ \(message)")
                     Task { @MainActor in authManager.error = message }
                     return
                 }
+                print("[GoogleSignIn] ✅ Got refreshed idToken, calling backend")
                 Task { await authManager.signInWithGoogle(idToken: idToken) }
             }
         }
+        print("[GoogleSignIn] 🟡 signIn(withPresenting:) returned — waiting for callback")
     }
     #endif
 }
