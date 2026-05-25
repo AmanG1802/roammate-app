@@ -1,9 +1,9 @@
 from contextlib import asynccontextmanager
 import logging
 import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import router as api_router
 from app.core.config import settings
 from app.db.base_class import Base
 from app.db.session import engine
@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.warning("LLM client warm-up skipped", exc_info=True)
 
+
     try:
         yield
     finally:
@@ -64,10 +65,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if settings.VALIDATE_SPEC:
+    from app.middleware.spec_validation import SpecValidationMiddleware
+    app.add_middleware(SpecValidationMiddleware)
+    logger.info("SpecValidationMiddleware enabled — requests validated against docs/api/openapi.yaml")
 
-@app.get("/health")
-async def health_check():
-    return {"status": "ok"}
 
+_SPEC_PATH = Path(__file__).resolve().parent.parent / "openapi.yaml"
 
-app.include_router(api_router, prefix="/api")
+from app.api import registry, spec_router as _spec_router_module
+app.include_router(_spec_router_module.build(_SPEC_PATH, registry.HANDLERS))

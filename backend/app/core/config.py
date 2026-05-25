@@ -116,6 +116,11 @@ class Settings(BaseSettings):
     PLUS_ONETIME_PRICE_INR: int = 200
     PLUS_ONETIME_DURATION_DAYS: int = 30
 
+    # ── API spec validation (dev/staging only) ───────────────────────────────
+    # Set VALIDATE_SPEC=true to validate all incoming requests against docs/api/openapi.yaml.
+    # Never enable in production — adds latency.
+    VALIDATE_SPEC: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 settings = Settings()

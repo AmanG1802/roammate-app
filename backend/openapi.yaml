@@ -1,0 +1,4929 @@
+openapi: 3.0.3
+
+info:
+  title: Roammate API
+  version: "1.0.0"
+  description: |
+    Travel itinerary planner API.
+
+    ## Authentication
+
+    All protected endpoints accept credentials via two transports:
+    - **Web (Next.js):** HttpOnly cookie `rm_access` set automatically on login/verify/refresh.
+    - **iOS:** `Authorization: Bearer <jwt>` header. The login/verify response body also includes `access_token` for Keychain storage.
+
+    Use `POST /api/auth/refresh` to rotate both tokens. The refresh token is accepted via `rm_refresh` cookie (web) or `{"refresh_token": "..."}` body (iOS).
+
+    ## Error Responses
+
+    All errors return `{"detail": "<message>"}`. Some errors return a structured object in `detail` (e.g., the Ripple Engine's `cross_midnight_shift` error).
+
+    ## Time Handling
+
+    Event `start_time` and `end_time` are trip-local wall-clock times (no timezone), serialized as `HH:MM:SS`. Combine with `day_date` and the trip's `timezone` to recover an absolute instant.
+  contact:
+    email: aman.180202@gmail.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.roammate.xyz
+    description: Production
+
+tags:
+  - name: auth
+    description: Authentication — signup, login, OAuth, token refresh, password reset
+  - name: users
+    description: User profile management
+  - name: trips
+    description: Trip CRUD, members, invitations, idea bin, trip days
+  - name: events
+    description: Timeline events — create, update, move-to-bin, ripple engine
+  - name: brainstorm
+    description: AI brainstorm chat and item extraction
+  - name: concierge
+    description: In-trip conversational AI concierge
+  - name: maps
+    description: Driving route computation and place enrichment
+  - name: votes
+    description: Voting on ideas and events
+  - name: ideas
+    description: Idea bin tagging and cross-trip copy
+  - name: groups
+    description: Group management, members, trips, idea library
+  - name: notifications
+    description: User notification inbox
+  - name: dashboard
+    description: Home screen widgets
+  - name: llm
+    description: One-shot AI trip plan generation
+  - name: billing
+    description: Subscription and payment management (Razorpay + Apple IAP)
+  - name: admin
+    description: Internal admin dashboard (separate credentials)
+  - name: tutorial
+    description: Onboarding tutorial state management
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token. Used by iOS clients storing token in Keychain.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: rm_access
+      description: HttpOnly cookie `rm_access`. Set automatically by login/verify/refresh. Used by web clients.
+    adminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Admin JWT issued by `POST /api/admin/login`. Separate from user tokens.
+
+  schemas:
+
+    # ── Shared ──────────────────────────────────────────────────────────────
+
+    ErrorDetail:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: object
+          example: "Resource not found"
+
+    PlaceFields:
+      description: Canonical enrichment fields shared by Event, IdeaBinItem, and BrainstormBinItem.
+      type: object
+      properties:
+        title:
+          type: string
+          example: "Eiffel Tower"
+        description:
+          type: string
+          nullable: true
+          example: "Iconic iron lattice tower on the Champ de Mars."
+        category:
+          type: string
+          nullable: true
+          example: "sightseeing"
+        place_id:
+          type: string
+          nullable: true
+          example: "ChIJLU7jZClu5kcR4PcOOO6p3I0"
+        lat:
+          type: number
+          format: double
+          nullable: true
+          example: 48.8584
+        lng:
+          type: number
+          format: double
+          nullable: true
+          example: 2.2945
+        address:
+          type: string
+          nullable: true
+          example: "Champ de Mars, 5 Av. Anatole France, 75007 Paris"
+        photo_url:
+          type: string
+          nullable: true
+          example: "https://maps.googleapis.com/maps/api/place/photo?..."
+        rating:
+          type: number
+          format: double
+          nullable: true
+          example: 4.7
+        price_level:
+          type: integer
+          nullable: true
+          description: "0=free, 1=inexpensive, 2=moderate, 3=expensive, 4=very expensive"
+          example: 2
+        types:
+          type: array
+          nullable: true
+          items:
+            type: string
+          example: ["tourist_attraction", "point_of_interest"]
+        time_category:
+          type: string
+          nullable: true
+          description: "Time-of-day bucket"
+          enum: [morning, afternoon, evening, night]
+          example: "afternoon"
+        added_by:
+          type: string
+          nullable: true
+          description: "First name of the user who added this item"
+          example: "Alice"
+
+    # ── Auth ────────────────────────────────────────────────────────────────
+
+    UserOut:
+      type: object
+      required: [id, email, name, email_verified]
+      properties:
+        id:
+          type: integer
+          example: 42
+        email:
+          type: string
+          format: email
+          example: "alice@example.com"
+        name:
+          type: string
+          example: "Alice Smith"
+        avatar_url:
+          type: string
+          nullable: true
+          example: "https://lh3.googleusercontent.com/..."
+        email_verified:
+          type: boolean
+          example: true
+        personas:
+          type: array
+          nullable: true
+          items:
+            type: string
+          example: ["explorer", "foodie"]
+        home_city:
+          type: string
+          nullable: true
+          example: "Mumbai"
+        timezone:
+          type: string
+          nullable: true
+          example: "Asia/Kolkata"
+        currency:
+          type: string
+          nullable: true
+          example: "INR"
+        travel_blurb:
+          type: string
+          nullable: true
+        subscription_tier:
+          type: string
+          enum: [free, plus]
+          example: "free"
+
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in, user]
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          enum: [bearer]
+          example: "bearer"
+        expires_in:
+          type: integer
+          description: "Access token TTL in seconds"
+          example: 900
+        user:
+          $ref: '#/components/schemas/UserOut'
+
+    SignupIn:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "alice@example.com"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          example: "s3cur3passw0rd"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: "Alice Smith"
+
+    LoginIn:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "alice@example.com"
+        password:
+          type: string
+          example: "s3cur3passw0rd"
+        skip_verification:
+          type: boolean
+          default: false
+          description: "Internal flag — if true, allows login even if email is unverified."
+
+    VerifyIn:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: "One-time verification token from the email link"
+
+    ResendIn:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    OAuthIn:
+      type: object
+      required: [id_token, platform]
+      properties:
+        id_token:
+          type: string
+          description: "JWT id_token from Google or Apple OAuth flow"
+        platform:
+          type: string
+          enum: [web, ios]
+          description: "Client platform — determines which OAuth client_id is used for verification"
+          example: "web"
+        nonce:
+          type: string
+          nullable: true
+          description: "Required for Apple iOS sign-in"
+
+    ForgotIn:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ResetIn:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+
+    ChangeEmailIn:
+      type: object
+      required: [new_email, password]
+      properties:
+        new_email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    RefreshIn:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+          description: "For iOS clients. Web clients send via rm_refresh cookie."
+
+    IdentityItem:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [google, apple]
+        email_at_link:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    IdentitiesOut:
+      type: object
+      properties:
+        has_password:
+          type: boolean
+        identities:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityItem'
+
+    # ── Users ────────────────────────────────────────────────────────────────
+
+    ProfileUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        home_city:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        travel_blurb:
+          type: string
+          nullable: true
+        password:
+          type: string
+          nullable: true
+          description: "New password. Requires current_password."
+        current_password:
+          type: string
+          nullable: true
+
+    PersonasUpdate:
+      type: object
+      required: [personas]
+      properties:
+        personas:
+          type: array
+          items:
+            type: string
+          example: ["explorer", "foodie"]
+
+    # ── Trips ────────────────────────────────────────────────────────────────
+
+    TripCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: "Tokyo Blitz 2026"
+        start_date:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-06-01T00:00:00"
+        end_date:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-06-10T00:00:00"
+        timezone:
+          type: string
+          default: "UTC"
+          description: "IANA timezone name for the destination"
+          example: "Asia/Tokyo"
+        destination_city:
+          type: string
+          nullable: true
+          example: "Tokyo"
+        country_code:
+          type: string
+          nullable: true
+          description: "ISO 3166-1 alpha-2 country code"
+          example: "JP"
+        destination_lat:
+          type: number
+          format: double
+          nullable: true
+          example: 35.6762
+        destination_lng:
+          type: number
+          format: double
+          nullable: true
+          example: 139.6503
+
+    TripUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        start_date:
+          type: string
+          format: date-time
+          nullable: true
+        end_date:
+          type: string
+          format: date-time
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+
+    TripOut:
+      allOf:
+        - $ref: '#/components/schemas/TripCreate'
+        - type: object
+          required: [id, created_at]
+          properties:
+            id:
+              type: integer
+              example: 1
+            created_at:
+              type: string
+              format: date-time
+            created_by_id:
+              type: integer
+            group_id:
+              type: integer
+              nullable: true
+            is_tutorial:
+              type: boolean
+              example: false
+            is_tutorial_completed:
+              type: boolean
+              example: false
+
+    TripWithRole:
+      allOf:
+        - $ref: '#/components/schemas/TripOut'
+        - type: object
+          properties:
+            my_role:
+              type: string
+              enum: [admin, view_only, view_with_vote]
+              example: "admin"
+
+    UserInTrip:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+
+    TripMemberOut:
+      type: object
+      required: [id, trip_id, user_id, role, status]
+      properties:
+        id:
+          type: integer
+        trip_id:
+          type: integer
+        user_id:
+          type: integer
+        role:
+          type: string
+          enum: [admin, view_only, view_with_vote]
+        status:
+          type: string
+          enum: [accepted, invited]
+        user:
+          $ref: '#/components/schemas/UserInTrip'
+
+    InviteRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+          description: "Email of a registered Roammate user to invite"
+        role:
+          type: string
+          enum: [admin, view_only, view_with_vote]
+          example: "view_only"
+
+    RoleUpdateRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, view_only, view_with_vote]
+
+    TripSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        start_date:
+          type: string
+          format: date-time
+          nullable: true
+        end_date:
+          type: string
+          format: date-time
+          nullable: true
+
+    InviterSummary:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+
+    InvitationOut:
+      type: object
+      properties:
+        id:
+          type: integer
+        trip_id:
+          type: integer
+        role:
+          type: string
+          enum: [admin, view_only, view_with_vote]
+        trip:
+          $ref: '#/components/schemas/TripSummary'
+        inviter:
+          $ref: '#/components/schemas/InviterSummary'
+
+    TripDayOut:
+      type: object
+      required: [id, trip_id, date, day_number]
+      properties:
+        id:
+          type: integer
+        trip_id:
+          type: integer
+        date:
+          type: string
+          format: date
+          example: "2026-06-01"
+        day_number:
+          type: integer
+          example: 1
+
+    IdeaBinItem:
+      allOf:
+        - $ref: '#/components/schemas/PlaceFields'
+        - type: object
+          required: [id, trip_id]
+          properties:
+            id:
+              type: integer
+            trip_id:
+              type: integer
+            start_time:
+              type: string
+              nullable: true
+              description: "Trip-local wall-clock time (HH:MM:SS)"
+              example: "09:00:00"
+            end_time:
+              type: string
+              nullable: true
+              description: "Trip-local wall-clock time (HH:MM:SS)"
+              example: "11:00:00"
+            origin_idea_id:
+              type: integer
+              nullable: true
+              description: "Source idea ID if this was copied from another trip"
+            up:
+              type: integer
+              example: 3
+            down:
+              type: integer
+              example: 1
+            my_vote:
+              type: integer
+              enum: [-1, 0, 1]
+              example: 1
+
+    IdeaBinItemUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+        start_time:
+          type: string
+          nullable: true
+          description: "HH:MM:SS trip-local time"
+          example: "09:00:00"
+        end_time:
+          type: string
+          nullable: true
+          description: "HH:MM:SS trip-local time"
+          example: "11:00:00"
+        time_category:
+          type: string
+          nullable: true
+          enum: [morning, afternoon, evening, night]
+
+    IngestRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: "Free-form text (paste from travel blog, Google Maps, etc.) to parse into ideas"
+          example: "Visit Senso-ji temple in the morning, then Shibuya crossing in the evening."
+
+    # ── Events ───────────────────────────────────────────────────────────────
+
+    EventCreate:
+      allOf:
+        - $ref: '#/components/schemas/PlaceFields'
+        - type: object
+          required: [trip_id, title]
+          properties:
+            trip_id:
+              type: integer
+            location_name:
+              type: string
+              nullable: true
+            day_date:
+              type: string
+              format: date
+              nullable: true
+              description: "Calendar date for this event in the trip's timezone (YYYY-MM-DD)"
+              example: "2026-06-01"
+            start_time:
+              type: string
+              nullable: true
+              description: "Wall-clock start time, trip-local, naive (HH:MM:SS)"
+              example: "09:00:00"
+            end_time:
+              type: string
+              nullable: true
+              description: "Wall-clock end time, trip-local, naive (HH:MM:SS). Must not cross midnight."
+              example: "11:00:00"
+            is_locked:
+              type: boolean
+              default: false
+              description: "Locked events are skipped by the Ripple Engine"
+            event_type:
+              type: string
+              nullable: true
+            sort_order:
+              type: integer
+              default: 0
+              description: "Display order within the day. Lower = earlier."
+            source_idea_id:
+              type: integer
+              nullable: true
+              description: "Idea bin item to promote. Votes are transferred; idea is deleted."
+
+    EventUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+        day_date:
+          type: string
+          format: date
+          nullable: true
+        start_time:
+          type: string
+          nullable: true
+          example: "10:00:00"
+        end_time:
+          type: string
+          nullable: true
+          example: "12:00:00"
+        sort_order:
+          type: integer
+          nullable: true
+        time_category:
+          type: string
+          nullable: true
+          enum: [morning, afternoon, evening, night]
+        is_skipped:
+          type: boolean
+          nullable: true
+
+    EventOut:
+      allOf:
+        - $ref: '#/components/schemas/EventCreate'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
+            is_skipped:
+              type: boolean
+            up:
+              type: integer
+            down:
+              type: integer
+            my_vote:
+              type: integer
+              enum: [-1, 0, 1]
+
+    RippleRequest:
+      type: object
+      required: [delta_minutes]
+      properties:
+        delta_minutes:
+          type: integer
+          description: "Minutes to shift all subsequent unlocked events. Negative shifts earlier."
+          example: 15
+        start_from_time:
+          type: string
+          nullable: true
+          description: "Only shift events starting at or after this time (HH:MM:SS)"
+          example: "14:00:00"
+
+    # ── Groups ───────────────────────────────────────────────────────────────
+
+    GroupCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: "College Crew"
+
+    GroupUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+
+    GroupOut:
+      type: object
+      required: [id, name, owner_id]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        owner_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        my_role:
+          type: string
+          enum: [admin, member]
+        member_count:
+          type: integer
+        trip_count:
+          type: integer
+
+    GroupDetailOut:
+      type: object
+      required: [id, name, owner_id]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        owner_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        my_role:
+          type: string
+          enum: [admin, member]
+
+    GroupMemberOut:
+      type: object
+      properties:
+        id:
+          type: integer
+        group_id:
+          type: integer
+        user_id:
+          type: integer
+        role:
+          type: string
+          enum: [admin, member]
+        status:
+          type: string
+          enum: [accepted, invited]
+        user:
+          $ref: '#/components/schemas/UserInTrip'
+
+    GroupInviteRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, member]
+
+    GroupRoleUpdateRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+
+    GroupSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    GroupInviterSummary:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+
+    GroupInvitationOut:
+      type: object
+      properties:
+        id:
+          type: integer
+        group_id:
+          type: integer
+        role:
+          type: string
+          enum: [admin, member]
+        group:
+          $ref: '#/components/schemas/GroupSummary'
+        inviter:
+          $ref: '#/components/schemas/GroupInviterSummary'
+
+    GroupTripSummary:
+      allOf:
+        - $ref: '#/components/schemas/TripOut'
+
+    TripProvenance:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    LibraryIdeaOut:
+      allOf:
+        - $ref: '#/components/schemas/IdeaBinItem'
+        - type: object
+          properties:
+            tags:
+              type: array
+              items:
+                type: string
+            trip:
+              $ref: '#/components/schemas/TripProvenance'
+
+    TagSummary:
+      type: object
+      properties:
+        tag:
+          type: string
+        count:
+          type: integer
+
+    # ── Votes ────────────────────────────────────────────────────────────────
+
+    VoteRequest:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: integer
+          enum: [-1, 0, 1]
+          description: "1 = upvote, -1 = downvote, 0 = retract vote"
+
+    VoteTally:
+      type: object
+      required: [up, down, my_vote]
+      properties:
+        up:
+          type: integer
+          example: 3
+        down:
+          type: integer
+          example: 1
+        my_vote:
+          type: integer
+          enum: [-1, 0, 1]
+          example: 1
+
+    VoterInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+
+    VoterList:
+      type: object
+      properties:
+        up_voters:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoterInfo'
+        down_voters:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoterInfo'
+
+    # ── Dashboard ────────────────────────────────────────────────────────────
+
+    TodayTrip:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        start_date:
+          type: string
+          format: date-time
+          nullable: true
+        end_date:
+          type: string
+          format: date-time
+          nullable: true
+        timezone:
+          type: string
+
+    TodayEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        location_name:
+          type: string
+          nullable: true
+        start_time:
+          type: string
+          nullable: true
+        end_time:
+          type: string
+          nullable: true
+        is_next:
+          type: boolean
+        is_ongoing:
+          type: boolean
+        is_past:
+          type: boolean
+
+    TodayWidgetPage:
+      type: object
+      required: [state, trip]
+      properties:
+        state:
+          type: string
+          enum: [pre_trip, in_trip, post_trip]
+        trip:
+          $ref: '#/components/schemas/TodayTrip'
+        days_until_start:
+          type: integer
+          nullable: true
+        today_date:
+          type: string
+          format: date
+          nullable: true
+        today_events:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/TodayEvent'
+        day_number:
+          type: integer
+          nullable: true
+        total_days:
+          type: integer
+          nullable: true
+        days_since_end:
+          type: integer
+          nullable: true
+        total_events:
+          type: integer
+          nullable: true
+
+    TodayWidgetOut:
+      type: object
+      required: [pages, default_index]
+      properties:
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodayWidgetPage'
+        default_index:
+          type: integer
+          description: "Index of the page to show by default (active/soonest trip)"
+
+    # ── Notifications ─────────────────────────────────────────────────────────
+
+    NotificationOut:
+      type: object
+      required: [id, type, created_at]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          example: "EVENT_MOVED"
+        payload:
+          type: object
+          description: "Type-specific payload"
+        trip_id:
+          type: integer
+          nullable: true
+        actor_id:
+          type: integer
+          nullable: true
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    UnreadCountOut:
+      type: object
+      required: [unread]
+      properties:
+        unread:
+          type: integer
+
+    # ── Brainstorm ────────────────────────────────────────────────────────────
+
+    BrainstormItemOut:
+      allOf:
+        - $ref: '#/components/schemas/PlaceFields'
+        - type: object
+          required: [id, trip_id, user_id]
+          properties:
+            id:
+              type: integer
+            trip_id:
+              type: integer
+            user_id:
+              type: integer
+            created_at:
+              type: string
+              format: date-time
+
+    BrainstormMessageOut:
+      type: object
+      required: [id, role, content]
+      properties:
+        id:
+          type: integer
+        trip_id:
+          type: integer
+        user_id:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        extracted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    BrainstormSeedRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+                enum: [user, assistant, system]
+              content:
+                type: string
+
+    BrainstormChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: "User message to the brainstorm AI"
+
+    BrainstormBulkRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaceFields'
+
+    BrainstormPromoteRequest:
+      type: object
+      properties:
+        item_ids:
+          type: array
+          nullable: true
+          items:
+            type: integer
+          description: "Specific item IDs to promote. If null/omitted, all items are promoted."
+
+    # ── Concierge ─────────────────────────────────────────────────────────────
+
+    ConciergeChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    ConciergeChatResponse:
+      type: object
+      properties:
+        intent:
+          type: string
+        user_message:
+          type: string
+        params:
+          type: object
+        requires_confirmation:
+          type: boolean
+        message_type:
+          type: string
+
+    ExecuteRequest:
+      type: object
+      required: [intent, params]
+      properties:
+        intent:
+          type: string
+        params:
+          type: object
+
+    ExecuteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        updated_events:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/EventOut'
+        new_event:
+          nullable: true
+          $ref: '#/components/schemas/EventOut'
+
+    FindNearbyRequest:
+      type: object
+      required: [query, lat, lng]
+      properties:
+        query:
+          type: string
+          example: "coffee shops"
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        limit:
+          type: integer
+          default: 5
+        category:
+          type: string
+          nullable: true
+
+    SkipEventRequest:
+      type: object
+      required: [event_id]
+      properties:
+        event_id:
+          type: integer
+
+    # ── Maps ──────────────────────────────────────────────────────────────────
+
+    RouteLeg:
+      type: object
+      properties:
+        from_event_id:
+          type: integer
+        to_event_id:
+          type: integer
+        duration_s:
+          type: integer
+        distance_m:
+          type: integer
+        polyline:
+          type: string
+          nullable: true
+
+    UnroutableEvent:
+      type: object
+      properties:
+        event_id:
+          type: integer
+        reason:
+          type: string
+
+    RouteRequest:
+      type: object
+      required: [day_date]
+      properties:
+        day_date:
+          type: string
+          format: date
+          example: "2026-06-01"
+
+    RouteResponse:
+      type: object
+      properties:
+        encoded_polyline:
+          type: string
+          nullable: true
+        legs:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteLeg'
+        total_duration_s:
+          type: integer
+        total_distance_m:
+          type: integer
+        ordered_event_ids:
+          type: array
+          items:
+            type: integer
+        unroutable:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnroutableEvent'
+        waypoint_fingerprint:
+          type: string
+        computed_at:
+          type: string
+          format: date-time
+        is_stale:
+          type: boolean
+
+    ReEnrichRequest:
+      type: object
+      required: [kind, item_id]
+      properties:
+        kind:
+          type: string
+          enum: [brainstorm, idea, event]
+        item_id:
+          type: integer
+
+    RouteSaveRequest:
+      type: object
+      required: [day_date, legs, total_duration_s, total_distance_m, ordered_event_ids, unroutable]
+      properties:
+        day_date:
+          type: string
+          format: date
+        encoded_polyline:
+          type: string
+          nullable: true
+        legs:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteLeg'
+        total_duration_s:
+          type: integer
+        total_distance_m:
+          type: integer
+        ordered_event_ids:
+          type: array
+          items:
+            type: integer
+        unroutable:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnroutableEvent'
+        waypoint_fingerprint:
+          type: string
+          nullable: true
+
+    # ── Tutorial ──────────────────────────────────────────────────────────────
+
+    TutorialStatusOut:
+      type: object
+      required: [status, step, platform]
+      properties:
+        status:
+          type: string
+          enum: [not_started, in_progress, completed, skipped]
+        step:
+          type: integer
+        trip_id:
+          type: integer
+          nullable: true
+        platform:
+          type: string
+          enum: [web, ios]
+
+    TutorialStepIn:
+      type: object
+      required: [step]
+      properties:
+        step:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    # ── LLM ──────────────────────────────────────────────────────────────────
+
+    PlanTripRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          description: "Natural language trip description"
+          example: "5 days in Kyoto, Japan in June 2026"
+        timezone:
+          type: string
+          nullable: true
+          example: "Asia/Tokyo"
+
+    PlanTripResponse:
+      type: object
+      properties:
+        trip_name:
+          type: string
+        start_date:
+          type: string
+          format: date
+          nullable: true
+        duration_days:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaceFields'
+        user_output:
+          type: string
+          description: "Human-readable summary of the generated plan"
+        timezone:
+          type: string
+          nullable: true
+        destination_city:
+          type: string
+          nullable: true
+        country_code:
+          type: string
+          nullable: true
+        destination_lat:
+          type: number
+          format: double
+          nullable: true
+        destination_lng:
+          type: number
+          format: double
+          nullable: true
+
+    # ── Billing ───────────────────────────────────────────────────────────────
+
+    EntitlementOut:
+      type: object
+      description: "Current user subscription status and quotas"
+      properties:
+        tier:
+          type: string
+          enum: [free, plus]
+        status:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+          enum: [razorpay, apple]
+        period_end:
+          type: string
+          format: date-time
+          nullable: true
+        quotas:
+          type: object
+
+    CreateSubscriptionRequest:
+      type: object
+      properties:
+        coupon_code:
+          type: string
+          nullable: true
+
+    ValidateCouponRequest:
+      type: object
+      required: [code, target]
+      properties:
+        code:
+          type: string
+        target:
+          type: string
+          enum: [one_time, subscription]
+
+    OneTimeCreateRequest:
+      type: object
+      properties:
+        coupon_code:
+          type: string
+          nullable: true
+
+    OneTimeVerifyRequest:
+      type: object
+      required: [order_id, payment_id, signature]
+      properties:
+        order_id:
+          type: string
+        payment_id:
+          type: string
+        signature:
+          type: string
+        coupon_id:
+          type: integer
+          nullable: true
+
+    AppleVerifyRequest:
+      type: object
+      required: [signed_transaction_info]
+      properties:
+        signed_transaction_info:
+          type: string
+          description: "JWS-signed transaction from StoreKit"
+        coupon_id:
+          type: integer
+          nullable: true
+
+    RedeemOfferRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+# ── Security defaults (most endpoints require auth) ───────────────────────────
+
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Health ──────────────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      tags: [auth]
+      summary: Health check
+      operationId: health_check
+      description: Returns 200 if the server is running.
+      security: []
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+
+  /api/auth/signup:
+    post:
+      tags: [auth]
+      summary: Register a new user
+      operationId: signup
+      description: |
+        Creates a new account and sends a verification email. Returns 200 even if the email is already
+        taken (to prevent enumeration). No session is issued — the client must call `/api/auth/verify`
+        after the user clicks the email link.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupIn'
+      responses:
+        "200":
+          description: Signup accepted (email may or may not have been taken)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Verification email sent."
+
+  /api/auth/verify:
+    post:
+      tags: [auth]
+      summary: Verify email and issue session
+      operationId: verify
+      description: |
+        Consumes the one-time verification token from the email link. On success, marks the email
+        verified and issues access + refresh tokens.
+
+        **Web:** tokens set as HttpOnly cookies (`rm_access`, `rm_refresh`).
+        **iOS:** tokens also returned in the response body for Keychain storage.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyIn'
+      responses:
+        "200":
+          description: Email verified — session issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/verify/resend:
+    post:
+      tags: [auth]
+      summary: Resend verification email
+      operationId: verify_resend
+      description: Always returns 204 to prevent email enumeration.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendIn'
+      responses:
+        "204":
+          description: Email sent (or silently skipped if address not found)
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Email + password login
+      operationId: login
+      description: |
+        Returns a session on success. Returns 409 if the email is registered but unverified.
+
+        **Web:** tokens set as HttpOnly cookies.
+        **iOS:** tokens returned in response body.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginIn'
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "409":
+          description: Email registered but unverified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/google:
+    post:
+      tags: [auth]
+      summary: Google OAuth login / signup
+      operationId: login_with_google
+      description: |
+        Verifies a Google `id_token` and issues a Roammate session. Creates an account if none exists.
+        If the email is already registered via password, links the Google identity to the existing account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthIn'
+      responses:
+        "200":
+          description: Login / signup successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        "400":
+          description: Invalid id_token or platform mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/apple:
+    post:
+      tags: [auth]
+      summary: Apple OAuth login / signup
+      operationId: login_with_apple
+      description: |
+        Verifies an Apple `id_token` and issues a Roammate session. `nonce` is required for iOS Sign in with Apple.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthIn'
+      responses:
+        "200":
+          description: Login / signup successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        "400":
+          description: Invalid id_token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate access + refresh tokens
+      operationId: refresh
+      description: |
+        Accepts the refresh token via `rm_refresh` cookie (web) or `{"refresh_token": "..."}` body (iOS).
+        Issues a new token pair and invalidates the old refresh token.
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshIn'
+      responses:
+        "200":
+          description: New token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        "401":
+          description: Refresh token invalid, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke session
+      operationId: logout
+      description: Revokes the current refresh token and clears cookies. Idempotent.
+      responses:
+        "204":
+          description: Logged out
+
+  /api/auth/password/forgot:
+    post:
+      tags: [auth]
+      summary: Send password reset email
+      operationId: password_forgot
+      description: Always returns 204 to prevent email enumeration.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotIn'
+      responses:
+        "204":
+          description: Email sent (or silently skipped if address not found)
+
+  /api/auth/password/reset:
+    post:
+      tags: [auth]
+      summary: Reset password with token
+      operationId: password_reset
+      description: Consumes the one-time reset token and sets the new password. Issues a new session.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetIn'
+      responses:
+        "200":
+          description: Password reset — new session issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Get current user
+      operationId: me
+      description: Returns the authenticated user's profile.
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/me/identities:
+    get:
+      tags: [auth]
+      summary: List linked OAuth identities
+      operationId: list_identities
+      description: Returns all OAuth providers linked to the current account, plus whether a password is set.
+      responses:
+        "200":
+          description: Linked identities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentitiesOut'
+
+  /api/auth/me/identities/{provider}:
+    delete:
+      tags: [auth]
+      summary: Unlink OAuth provider
+      operationId: unlink_identity
+      description: Removes the OAuth link. Only allowed if another login method remains.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, apple]
+      responses:
+        "204":
+          description: Provider unlinked
+        "400":
+          description: Cannot unlink last login method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "404":
+          description: Provider not linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/auth/me/email/change:
+    post:
+      tags: [auth]
+      summary: Request email change
+      operationId: change_email
+      description: Sends a verification email to the new address. Change is applied when the link is clicked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeEmailIn'
+      responses:
+        "204":
+          description: Verification email sent
+        "400":
+          description: Wrong current password or invalid new email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+
+  /api/users/me:
+    get:
+      tags: [users]
+      summary: Get profile
+      operationId: get_me
+      description: Returns the authenticated user's full profile.
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+    put:
+      tags: [users]
+      summary: Update profile
+      operationId: update_me
+      description: Updates name, avatar, timezone, currency, travel blurb, or password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+        "400":
+          description: Wrong current password or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    delete:
+      tags: [users]
+      summary: Delete account
+      operationId: delete_me
+      description: Permanently deletes the user account and all associated data.
+      responses:
+        "200":
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Account deleted"
+
+  /api/users/personas/catalog:
+    get:
+      tags: [users]
+      summary: List available personas
+      operationId: get_personas_catalog
+      description: Returns the full catalog of traveler persona slugs available for selection.
+      security: []
+      responses:
+        "200":
+          description: Persona catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /api/users/me/personas:
+    get:
+      tags: [users]
+      summary: Get user's selected personas
+      operationId: get_my_personas
+      responses:
+        "200":
+          description: User's personas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  personas:
+                    type: array
+                    items:
+                      type: string
+    put:
+      tags: [users]
+      summary: Update user's personas
+      operationId: update_my_personas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonasUpdate'
+      responses:
+        "200":
+          description: Updated personas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  personas:
+                    type: array
+                    items:
+                      type: string
+        "422":
+          description: Invalid persona slugs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Trips ─────────────────────────────────────────────────────────────────────
+
+  /api/trips:
+    get:
+      tags: [trips]
+      summary: List my trips
+      operationId: get_my_trips
+      description: Returns all trips where the current user is an accepted member, ordered by start date.
+      responses:
+        "200":
+          description: Trip list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TripWithRole'
+    post:
+      tags: [trips]
+      summary: Create a trip
+      operationId: create_trip
+      description: |
+        Creates a new trip. The creator is automatically added as admin.
+        Day 1 is created automatically when `start_date` is provided.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripCreate'
+      responses:
+        "201":
+          description: Trip created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripOut'
+
+  /api/trips/invitations/pending:
+    get:
+      tags: [trips]
+      summary: List pending trip invitations
+      operationId: get_my_invitations
+      description: Returns all trip invitations in `invited` status for the current user.
+      responses:
+        "200":
+          description: Pending invitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvitationOut'
+
+  /api/trips/invitations/{member_id}/accept:
+    post:
+      tags: [trips]
+      summary: Accept trip invitation
+      operationId: accept_invitation
+      parameters:
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invitation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripMemberOut'
+        "404":
+          description: Invitation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/invitations/{member_id}/decline:
+    delete:
+      tags: [trips]
+      summary: Decline trip invitation
+      operationId: decline_invitation
+      parameters:
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Invitation declined
+        "404":
+          description: Invitation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}:
+    get:
+      tags: [trips]
+      summary: Get trip details
+      operationId: get_trip
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trip details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripOut'
+        "403":
+          description: Not a trip member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    patch:
+      tags: [trips]
+      summary: Update trip
+      operationId: update_trip
+      description: |
+        Updates trip name, dates, or timezone. Admin only.
+        Changing `start_date`/`end_date` shifts all TripDay dates and events accordingly.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripUpdate'
+      responses:
+        "200":
+          description: Updated trip
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripOut'
+        "403":
+          description: Not a trip admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    delete:
+      tags: [trips]
+      summary: Delete trip
+      operationId: delete_trip
+      description: Permanently deletes the trip and all children (events, ideas, days). Admin only.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Trip deleted
+        "403":
+          description: Not a trip admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/ideas:
+    get:
+      tags: [trips]
+      summary: List idea bin
+      operationId: get_idea_bin
+      description: Returns all idea bin items for the trip with vote tallies.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Idea bin items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IdeaBinItem'
+
+  /api/trips/{trip_id}/ingest:
+    post:
+      tags: [trips]
+      summary: Ingest text into idea bin
+      operationId: ingest_to_idea_bin
+      description: |
+        Parses free-form text (paste from Google Maps, travel blog, etc.) using the LLM
+        and adds structured ideas to the trip's idea bin. Enriches with Google Maps data.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+      responses:
+        "200":
+          description: Created idea bin items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IdeaBinItem'
+        "403":
+          description: Not a trip member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/ideas/{idea_id}:
+    delete:
+      tags: [trips]
+      summary: Remove idea from bin
+      operationId: delete_idea
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Idea deleted
+        "404":
+          description: Idea not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    patch:
+      tags: [trips]
+      summary: Update idea bin item
+      operationId: update_idea
+      description: Update start_time, end_time, time_category, or title of an idea.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdeaBinItemUpdate'
+      responses:
+        "200":
+          description: Updated idea bin item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaBinItem'
+
+  /api/trips/{trip_id}/members:
+    get:
+      tags: [trips]
+      summary: List trip members
+      operationId: get_trip_members
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trip members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TripMemberOut'
+
+  /api/trips/{trip_id}/invite:
+    post:
+      tags: [trips]
+      summary: Invite user to trip
+      operationId: invite_to_trip
+      description: Invites a registered Roammate user by email. Admin only.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteRequest'
+      responses:
+        "201":
+          description: Invitation sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripMemberOut'
+        "403":
+          description: Not a trip admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "404":
+          description: User with that email not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "409":
+          description: User is already a member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/members/{member_id}/role:
+    patch:
+      tags: [trips]
+      summary: Change member role
+      operationId: update_member_role
+      description: Admin only.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdateRequest'
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripMemberOut'
+        "403":
+          description: Not a trip admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/members/{member_id}:
+    delete:
+      tags: [trips]
+      summary: Remove member from trip
+      operationId: remove_trip_member
+      description: Admin only.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Member removed
+        "403":
+          description: Not a trip admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/days:
+    get:
+      tags: [trips]
+      summary: List trip days
+      operationId: get_trip_days
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trip days
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TripDayOut'
+    post:
+      tags: [trips]
+      summary: Add a trip day
+      operationId: add_trip_day
+      description: Creates a new day for the trip. Admin only.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date]
+              properties:
+                date:
+                  type: string
+                  format: date
+                  example: "2026-06-05"
+      responses:
+        "201":
+          description: Day created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripDayOut'
+
+  /api/trips/{trip_id}/days/{day_id}:
+    delete:
+      tags: [trips]
+      summary: Delete a trip day
+      operationId: delete_trip_day
+      description: |
+        Deletes a day and left-shifts subsequent day numbers. Admin only.
+        Use `items_action` query param to control what happens to events on the deleted day.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: day_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: items_action
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [bin, delete]
+            default: bin
+          description: "bin = move events to idea bin, delete = permanently delete"
+      responses:
+        "204":
+          description: Day deleted
+        "403":
+          description: Not a trip admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Events ───────────────────────────────────────────────────────────────────
+
+  /api/events:
+    get:
+      tags: [events]
+      summary: List events for a trip
+      operationId: get_events
+      description: Returns all timeline events for the given trip, ordered by day_date then start_time.
+      parameters:
+        - name: trip_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: "Trip to fetch events for"
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventOut'
+        "403":
+          description: Not a trip member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    post:
+      tags: [events]
+      summary: Create a timeline event
+      operationId: create_event
+      description: |
+        Creates an event on the trip timeline. If `source_idea_id` is provided, votes are
+        transferred from the idea and the idea is deleted (promotion flow).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreate'
+      responses:
+        "201":
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOut'
+        "403":
+          description: Not a trip member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "422":
+          description: Validation error (e.g., overnight event — end_time before start_time)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/events/{event_id}:
+    patch:
+      tags: [events]
+      summary: Update event
+      operationId: update_event
+      description: Updates time, title, sort order, or skip status. Fires EVENT_MOVED notifications if time changes.
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventUpdate'
+      responses:
+        "200":
+          description: Updated event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOut'
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    delete:
+      tags: [events]
+      summary: Delete event
+      operationId: delete_event
+      description: Permanently deletes the event. Fires EVENT_REMOVED notification.
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Event deleted
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/events/{event_id}/move-to-bin:
+    post:
+      tags: [events]
+      summary: Demote event to idea bin
+      operationId: move_event_to_bin
+      description: Atomically moves the event to the idea bin, transferring votes.
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Idea bin item created from event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaBinItem'
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/events/ripple/{trip_id}:
+    post:
+      tags: [events]
+      summary: Trigger Ripple Engine
+      operationId: trigger_ripple_engine
+      description: |
+        Shifts all unlocked events starting at or after `start_from_time` by `delta_minutes`.
+        Use for "running late" adjustments. Admin only.
+
+        Returns 422 with `cross_midnight_shift` detail if any shift would push an event past midnight.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RippleRequest'
+      responses:
+        "200":
+          description: All affected events after shift
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventOut'
+        "403":
+          description: Not a trip admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "422":
+          description: Shift would cross midnight
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: object
+                    properties:
+                      detail:
+                        type: string
+                        example: "cross_midnight_shift"
+                      event_id:
+                        type: integer
+                      original_day:
+                        type: string
+                      new_day:
+                        type: string
+                      message:
+                        type: string
+
+  # ── Brainstorm ────────────────────────────────────────────────────────────────
+
+  /api/trips/{trip_id}/brainstorm/items:
+    get:
+      tags: [brainstorm]
+      summary: List brainstorm items
+      operationId: brainstorm_list_items
+      description: Returns the current user's brainstorm items for this trip.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          required: false
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: Brainstorm items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BrainstormItemOut'
+    delete:
+      tags: [brainstorm]
+      summary: Clear all brainstorm items
+      operationId: brainstorm_clear_items
+      description: Deletes all of the current user's brainstorm items for this trip.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: All items deleted
+
+  /api/trips/{trip_id}/brainstorm/items/{item_id}:
+    delete:
+      tags: [brainstorm]
+      summary: Delete a brainstorm item
+      operationId: brainstorm_delete_item
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Item deleted
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/brainstorm/messages:
+    get:
+      tags: [brainstorm]
+      summary: Get brainstorm chat history
+      operationId: brainstorm_list_messages
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          required: false
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: Chat messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BrainstormMessageOut'
+
+  /api/trips/{trip_id}/brainstorm/messages/seed:
+    post:
+      tags: [brainstorm]
+      summary: Seed initial brainstorm messages
+      operationId: brainstorm_seed_messages
+      description: Pre-populates the chat history. Returns 409 if history already exists.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrainstormSeedRequest'
+      responses:
+        "200":
+          description: Messages seeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seeded:
+                    type: integer
+        "409":
+          description: Brainstorm history already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/brainstorm/chat:
+    post:
+      tags: [brainstorm]
+      summary: Send brainstorm chat message
+      operationId: brainstorm_chat
+      description: Sends a message to the AI brainstorm assistant. Returns the assistant's response.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrainstormChatRequest'
+      responses:
+        "200":
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assistant_message:
+                    $ref: '#/components/schemas/BrainstormMessageOut'
+                  history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BrainstormMessageOut'
+        "423":
+          description: Brainstorm locked (tutorial mode)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "502":
+          description: LLM service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/trips/{trip_id}/brainstorm/extract:
+    post:
+      tags: [brainstorm]
+      summary: Extract structured items from chat
+      operationId: brainstorm_extract
+      description: |
+        Runs the LLM extractor on unextracted chat messages, creating BrainstormBinItems.
+        Enriches results with Google Maps data if available.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Extracted items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BrainstormItemOut'
+                  enrichment:
+                    type: object
+                    nullable: true
+
+  /api/trips/{trip_id}/brainstorm/bulk:
+    post:
+      tags: [brainstorm]
+      summary: Bulk insert brainstorm items
+      operationId: brainstorm_bulk_insert
+      description: Directly inserts pre-structured items (e.g., from AI plan generation).
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrainstormBulkRequest'
+      responses:
+        "200":
+          description: Created items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BrainstormItemOut'
+
+  /api/trips/{trip_id}/brainstorm/promote:
+    post:
+      tags: [brainstorm]
+      summary: Promote brainstorm items to idea bin
+      operationId: brainstorm_promote
+      description: |
+        Moves brainstorm items to the trip idea bin. If `item_ids` is omitted, all items are promoted.
+        Sends BRAINSTORM_PROMOTED notifications to other trip members.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrainstormPromoteRequest'
+      responses:
+        "200":
+          description: Created idea bin items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IdeaBinItem'
+        "404":
+          description: One or more item IDs not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Concierge ─────────────────────────────────────────────────────────────────
+
+  /api/concierge/{trip_id}/chat:
+    post:
+      tags: [concierge]
+      summary: Send concierge message
+      operationId: concierge_chat
+      description: |
+        Sends a message to the in-trip AI concierge. The concierge interprets intent
+        (add event, find nearby, skip event, etc.) and returns a structured response
+        with `requires_confirmation` for destructive actions.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConciergeChatRequest'
+      responses:
+        "200":
+          description: Concierge response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConciergeChatResponse'
+        "423":
+          description: Concierge locked (tutorial mode)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "502":
+          description: LLM service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/concierge/{trip_id}/execute:
+    post:
+      tags: [concierge]
+      summary: Execute confirmed concierge intent
+      operationId: concierge_execute
+      description: Executes an intent previously returned by `/chat` that required user confirmation.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRequest'
+      responses:
+        "200":
+          description: Execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
+
+  /api/concierge/{trip_id}/find-nearby:
+    post:
+      tags: [concierge]
+      summary: Find nearby places
+      operationId: find_nearby
+      description: Searches for places near a given coordinate using Google Maps.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FindNearbyRequest'
+      responses:
+        "200":
+          description: Nearby places
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  places:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlaceFields'
+                  enrichment:
+                    type: object
+                    nullable: true
+
+  /api/concierge/{trip_id}/skip-event:
+    post:
+      tags: [concierge]
+      summary: Skip an event from the route
+      operationId: skip_event
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkipEventRequest'
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
+
+  /api/concierge/{trip_id}/whats-next:
+    get:
+      tags: [concierge]
+      summary: What's next suggestion
+      operationId: whats_next
+      description: Returns the current event, next event, and travel time between them.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: What's next
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_event:
+                    nullable: true
+                    $ref: '#/components/schemas/EventOut'
+                  next_event:
+                    nullable: true
+                    $ref: '#/components/schemas/EventOut'
+                  time_until_next:
+                    type: string
+                    nullable: true
+                  travel_time_to_next:
+                    type: integer
+                    nullable: true
+
+  /api/concierge/{trip_id}/today-summary:
+    get:
+      tags: [concierge]
+      summary: Today's itinerary summary
+      operationId: today_summary
+      description: Returns a count and list of completed, upcoming, and skipped events for today.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Today summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  total_events:
+                    type: integer
+                  completed:
+                    type: integer
+                  upcoming:
+                    type: integer
+                  skipped:
+                    type: integer
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventOut'
+
+  # ── Maps ──────────────────────────────────────────────────────────────────────
+
+  /api/trips/{trip_id}/route:
+    get:
+      tags: [maps]
+      summary: Get cached route
+      operationId: get_stored_route
+      description: Returns the cached driving route for a specific day, or null if not computed yet.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: day_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-06-01"
+      responses:
+        "200":
+          description: Cached route (null if not yet computed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+                nullable: true
+    post:
+      tags: [maps]
+      summary: Compute driving route
+      operationId: compute_route
+      description: |
+        Computes the optimal driving route for all events on a given day.
+        Returns 422 if any events are missing start times or have time conflicts.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteRequest'
+      responses:
+        "200":
+          description: Computed route
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+        "422":
+          description: Missing start times or time conflicts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: object
+                    properties:
+                      reason:
+                        type: string
+                        enum: [missing_start_times, time_conflicts]
+                      offending_event_ids:
+                        type: array
+                        items:
+                          type: integer
+
+  /api/trips/{trip_id}/route/save:
+    post:
+      tags: [maps]
+      summary: Persist route to database
+      operationId: save_client_route
+      description: Saves a client-computed or server-computed route to the DB for caching.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteSaveRequest'
+      responses:
+        "200":
+          description: Saved route
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+
+  /api/trips/enrich:
+    post:
+      tags: [maps]
+      summary: Re-enrich place data
+      operationId: re_enrich_item
+      description: Re-fetches Google Maps enrichment for a brainstorm item, idea, or event.
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReEnrichRequest'
+      responses:
+        "200":
+          description: Enriched item
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PlaceFields'
+                  - type: object
+                    properties:
+                      id:
+                        type: integer
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "422":
+          description: Enrichment failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Votes ─────────────────────────────────────────────────────────────────────
+
+  /api/ideas/{idea_id}/vote:
+    post:
+      tags: [votes]
+      summary: Vote on an idea
+      operationId: vote_on_idea
+      description: |
+        Cast, change, or retract a vote on an idea bin item.
+        Only members with role `admin` or `view_with_vote` can vote; `view_only` members get 403.
+      parameters:
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteRequest'
+      responses:
+        "200":
+          description: Updated vote tally
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteTally'
+        "403":
+          description: view_only members cannot vote
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "404":
+          description: Idea not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/ideas/{idea_id}/votes:
+    get:
+      tags: [votes]
+      summary: Get idea vote tally
+      operationId: get_idea_votes
+      parameters:
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Vote tally
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteTally'
+
+  /api/ideas/{idea_id}/voters:
+    get:
+      tags: [votes]
+      summary: List idea voters
+      operationId: get_idea_voters
+      description: Returns names and avatars of upvoters and downvoters.
+      parameters:
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Voters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoterList'
+
+  /api/events/{event_id}/vote:
+    post:
+      tags: [votes]
+      summary: Vote on an event
+      operationId: vote_on_event
+      description: Same voting rules as ideas — `view_only` members get 403.
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteRequest'
+      responses:
+        "200":
+          description: Updated vote tally
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteTally'
+        "403":
+          description: view_only members cannot vote
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/events/{event_id}/votes:
+    get:
+      tags: [votes]
+      summary: Get event vote tally
+      operationId: get_event_votes
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Vote tally
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteTally'
+
+  /api/events/{event_id}/voters:
+    get:
+      tags: [votes]
+      summary: List event voters
+      operationId: get_event_voters
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Voters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoterList'
+
+  # ── Ideas ─────────────────────────────────────────────────────────────────────
+
+  /api/ideas/{idea_id}/tags:
+    get:
+      tags: [ideas]
+      summary: Get idea tags
+      operationId: list_idea_tags
+      parameters:
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tags for this idea
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "404":
+          description: Idea not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    put:
+      tags: [ideas]
+      summary: Set idea tags
+      operationId: set_idea_tags
+      description: Replaces all tags on the idea. Requires admin or view_with_vote role.
+      parameters:
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tags]
+              properties:
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Updated tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/ideas/{idea_id}/copy:
+    post:
+      tags: [ideas]
+      summary: Copy idea to another trip
+      operationId: copy_idea_to_trip
+      description: Copies the idea bin item to a different trip's idea bin (preserves place data, resets votes).
+      parameters:
+        - name: idea_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_trip_id]
+              properties:
+                target_trip_id:
+                  type: integer
+      responses:
+        "200":
+          description: Copied idea in target trip
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeaBinItem'
+        "404":
+          description: Idea or target trip not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Groups ────────────────────────────────────────────────────────────────────
+
+  /api/groups:
+    get:
+      tags: [groups]
+      summary: List my groups
+      operationId: list_my_groups
+      description: Returns all groups where the current user is an accepted member.
+      responses:
+        "200":
+          description: Group list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupOut'
+    post:
+      tags: [groups]
+      summary: Create a group
+      operationId: create_group
+      description: Creates a new group. The creator is automatically added as admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupCreate'
+      responses:
+        "201":
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetailOut'
+
+  /api/groups/invitations/pending:
+    get:
+      tags: [groups]
+      summary: List pending group invitations
+      operationId: list_my_group_invitations
+      responses:
+        "200":
+          description: Pending invitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupInvitationOut'
+
+  /api/groups/invitations/{member_id}/accept:
+    post:
+      tags: [groups]
+      summary: Accept group invitation
+      operationId: accept_group_invitation
+      parameters:
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invitation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMemberOut'
+
+  /api/groups/invitations/{member_id}/decline:
+    delete:
+      tags: [groups]
+      summary: Decline group invitation
+      operationId: decline_group_invitation
+      parameters:
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Invitation declined
+
+  /api/groups/{group_id}:
+    get:
+      tags: [groups]
+      summary: Get group details
+      operationId: get_group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetailOut'
+        "404":
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+    patch:
+      tags: [groups]
+      summary: Update group
+      operationId: update_group
+      description: Admin only.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupUpdate'
+      responses:
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetailOut'
+    delete:
+      tags: [groups]
+      summary: Delete group
+      operationId: delete_group
+      description: Deletes the group. Detaches all trips, removes all members. Admin only.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Group deleted
+
+  /api/groups/{group_id}/members:
+    get:
+      tags: [groups]
+      summary: List group members
+      operationId: list_group_members
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Group members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupMemberOut'
+
+  /api/groups/{group_id}/invite:
+    post:
+      tags: [groups]
+      summary: Invite user to group
+      operationId: invite_to_group
+      description: Admin only.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupInviteRequest'
+      responses:
+        "201":
+          description: Invitation sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMemberOut'
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "409":
+          description: User is already a group member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/groups/{group_id}/members/{member_id}/role:
+    patch:
+      tags: [groups]
+      summary: Change group member role
+      operationId: update_group_member_role
+      description: Admin only.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupRoleUpdateRequest'
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMemberOut'
+
+  /api/groups/{group_id}/members/{member_id}:
+    delete:
+      tags: [groups]
+      summary: Remove group member
+      operationId: remove_group_member
+      description: Admin only.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Member removed
+
+  /api/groups/{group_id}/trips:
+    get:
+      tags: [groups]
+      summary: List group trips
+      operationId: list_group_trips
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Group trips
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupTripSummary'
+
+  /api/groups/{group_id}/trips/{trip_id}:
+    post:
+      tags: [groups]
+      summary: Attach trip to group
+      operationId: attach_trip_to_group
+      description: Requires admin role in both the group and the trip.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trip attached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupTripSummary'
+    delete:
+      tags: [groups]
+      summary: Detach trip from group
+      operationId: detach_trip_from_group
+      description: Admin only.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Trip detached
+
+  /api/groups/{group_id}/ideas:
+    get:
+      tags: [groups]
+      summary: Group idea library
+      operationId: get_group_idea_library
+      description: Aggregated idea bin across all trips in the group for the current user, with tags.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Full-text search query"
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: trip_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: "Filter by specific trip"
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [recent, top, title]
+            default: recent
+      responses:
+        "200":
+          description: Library ideas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LibraryIdeaOut'
+
+  /api/groups/{group_id}/tags:
+    get:
+      tags: [groups]
+      summary: Group tag cloud
+      operationId: list_group_tags
+      description: Returns tag frequencies across all ideas in the group's trips.
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tag summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TagSummary'
+
+  # ── Notifications ─────────────────────────────────────────────────────────────
+
+  /api/notifications:
+    get:
+      tags: [notifications]
+      summary: List notifications
+      operationId: list_notifications
+      description: Returns the user's notification inbox, newest first.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 100
+        - name: before_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: "Pagination cursor — return notifications with ID < before_id"
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationOut'
+
+  /api/notifications/unread-count:
+    get:
+      tags: [notifications]
+      summary: Get unread notification count
+      operationId: unread_count
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCountOut'
+
+  /api/notifications/{notification_id}/read:
+    post:
+      tags: [notifications]
+      summary: Mark notification as read
+      operationId: mark_read
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Marked as read
+        "404":
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/notifications/mark-all-read:
+    post:
+      tags: [notifications]
+      summary: Mark all notifications as read
+      operationId: mark_all_read
+      responses:
+        "204":
+          description: All marked as read
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────────
+
+  /api/dashboard/today:
+    get:
+      tags: [dashboard]
+      summary: Today widget data
+      operationId: get_today_widget
+      description: |
+        Returns a paginated carousel of trip "pages" for the home screen widget.
+        Pages are bucketed as `pre_trip`, `in_trip` (with today's events), or `post_trip`.
+        Uses each trip's `timezone` for accurate date comparison.
+      responses:
+        "200":
+          description: Today widget
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodayWidgetOut'
+
+  # ── LLM ───────────────────────────────────────────────────────────────────────
+
+  /api/llm/plan-trip:
+    post:
+      tags: [llm]
+      summary: Generate a one-shot trip plan
+      operationId: plan_trip
+      description: |
+        Uses the LLM to generate a full multi-day itinerary from a natural language prompt.
+        Enriches items with Google Maps data. Counts against the user's brainstorm quota.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanTripRequest'
+      responses:
+        "200":
+          description: Generated trip plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanTripResponse'
+        "502":
+          description: AI planner unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Billing ───────────────────────────────────────────────────────────────────
+
+  /api/billing/status:
+    get:
+      tags: [billing]
+      summary: Get subscription status
+      operationId: get_billing_status
+      description: Returns the current user's entitlement tier, quotas, and subscription details.
+      responses:
+        "200":
+          description: Entitlement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitlementOut'
+
+  /api/billing/razorpay/subscription:
+    post:
+      tags: [billing]
+      summary: Create Razorpay subscription
+      operationId: create_razorpay_subscription
+      description: Creates a Razorpay subscription and returns the parameters needed to launch the payment sheet.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionRequest'
+      responses:
+        "200":
+          description: Subscription parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscription_id:
+                    type: string
+                  razorpay_key_id:
+                    type: string
+                  plan_id:
+                    type: string
+                  amount_inr:
+                    type: integer
+                  user:
+                    type: object
+        "502":
+          description: Could not start subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/billing/razorpay/one-time:
+    post:
+      tags: [billing]
+      summary: Create Razorpay one-time payment
+      operationId: create_one_time_purchase
+      description: Creates a Razorpay order for a one-time Plus access purchase.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OneTimeCreateRequest'
+      responses:
+        "200":
+          description: "Order parameters (or granted=true if already eligible via coupon)"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  granted:
+                    type: boolean
+                  order_id:
+                    type: string
+                    nullable: true
+                  amount_paise:
+                    type: integer
+                    nullable: true
+                  razorpay_key_id:
+                    type: string
+                    nullable: true
+
+  /api/billing/razorpay/one-time/verify:
+    post:
+      tags: [billing]
+      summary: Verify Razorpay one-time payment
+      operationId: verify_one_time_purchase
+      description: Verifies the payment signature and grants Plus access.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OneTimeVerifyRequest'
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  entitlement:
+                    $ref: '#/components/schemas/EntitlementOut'
+        "400":
+          description: Invalid signature or payment status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/billing/razorpay/webhook:
+    post:
+      tags: [billing]
+      summary: Razorpay webhook receiver
+      operationId: razorpay_webhook
+      description: |
+        Receives Razorpay lifecycle events (subscription activated, payment captured, etc.).
+        Signature verified via `X-Razorpay-Signature` header. Idempotent.
+      security: []
+      parameters:
+        - name: X-Razorpay-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  replay:
+                    type: boolean
+                    nullable: true
+                  ignored:
+                    type: boolean
+                    nullable: true
+        "400":
+          description: Missing or invalid signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/billing/coupons/validate:
+    post:
+      tags: [billing]
+      summary: Validate coupon code
+      operationId: validate_coupon
+      description: Validates a coupon and returns the discount details without applying it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateCouponRequest'
+      responses:
+        "200":
+          description: Coupon quote
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  discount_type:
+                    type: string
+                  discount_value:
+                    type: number
+                  description:
+                    type: string
+        "400":
+          description: Invalid, expired, or already used coupon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/billing/apple/verify:
+    post:
+      tags: [billing]
+      summary: Verify Apple in-app purchase
+      operationId: verify_apple_transaction
+      description: Verifies a StoreKit JWS-signed transaction and grants Plus access.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppleVerifyRequest'
+      responses:
+        "200":
+          description: Entitlement after verification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitlementOut'
+        "400":
+          description: Invalid JWS or unexpected product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/billing/apple/redeem-offer:
+    post:
+      tags: [billing]
+      summary: Redeem Apple promotional offer
+      operationId: apple_redeem_offer
+      description: Generates a signed offer payload for StoreKit promotional offers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemOfferRequest'
+      responses:
+        "200":
+          description: Signed offer payload for StoreKit
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product_id:
+                    type: string
+                  offer_id:
+                    type: string
+                  key_id:
+                    type: string
+                  nonce:
+                    type: string
+                  timestamp_ms:
+                    type: integer
+                  signature:
+                    type: string
+                  username_hash:
+                    type: string
+        "400":
+          description: No Apple offer configured for this coupon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/billing/apple/webhook:
+    post:
+      tags: [billing]
+      summary: Apple App Store webhook receiver
+      operationId: apple_server_notification
+      description: |
+        Receives App Store Server Notifications V2 (JWS-signed payload).
+        Handles subscription lifecycle events. Idempotent.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signedPayload]
+              properties:
+                signedPayload:
+                  type: string
+                  description: "JWS-encoded App Store Server Notification V2"
+      responses:
+        "200":
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: Invalid payload or decode error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/billing/cancel:
+    post:
+      tags: [billing]
+      summary: Cancel subscription
+      operationId: cancel_subscription
+      description: Cancels the active Razorpay subscription at period end.
+      responses:
+        "200":
+          description: Updated entitlement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitlementOut'
+        "400":
+          description: Cancellation not allowed (non-Razorpay subscription)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  # ── Tutorial ──────────────────────────────────────────────────────────────────
+
+  /api/tutorial/status:
+    get:
+      tags: [tutorial]
+      summary: Get tutorial status
+      operationId: tutorial_get_status
+      description: Returns the current tutorial state for the requesting platform.
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Tutorial status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  /api/tutorial/start:
+    post:
+      tags: [tutorial]
+      summary: Start tutorial
+      operationId: tutorial_start
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Tutorial started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  /api/tutorial/step:
+    patch:
+      tags: [tutorial]
+      summary: Advance tutorial step
+      operationId: tutorial_patch_step
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TutorialStepIn'
+      responses:
+        "200":
+          description: Updated tutorial status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  /api/tutorial/skip:
+    post:
+      tags: [tutorial]
+      summary: Skip tutorial
+      operationId: tutorial_skip
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Tutorial skipped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  /api/tutorial/complete:
+    post:
+      tags: [tutorial]
+      summary: Mark tutorial complete
+      operationId: tutorial_complete
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Tutorial completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  /api/tutorial/replay:
+    post:
+      tags: [tutorial]
+      summary: Replay tutorial from beginning
+      operationId: tutorial_replay
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Tutorial reset to step 0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  /api/tutorial/reset:
+    post:
+      tags: [tutorial]
+      summary: Reset tutorial state
+      operationId: tutorial_reset
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Tutorial reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  /api/tutorial/trip:
+    delete:
+      tags: [tutorial]
+      summary: Delete tutorial trip
+      operationId: tutorial_delete_trip
+      description: Deletes the tutorial trip associated with the current user on the given platform.
+      parameters:
+        - name: X-Client-Platform
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [web, ios]
+      responses:
+        "200":
+          description: Tutorial trip deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorialStatusOut'
+
+  # ── Admin ─────────────────────────────────────────────────────────────────────
+
+  /api/admin/login:
+    post:
+      tags: [admin]
+      summary: Admin login
+      operationId: admin_login
+      description: Issues an admin JWT (separate from user tokens) using admin credentials.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Admin token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: "bearer"
+        "401":
+          description: Invalid admin credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+
+  /api/admin/users:
+    get:
+      tags: [admin]
+      summary: List all users
+      operationId: list_users
+      security:
+        - adminAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  next_cursor:
+                    type: string
+                    nullable: true
+                  has_more:
+                    type: boolean
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        email:
+                          type: string
+                        created_at:
+                          type: string
+                          format: date-time
+
+  /api/admin/token-usage/options:
+    get:
+      tags: [admin]
+      summary: Token usage filter options
+      operationId: token_usage_options
+      security:
+        - adminAuth: []
+      responses:
+        "200":
+          description: Available providers and models for filtering
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+
+  /api/admin/token-usage/summary:
+    get:
+      tags: [admin]
+      summary: Token usage summary
+      operationId: token_usage_summary
+      security:
+        - adminAuth: []
+      parameters:
+        - name: model
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "YYYY-MM format"
+        - name: day
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "YYYY-MM-DD format"
+      responses:
+        "200":
+          description: Token usage summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_tokens:
+                    type: integer
+                  total_cost_usd:
+                    type: number
+                  request_count:
+                    type: integer
+                  by_provider:
+                    type: object
+                  by_model:
+                    type: object
+                  by_source:
+                    type: object
+
+  /api/admin/token-usage/users:
+    get:
+      tags: [admin]
+      summary: Per-user token usage
+      operationId: token_usage_users
+      security:
+        - adminAuth: []
+      parameters:
+        - name: model
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: day
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Filter by name or email"
+      responses:
+        "200":
+          description: Per-user token usage
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: integer
+                    name:
+                      type: string
+                    email:
+                      type: string
+                    tokens_in:
+                      type: integer
+                    tokens_out:
+                      type: integer
+                    tokens_total:
+                      type: integer
+                    cost_usd:
+                      type: number
+
+  /api/admin/maps-usage/summary:
+    get:
+      tags: [admin]
+      summary: Maps API usage summary
+      operationId: maps_usage_summary
+      security:
+        - adminAuth: []
+      parameters:
+        - name: ops
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: day
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Maps API usage summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_calls:
+                    type: integer
+                  cache_hits:
+                    type: integer
+                  cache_hit_rate_pct:
+                    type: number
+                  error_count:
+                    type: integer
+                  total_cost_usd:
+                    type: number
+                  by_op:
+                    type: object
+
+  /api/admin/maps-usage/users:
+    get:
+      tags: [admin]
+      summary: Per-user Maps API usage
+      operationId: maps_usage_users
+      security:
+        - adminAuth: []
+      parameters:
+        - name: ops
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: day
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Per-user Maps usage
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: integer
+                    name:
+                      type: string
+                    email:
+                      type: string
+                    calls_by_op:
+                      type: object
+                    cost_usd:
+                      type: number
