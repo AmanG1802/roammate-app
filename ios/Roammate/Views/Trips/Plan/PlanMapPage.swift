@@ -5,7 +5,7 @@ struct PlanMapPage: View {
     @EnvironmentObject var store: TripDetailStore
 
     @State private var cameraPosition: MapCameraPosition = .automatic
-    @State private var drawerDetent: PresentationDetent = .fraction(0.6)
+    @State private var drawerDetent: DrawerDetent = .fraction(0.6)
     @State private var selectedDayIndex = 0
     @State private var selectedEventId: Int?
     @State private var selectedLegIndex: Int?
@@ -222,19 +222,16 @@ struct PlanMapPage: View {
             .animation(.easeInOut(duration: 0.2), value: selectedEventId)
             .animation(.easeInOut(duration: 0.2), value: selectedLegIndex)
 
-        }
-        .sheet(isPresented: .constant(true)) {
-            TimelineDrawerContent(selectedDayIndex: $selectedDayIndex)
-                .environmentObject(store)
-                .presentationDetents(
-                    [.height(140), .fraction(0.6), .large],
-                    selection: $drawerDetent
-                )
-                .presentationDragIndicator(.visible)
-                .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.6)))
-                .presentationCornerRadius(28)
-                .interactiveDismissDisabled()
-                .background { ScrollableAtAnyDetent() }
+
+            // Bottom drawer
+            BottomDrawer(
+                detents: [.minimised(140), .fraction(0.6), .fraction(0.9)],
+                current: $drawerDetent,
+                panelAnchorID: "timeline-day-1"
+            ) {
+                TimelineDrawerContent(selectedDayIndex: $selectedDayIndex)
+                    .environmentObject(store)
+            }
         }
         .onAppear {
             fitCamera()
