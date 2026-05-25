@@ -33,7 +33,7 @@ class ClaudeModel(BaseLLMModel):
         self._model = model
         self._client: Any | None = None  # lazy AsyncAnthropic
 
-    def _get_client(self):
+    def _get_client(self):  # pragma: no cover — SDK init
         if self._client is None:
             from anthropic import AsyncAnthropic
             from app.services.llm.models._clients import get_shared_client
@@ -49,7 +49,7 @@ class ClaudeModel(BaseLLMModel):
     def model_name(self) -> str:
         return self._model
 
-    async def complete(
+    async def complete(  # pragma: no cover — Anthropic SDK call
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,

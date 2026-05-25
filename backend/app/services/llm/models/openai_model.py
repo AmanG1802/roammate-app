@@ -41,7 +41,7 @@ class OpenAIModel(BaseLLMModel):
         self._model = model
         self._client: Any | None = None  # lazy AsyncOpenAI
 
-    def _get_client(self):
+    def _get_client(self):  # pragma: no cover — SDK init
         if self._client is None:
             from openai import AsyncOpenAI
             from app.services.llm.models._clients import get_shared_client
@@ -57,7 +57,7 @@ class OpenAIModel(BaseLLMModel):
     def model_name(self) -> str:
         return self._model
 
-    async def complete(
+    async def complete(  # pragma: no cover — OpenAI SDK call
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,

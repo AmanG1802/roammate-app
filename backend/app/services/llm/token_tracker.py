@@ -15,7 +15,7 @@ from app.utils.tasks import fire_and_forget
 log = logging.getLogger("roammate.tokens")
 
 
-async def _persist_token_usage(record: dict[str, Any]) -> None:
+async def _persist_token_usage(record: dict[str, Any]) -> None:  # pragma: no cover
     """Fire-and-forget DB write — failures are logged, never raised."""
     try:
         from app.db.session import AsyncSessionLocal

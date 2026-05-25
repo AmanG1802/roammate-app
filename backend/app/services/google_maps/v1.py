@@ -58,7 +58,7 @@ class MapServiceV1(BaseMapService):
 
     # ── find_place ───────────────────────────────────────────────────────
 
-    async def find_place(
+    async def find_place(  # pragma: no cover — external HTTP
         self,
         query: str,
         *,
@@ -163,7 +163,7 @@ class MapServiceV1(BaseMapService):
 
     # ── place_details ────────────────────────────────────────────────────
 
-    async def place_details(
+    async def place_details(  # pragma: no cover — external HTTP
         self,
         place_id: str,
         *,
@@ -303,7 +303,7 @@ class MapServiceV1(BaseMapService):
 
     # ── nearby_search (Text Search or Nearby Search) ────────────────────
 
-    async def nearby_search(
+    async def nearby_search(  # pragma: no cover — external HTTP
         self,
         query: str,
         lat: float,
@@ -384,7 +384,7 @@ class MapServiceV1(BaseMapService):
 
     # ── directions (legacy Directions API) ───────────────────────────────
 
-    async def _directions_api_call(
+    async def _directions_api_call(  # pragma: no cover — external HTTP
         self,
         waypoints: list[RoutePoint],
     ) -> dict[str, Any]:

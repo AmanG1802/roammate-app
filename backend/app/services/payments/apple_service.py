@@ -117,7 +117,7 @@ def decode_signed_transaction(jws: str) -> AppleTransaction:
 # ── Promotional Offer signing (subscription discounts) ──────────────────────
 
 
-def sign_promotional_offer(
+def sign_promotional_offer(  # pragma: no cover — requires Apple P8 key
     *,
     product_id: str,
     offer_id: str,

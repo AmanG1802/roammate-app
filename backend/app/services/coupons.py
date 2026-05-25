@@ -51,6 +51,13 @@ def _raise(code: str, message: str, status: int = 400) -> None:
     raise HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
+def _coerce_aware(dt: datetime) -> datetime:
+    """Ensure a datetime is UTC-aware; naive values are assumed UTC."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -136,9 +143,9 @@ async def validate_and_quote(
         _raise("coupon_inactive", "This code is no longer active")
 
     now = _now()
-    if coupon.valid_from and coupon.valid_from > now:
+    if coupon.valid_from and _coerce_aware(coupon.valid_from) > now:
         _raise("coupon_not_yet_active", "This code isn't active yet")
-    if coupon.valid_until and coupon.valid_until < now:
+    if coupon.valid_until and _coerce_aware(coupon.valid_until) < now:
         _raise("coupon_expired", "This code has expired")
 
     if not _target_matches(coupon, target):

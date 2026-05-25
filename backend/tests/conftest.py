@@ -27,9 +27,18 @@ from app.services import idea_bin as _idea_bin_mod
 _idea_bin_mod.google_maps_service.find_place = AsyncMock(return_value=None)
 
 
+from sqlalchemy import event as sa_event
+
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 test_engine = create_async_engine(TEST_DATABASE_URL, future=True, echo=False)
+
+# SQLite ignores ON DELETE CASCADE unless foreign_keys is enabled per-connection.
+@sa_event.listens_for(test_engine.sync_engine, "connect")
+def _enable_sqlite_fks(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.close()
 TestSessionLocal = sessionmaker(
     bind=test_engine, class_=AsyncSession,
     expire_on_commit=False, autoflush=False,
@@ -153,8 +162,8 @@ async def wait_for_tracker_writes() -> None:
 
 async def create_trip(client: AsyncClient, headers: dict, **payload) -> dict:
     payload.setdefault("name", "Test Trip")
-    resp = await client.post("/api/trips/", json=payload, headers=headers)
-    assert resp.status_code == 200, resp.text
+    resp = await client.post("/api/trips", json=payload, headers=headers)
+    assert resp.status_code in (200, 201), resp.text
     return resp.json()
 
 

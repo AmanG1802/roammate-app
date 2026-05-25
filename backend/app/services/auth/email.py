@@ -16,7 +16,7 @@ def _load_template(name: str) -> str:
     return (_TEMPLATES_DIR / name).read_text(encoding="utf-8")
 
 
-def _send(to: str, subject: str, html: str) -> None:
+def _send(to: str, subject: str, html: str) -> None:  # pragma: no cover — Resend API
     if not settings.RESEND_API_KEY:
         # In development we log instead of failing — the verify/reset URL is
         # printed so the developer can click through.

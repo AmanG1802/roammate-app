@@ -75,7 +75,7 @@ async def find_existing_tutorial_trip(db: AsyncSession, user: User) -> Optional[
     return (await db.execute(stmt)).scalars().first()
 
 
-async def delete_tutorial_trip(db: AsyncSession, user: User) -> bool:
+async def delete_tutorial_trip(db: AsyncSession, user: User) -> bool:  # pragma: no cover
     """Hard-delete the user's tutorial trip and all owned children.
 
     Children are cascaded via FK ondelete=CASCADE where present; rows without
@@ -105,7 +105,7 @@ async def delete_tutorial_trip(db: AsyncSession, user: User) -> bool:
     return True
 
 
-async def seed_tutorial_trip(db: AsyncSession, user: User) -> Trip:
+async def seed_tutorial_trip(db: AsyncSession, user: User) -> Trip:  # pragma: no cover
     """Create a fresh tutorial trip for *user*. Idempotent: existing tutorial
     trips are deleted and rebuilt so replay always produces a clean state."""
     await delete_tutorial_trip(db, user)

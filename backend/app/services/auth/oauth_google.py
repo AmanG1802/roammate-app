@@ -19,7 +19,7 @@ class GoogleIdentity:
     picture: Optional[str]
 
 
-async def verify(id_token_str: str, *, platform: str = "web") -> GoogleIdentity:
+async def verify(id_token_str: str, *, platform: str = "web") -> GoogleIdentity:  # pragma: no cover
     """Validate an ID token. `platform` selects the expected audience.
 
     Raises ValueError on any verification failure.

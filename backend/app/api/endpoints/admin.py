@@ -1,6 +1,8 @@
 """Admin-only endpoints for the Roammate dashboard.
 
-All GET endpoints require a valid admin JWT (``Depends(get_admin)``).
+All GET endpoints require a valid admin JWT via ``Depends(get_admin)``
+injected as a **parameter** dependency (not route-level ``dependencies=[]``)
+so the guard survives spec_router re-registration.
 The login endpoint is public.
 """
 from __future__ import annotations
@@ -50,8 +52,9 @@ async def admin_login(body: LoginRequest):
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
-@router.get("/users", dependencies=[Depends(get_admin)])
+@router.get("/users")
 async def list_users(
+    _admin: bool = Depends(get_admin),
     db: AsyncSession = Depends(get_db),
     limit: int | None = None,
     cursor: str | None = None,
@@ -90,8 +93,11 @@ async def list_users(
 
 # ── Token Usage Options (distinct providers & models from DB) ─────────────────
 
-@router.get("/token-usage/options", dependencies=[Depends(get_admin)])
-async def token_usage_options(db: AsyncSession = Depends(get_db)):
+@router.get("/token-usage/options")
+async def token_usage_options(
+    _admin: bool = Depends(get_admin),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(TokenUsage.provider, TokenUsage.model)
         .distinct()
@@ -106,8 +112,9 @@ async def token_usage_options(db: AsyncSession = Depends(get_db)):
 
 # ── Token Usage Summary ───────────────────────────────────────────────────────
 
-@router.get("/token-usage/summary", dependencies=[Depends(get_admin)])
+@router.get("/token-usage/summary")
 async def token_usage_summary(
+    _admin: bool = Depends(get_admin),
     model: Optional[str] = None,
     provider: Optional[str] = None,
     month: Optional[str] = None,
@@ -146,8 +153,9 @@ async def token_usage_summary(
 
 # ── Token Usage Per User ──────────────────────────────────────────────────────
 
-@router.get("/token-usage/users", dependencies=[Depends(get_admin)])
+@router.get("/token-usage/users")
 async def token_usage_users(
+    _admin: bool = Depends(get_admin),
     model: Optional[str] = None,
     provider: Optional[str] = None,
     month: Optional[str] = None,
@@ -193,8 +201,9 @@ async def token_usage_users(
 
 # ── Maps Usage Summary ────────────────────────────────────────────────────────
 
-@router.get("/maps-usage/summary", dependencies=[Depends(get_admin)])
+@router.get("/maps-usage/summary")
 async def maps_usage_summary(
+    _admin: bool = Depends(get_admin),
     ops: Optional[list[str]] = Query(None),
     month: Optional[str] = None,
     day: Optional[str] = None,
@@ -227,8 +236,9 @@ async def maps_usage_summary(
 
 # ── Maps Usage Per User ───────────────────────────────────────────────────────
 
-@router.get("/maps-usage/users", dependencies=[Depends(get_admin)])
+@router.get("/maps-usage/users")
 async def maps_usage_users(
+    _admin: bool = Depends(get_admin),
     ops: Optional[list[str]] = Query(None),
     month: Optional[str] = None,
     day: Optional[str] = None,

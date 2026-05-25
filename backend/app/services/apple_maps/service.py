@@ -33,7 +33,7 @@ _SEARCH_URL = "https://maps-api.apple.com/v1/search"
 _PLACE_URL = "https://maps-api.apple.com/v1/place"
 
 
-class AppleMapsService(BaseMapService):
+class AppleMapsService(BaseMapService):  # pragma: no cover
     """Apple Maps Server API backed enrichment service."""
 
     _directions_op: str = "apple_directions_noop"
