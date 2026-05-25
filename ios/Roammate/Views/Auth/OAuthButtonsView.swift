@@ -78,13 +78,23 @@ struct OAuthButtonsView: View {
 
     #if canImport(GoogleSignIn)
     private func signInWithGoogle() {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let root = scene.windows.first?.rootViewController else { return }
+        guard let scene = UIApplication.shared.connectedScenes
+            .filter({ $0.activationState == .foregroundActive })
+            .compactMap({ $0 as? UIWindowScene })
+            .first,
+              let root = scene.keyWindow?.rootViewController else { return }
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
             if let error = error as NSError? {
+                // Surface cancellations so they're visible during testing; in production
+                // a canceled sign-in is a no-op the user initiated intentionally.
+                #if DEBUG
+                let message = error.localizedDescription
+                Task { @MainActor in authManager.error = "Google: \(message)" }
+                #else
                 if error.code == GIDSignInError.canceled.rawValue { return }
                 let message = error.localizedDescription
                 Task { @MainActor in authManager.error = message }
+                #endif
                 return
             }
             guard let result else {

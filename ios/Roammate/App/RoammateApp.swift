@@ -4,8 +4,24 @@ import SwiftUI
 import GoogleSignIn
 #endif
 
+// UIApplicationDelegate handles OAuth redirects more reliably than
+// SwiftUI's onOpenURL on physical devices, where the scene may not be
+// foregrounded by the time the redirect fires.
+class AppDelegate: NSObject, UIApplicationDelegate {
+    #if canImport(GoogleSignIn)
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        GIDSignIn.sharedInstance.handle(url)
+    }
+    #endif
+}
+
 @main
 struct RoammateApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var authManager = AuthManager()
     @StateObject private var tripStore = TripStore()
     @StateObject private var groupStore = GroupStore()
