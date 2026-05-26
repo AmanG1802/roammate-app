@@ -23,6 +23,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Roammate uses your location so the Concierge can find places nearby during your trip.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Roammate uses the mic so you can speak to the AI travel assistant.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

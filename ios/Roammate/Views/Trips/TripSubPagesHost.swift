@@ -30,6 +30,7 @@ struct TripSubPagesHost: View {
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var tutorial: TutorialStore
     @StateObject private var brainstormStore: BrainstormStore
+    @StateObject private var conciergeStore: ConciergeStore
 
     @State private var currentPage: SubPage
     @State private var showMenu = false
@@ -41,6 +42,14 @@ struct TripSubPagesHost: View {
         self.popToRoot = popToRoot
         _currentPage = State(initialValue: initialPage)
         _brainstormStore = StateObject(wrappedValue: BrainstormStore(tripId: trip.id))
+        _conciergeStore = StateObject(wrappedValue: ConciergeStore(trip: trip))
+    }
+
+    /// Mirrors the web admin gate for the Concierge action surface.
+    private var isConciergeAdmin: Bool {
+        if trip.myRole == "admin" { return true }
+        guard let uid = authManager.currentUser?.id else { return false }
+        return detailStore.members.first(where: { $0.userId == uid })?.role == "admin"
     }
 
     var body: some View {
@@ -102,6 +111,11 @@ struct TripSubPagesHost: View {
             brainstormStore.onIdeasTimeUpdated = { [weak detailStore] in
                 await detailStore?.reloadIdeas()
             }
+            // After a Concierge mutation (ripple / skip / add), refresh the
+            // shared itinerary so the Map/Timeline destinations stay in sync.
+            conciergeStore.onEventsChanged = { [weak detailStore] in
+                await detailStore?.loadAll()
+            }
         }
     }
 
@@ -139,6 +153,11 @@ struct TripSubPagesHost: View {
                 BrainstormQuotaPill()
             }
 
+            if currentPage == .concierge && isConciergeAdmin {
+                conciergeNavIcon("mappin.and.ellipse", .map, label: "Open map")
+                conciergeNavIcon("list.bullet.rectangle", .timeline, label: "Open timeline")
+            }
+
             Button {
                 HapticManager.light()
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -159,6 +178,22 @@ struct TripSubPagesHost: View {
         .padding(.vertical, 12)
         .background(Color.roammateSurface.ignoresSafeArea(edges: .top))
         .zIndex(1)
+    }
+
+    /// Concierge-only top-bar icon that opens a full-screen Map / Timeline.
+    private func conciergeNavIcon(_ icon: String, _ target: ConciergeDetail, label: String) -> some View {
+        Button {
+            HapticManager.light()
+            conciergeStore.detail = target
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.roammateInk)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color.roammateSurface))
+                .overlay(Circle().stroke(Color.roammateBorder, lineWidth: 0.5))
+        }
+        .accessibilityLabel(label)
     }
 
     // MARK: - Dropdown Menu
@@ -265,5 +300,6 @@ struct TripSubPagesHost: View {
         .id(currentPage)
         .environmentObject(detailStore)
         .environmentObject(brainstormStore)
+        .environmentObject(conciergeStore)
     }
 }

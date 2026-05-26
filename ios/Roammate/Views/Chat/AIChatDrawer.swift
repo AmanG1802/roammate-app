@@ -10,7 +10,7 @@ struct AIChatDrawer: View {
 
     init(trip: Trip) {
         self.trip = trip
-        _store = StateObject(wrappedValue: ConciergeStore(tripId: trip.id))
+        _store = StateObject(wrappedValue: ConciergeStore(trip: trip))
     }
 
     var body: some View {
@@ -118,23 +118,11 @@ struct AIChatDrawer: View {
 
     // MARK: - Confirmation bar
 
+    // Action confirmation now happens inline via action-card messages in the
+    // `ConciergeStore` (see `TripConciergeView`), so this legacy drawer no
+    // longer needs a dedicated confirm/cancel bar.
     @ViewBuilder
-    private var confirmationBar: some View {
-        if let pending = store.pendingResponse, pending.requiresConfirmation {
-            HStack(spacing: RoammateSpacing.sm) {
-                Button {
-                    Task { _ = await store.confirmPending(); HapticManager.success() }
-                } label: { Text("Confirm") }
-                .buttonStyle(RoammatePrimaryButtonStyle())
-
-                Button { store.cancelPending() } label: { Text("Nevermind") }
-                    .buttonStyle(RoammateSecondaryButtonStyle())
-            }
-            .padding(.horizontal, RoammateSpacing.md)
-            .padding(.bottom, 8)
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
-    }
+    private var confirmationBar: some View { EmptyView() }
 
     // MARK: - Input
 
@@ -184,28 +172,11 @@ struct AIChatDrawer: View {
     }
 
     private func handleMyDay() {
-        Task {
-            guard let summary = await store.todaySummary() else { return }
-            let line = "Day summary: \(summary.totalEvents) events, \(summary.completed) done, \(summary.upcoming) upcoming."
-            await MainActor.run {
-                store.messages.append(ChatMessage(role: .assistant, text: line))
-            }
-        }
+        Task { await store.todaySummary() }
     }
 
     private func handleWhatsNext() {
-        Task {
-            guard let next = await store.whatsNext() else { return }
-            let text: String
-            if let t = next.timeUntilNext {
-                text = "Next event in \(t)."
-            } else {
-                text = "Nothing scheduled next."
-            }
-            await MainActor.run {
-                store.messages.append(ChatMessage(role: .assistant, text: text))
-            }
-        }
+        Task { await store.whatsNext() }
     }
 
     private func handleFindNearby() {

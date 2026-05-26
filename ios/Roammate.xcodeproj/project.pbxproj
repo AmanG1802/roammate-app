@@ -47,6 +47,7 @@
 		4BBE6CCD95ACD47036B25D0D /* IdeaRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43128887BFE3C2FF7EBD96F /* IdeaRow.swift */; };
 		4C3D0E2488ED57BA7C408C6F /* RouteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73486494E12B87E274913E63 /* RouteService.swift */; };
 		5163CF41EA3E84935227BCC3 /* MemberService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1164795132D91940E852D4 /* MemberService.swift */; };
+		552BC6A0801D00CB73ABECAD /* ConciergeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89B86DA19347DD700E4A5649 /* ConciergeDetailView.swift */; };
 		5654132D33F6D391124EC3A0 /* PaneSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6136CD967B3A0CAB460752 /* PaneSlider.swift */; };
 		580981DF6E60C54C2CEF3EEF /* PeoplePaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BC55B1DE5C6D9C649989422 /* PeoplePaneView.swift */; };
 		5D03ECE64B867294D56F16FB /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3120D72C3562E982B2F2AF17 /* AuthManager.swift */; };
@@ -107,6 +108,7 @@
 		C3FEED62561A366C584AA179 /* BrainstormChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF6AA05206E01EF570BDDAE /* BrainstormChatView.swift */; };
 		C3FFF9293B1B351BE0FC3119 /* PlanTrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94AFBB985D12E03C00AAB099 /* PlanTrip.swift */; };
 		C8266EB4868A6EFE83701C48 /* MicButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F3DE29F17FB927E3E6EB06 /* MicButton.swift */; };
+		C891E639B904EE140463D735 /* ConciergeLocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E45B114E206845F645FB873 /* ConciergeLocationProvider.swift */; };
 		CB8BB591AB35CBA25AF3DA8F /* ChatMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = D86D5AFBF2385AE4E9D0A40C /* ChatMessageBubble.swift */; };
 		D1C30475FF3A75A0B3EE181D /* TutorialSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C08077AA1C6C796F2512C95 /* TutorialSteps.swift */; };
 		D3909AFF52306D0E586C8B0E /* Concierge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0DE47292239C0D810CEE72 /* Concierge.swift */; };
@@ -120,6 +122,7 @@
 		DD34EF1CAC6B5BE8DF26BE12 /* TripSubPagesHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7BB50D9B3D78974AF88D608 /* TripSubPagesHost.swift */; };
 		DE1CC4EE1ECA7DD50EF697D6 /* Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685413A58AAE02F5AB8A21F5 /* Notification.swift */; };
 		E9643A38D881BBC5C9149F1B /* Invitation.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA42A1B84C22563DD2613E5C /* Invitation.swift */; };
+		EC1AF4CEDBB9963396DB5BE2 /* ConciergeCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399CB9478170BEF1894A59FA /* ConciergeCards.swift */; };
 		EE0B6F1311278BF2D7894FC5 /* GroupsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 567ED1DAE5D634AB7368A822 /* GroupsTabView.swift */; };
 		EE51BF2A283B874B2EF21623 /* RoammateApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA611140C03D8C4FD33E913 /* RoammateApp.swift */; };
 		EE660F523B5C11EF9615E472 /* TripDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D130DDDCA344C1E431989CE /* TripDay.swift */; };
@@ -168,9 +171,11 @@
 		323AD075845AF35773923ED7 /* IntroMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroMockups.swift; sourceTree = "<group>"; };
 		351984D6080F7F1EFB118210 /* TripRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripRow.swift; sourceTree = "<group>"; };
 		396EA8CF5B4C03F4AC4DE9F5 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		399CB9478170BEF1894A59FA /* ConciergeCards.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConciergeCards.swift; sourceTree = "<group>"; };
 		3AF29332123F87A6ACC54B57 /* MainShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainShell.swift; sourceTree = "<group>"; };
 		3D41F98E8DF0A9ED38E6A07E /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		3DA611140C03D8C4FD33E913 /* RoammateApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoammateApp.swift; sourceTree = "<group>"; };
+		3E45B114E206845F645FB873 /* ConciergeLocationProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConciergeLocationProvider.swift; sourceTree = "<group>"; };
 		3EB4267DCC779CCCABE0575F /* PaywallSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallSheet.swift; sourceTree = "<group>"; };
 		3F6754F53167E5570C84136D /* IntroCardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroCardsView.swift; sourceTree = "<group>"; };
 		40F336759D98342917682997 /* WelcomeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSheet.swift; sourceTree = "<group>"; };
@@ -203,6 +208,7 @@
 		7F6136CD967B3A0CAB460752 /* PaneSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSlider.swift; sourceTree = "<group>"; };
 		8173F7FCFF08D0204B8C2C36 /* MapPinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPinView.swift; sourceTree = "<group>"; };
 		849A59FE726DA77F5EBE3196 /* PlusBanners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusBanners.swift; sourceTree = "<group>"; };
+		89B86DA19347DD700E4A5649 /* ConciergeDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConciergeDetailView.swift; sourceTree = "<group>"; };
 		89FC891E7B6142DA9C9D7A8C /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		8AA9F45AE4E2D8D5D18B2801 /* Group.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Group.swift; sourceTree = "<group>"; };
 		8AF3168C1CA54DBCE5457AED /* InviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteSheet.swift; sourceTree = "<group>"; };
@@ -326,6 +332,7 @@
 				24137F564EF2CC7AF5B2DE2E /* TripService.swift */,
 				43F0C28795A3FD4BBAD45B41 /* TutorialService.swift */,
 				25FED9E14FA9161D171A000B /* VoteService.swift */,
+				3E45B114E206845F645FB873 /* ConciergeLocationProvider.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -454,6 +461,7 @@
 			isa = PBXGroup;
 			children = (
 				50E94D374DBDCABA041B3614 /* TripConciergeView.swift */,
+				7ECAFE6EDD788B55D9988B9B /* Concierge */,
 			);
 			path = SubPages;
 			sourceTree = "<group>";
@@ -496,6 +504,16 @@
 				191073234C07798558CD7CAE /* SubscriptionView.swift */,
 			);
 			path = Profile;
+			sourceTree = "<group>";
+		};
+		7ECAFE6EDD788B55D9988B9B /* Concierge */ = {
+			isa = PBXGroup;
+			children = (
+				399CB9478170BEF1894A59FA /* ConciergeCards.swift */,
+				89B86DA19347DD700E4A5649 /* ConciergeDetailView.swift */,
+			);
+			name = Concierge;
+			path = Concierge;
 			sourceTree = "<group>";
 		};
 		8307BDDA580D7C780E1851DD /* Chat */ = {
@@ -814,6 +832,9 @@
 				EE6ED64EE4F1F23FA0F88DFB /* Vote.swift in Sources */,
 				FC124DE0EB63D1B735A05CF9 /* VoteService.swift in Sources */,
 				7D6D97E63A596073BBFD7ED2 /* WelcomeSheet.swift in Sources */,
+				C891E639B904EE140463D735 /* ConciergeLocationProvider.swift in Sources */,
+				EC1AF4CEDBB9963396DB5BE2 /* ConciergeCards.swift in Sources */,
+				552BC6A0801D00CB73ABECAD /* ConciergeDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
