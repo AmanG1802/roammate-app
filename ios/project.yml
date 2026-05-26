@@ -33,3 +33,22 @@ targets:
           UIColorName: ""
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # Google Sign-In. GIDClientID is the iOS OAuth client ID (mirrors
+        # GOOGLE_OAUTH_CLIENT_ID_IOS in repo-root .env); the URL scheme is that
+        # client ID reversed, for the OAuth callback. Declared here so they
+        # survive `xcodegen generate` — do NOT edit these in Info.plist directly.
+        GIDClientID: 376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com
+        CFBundleURLTypes:
+          - CFBundleURLName: GoogleSignIn
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - com.googleusercontent.apps.376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh
+        # Dev Mac LAN IP for physical-device Debug builds. Overwritten each
+        # build by the "Inject dev LAN host" phase; empty by default so
+        # Config.swift falls back when injection can't run (see Config.swift).
+        DevLANHost: ""
+    postBuildScripts:
+      - path: Scripts/inject-dev-host.sh
+        name: Inject dev LAN host
+        # Detection is cheap and the IP can change between builds, so always run.
+        basedOnDependencyAnalysis: false

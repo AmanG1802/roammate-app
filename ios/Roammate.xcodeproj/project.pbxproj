@@ -33,6 +33,7 @@
 		26274C8FCAAC3F610C086585 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB8DFE8F3C13906CD2E51E30 /* AboutView.swift */; };
 		27B83DB92B0473A5493FF0BE /* TripLandingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E13D3B3C30512384AC51FC64 /* TripLandingView.swift */; };
 		2CDE0E43996198401410A586 /* TripMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD03460EF395DD9021BD1331 /* TripMember.swift */; };
+		2F2626406A1F13ADA48B0797 /* ConciergeCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5863E0B0F8428D9A8E0896EF /* ConciergeCards.swift */; };
 		377A7BC2E4C7E2FD379DAEE5 /* DayTabsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BA5CF84F36398E2F605F3A2 /* DayTabsBar.swift */; };
 		3A2F16E95D436F4C047170ED /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70831DDC928AE753075DFF7 /* JSONValue.swift */; };
 		3D4AFAB928F9BB289294C7D0 /* TutorialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C49623FC6686B783ED97126 /* TutorialStore.swift */; };
@@ -47,7 +48,6 @@
 		4BBE6CCD95ACD47036B25D0D /* IdeaRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43128887BFE3C2FF7EBD96F /* IdeaRow.swift */; };
 		4C3D0E2488ED57BA7C408C6F /* RouteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73486494E12B87E274913E63 /* RouteService.swift */; };
 		5163CF41EA3E84935227BCC3 /* MemberService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1164795132D91940E852D4 /* MemberService.swift */; };
-		552BC6A0801D00CB73ABECAD /* ConciergeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89B86DA19347DD700E4A5649 /* ConciergeDetailView.swift */; };
 		5654132D33F6D391124EC3A0 /* PaneSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6136CD967B3A0CAB460752 /* PaneSlider.swift */; };
 		580981DF6E60C54C2CEF3EEF /* PeoplePaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BC55B1DE5C6D9C649989422 /* PeoplePaneView.swift */; };
 		5D03ECE64B867294D56F16FB /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3120D72C3562E982B2F2AF17 /* AuthManager.swift */; };
@@ -68,6 +68,7 @@
 		7AC9AFF6F109CF21991169C9 /* PlanTripService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8B276553068230186A9E05 /* PlanTripService.swift */; };
 		7B2F85E538D7993B601224FF /* GroupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D072EBFA42C33BC718388D41 /* GroupStore.swift */; };
 		7D6D97E63A596073BBFD7ED2 /* WelcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F336759D98342917682997 /* WelcomeSheet.swift */; };
+		8009D7CDF2FDA60938521883 /* ConciergeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A734E984EC4D4151D6A29B7 /* ConciergeDetailView.swift */; };
 		80D731C6BBCE674C91F8D52E /* PlanTripStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97BF76D98CFB39FF6A6EAF84 /* PlanTripStore.swift */; };
 		81062CEA9F915A84C737E5FB /* PlusOnboardingFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = A65769DE727E3F192C13977F /* PlusOnboardingFlag.swift */; };
 		813485819924A77F6E6536BF /* BrainstormPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11C5EC3922C26FD0DE959A2 /* BrainstormPaneView.swift */; };
@@ -108,7 +109,6 @@
 		C3FEED62561A366C584AA179 /* BrainstormChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF6AA05206E01EF570BDDAE /* BrainstormChatView.swift */; };
 		C3FFF9293B1B351BE0FC3119 /* PlanTrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94AFBB985D12E03C00AAB099 /* PlanTrip.swift */; };
 		C8266EB4868A6EFE83701C48 /* MicButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F3DE29F17FB927E3E6EB06 /* MicButton.swift */; };
-		C891E639B904EE140463D735 /* ConciergeLocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E45B114E206845F645FB873 /* ConciergeLocationProvider.swift */; };
 		CB8BB591AB35CBA25AF3DA8F /* ChatMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = D86D5AFBF2385AE4E9D0A40C /* ChatMessageBubble.swift */; };
 		D1C30475FF3A75A0B3EE181D /* TutorialSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C08077AA1C6C796F2512C95 /* TutorialSteps.swift */; };
 		D3909AFF52306D0E586C8B0E /* Concierge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0DE47292239C0D810CEE72 /* Concierge.swift */; };
@@ -121,8 +121,8 @@
 		DD2764BD1E56E747C891B0CA /* NotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA4F706C123EC682B9302DE /* NotificationStore.swift */; };
 		DD34EF1CAC6B5BE8DF26BE12 /* TripSubPagesHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7BB50D9B3D78974AF88D608 /* TripSubPagesHost.swift */; };
 		DE1CC4EE1ECA7DD50EF697D6 /* Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 685413A58AAE02F5AB8A21F5 /* Notification.swift */; };
+		E9025E089C72B474EB6119A7 /* ConciergeLocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC86A06D53D1F3F112BD54C5 /* ConciergeLocationProvider.swift */; };
 		E9643A38D881BBC5C9149F1B /* Invitation.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA42A1B84C22563DD2613E5C /* Invitation.swift */; };
-		EC1AF4CEDBB9963396DB5BE2 /* ConciergeCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399CB9478170BEF1894A59FA /* ConciergeCards.swift */; };
 		EE0B6F1311278BF2D7894FC5 /* GroupsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 567ED1DAE5D634AB7368A822 /* GroupsTabView.swift */; };
 		EE51BF2A283B874B2EF21623 /* RoammateApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA611140C03D8C4FD33E913 /* RoammateApp.swift */; };
 		EE660F523B5C11EF9615E472 /* TripDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D130DDDCA344C1E431989CE /* TripDay.swift */; };
@@ -171,24 +171,24 @@
 		323AD075845AF35773923ED7 /* IntroMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroMockups.swift; sourceTree = "<group>"; };
 		351984D6080F7F1EFB118210 /* TripRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripRow.swift; sourceTree = "<group>"; };
 		396EA8CF5B4C03F4AC4DE9F5 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		399CB9478170BEF1894A59FA /* ConciergeCards.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConciergeCards.swift; sourceTree = "<group>"; };
 		3AF29332123F87A6ACC54B57 /* MainShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainShell.swift; sourceTree = "<group>"; };
 		3D41F98E8DF0A9ED38E6A07E /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		3DA611140C03D8C4FD33E913 /* RoammateApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoammateApp.swift; sourceTree = "<group>"; };
-		3E45B114E206845F645FB873 /* ConciergeLocationProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConciergeLocationProvider.swift; sourceTree = "<group>"; };
 		3EB4267DCC779CCCABE0575F /* PaywallSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallSheet.swift; sourceTree = "<group>"; };
 		3F6754F53167E5570C84136D /* IntroCardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroCardsView.swift; sourceTree = "<group>"; };
 		40F336759D98342917682997 /* WelcomeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSheet.swift; sourceTree = "<group>"; };
 		43F0C28795A3FD4BBAD45B41 /* TutorialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorialService.swift; sourceTree = "<group>"; };
 		477441E5145383602A90D084 /* NotificationsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsSettingsView.swift; sourceTree = "<group>"; };
 		4878E9A03BC29E352246567B /* Trip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trip.swift; sourceTree = "<group>"; };
+		4A734E984EC4D4151D6A29B7 /* ConciergeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConciergeDetailView.swift; sourceTree = "<group>"; };
 		4C08077AA1C6C796F2512C95 /* TutorialSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorialSteps.swift; sourceTree = "<group>"; };
 		4C0DE47292239C0D810CEE72 /* Concierge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Concierge.swift; sourceTree = "<group>"; };
 		4F5375BE5A94103912CAFD5E /* BrainstormMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainstormMessageBubble.swift; sourceTree = "<group>"; };
 		5054E3FC28355D9CB0328AF5 /* PersonasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonasView.swift; sourceTree = "<group>"; };
 		50E94D374DBDCABA041B3614 /* TripConciergeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripConciergeView.swift; sourceTree = "<group>"; };
-		5582219BF23003A97860E900 /* Roammate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Roammate.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5582219BF23003A97860E900 /* Roammate.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Roammate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		567ED1DAE5D634AB7368A822 /* GroupsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsTabView.swift; sourceTree = "<group>"; };
+		5863E0B0F8428D9A8E0896EF /* ConciergeCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConciergeCards.swift; sourceTree = "<group>"; };
 		58EF3B7299121D5C46DFEBA8 /* Entitlement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entitlement.swift; sourceTree = "<group>"; };
 		5A0D1151F2E2CE214107EE20 /* AuthFieldStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthFieldStyle.swift; sourceTree = "<group>"; };
 		5BA5CF84F36398E2F605F3A2 /* DayTabsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTabsBar.swift; sourceTree = "<group>"; };
@@ -208,7 +208,6 @@
 		7F6136CD967B3A0CAB460752 /* PaneSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSlider.swift; sourceTree = "<group>"; };
 		8173F7FCFF08D0204B8C2C36 /* MapPinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPinView.swift; sourceTree = "<group>"; };
 		849A59FE726DA77F5EBE3196 /* PlusBanners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusBanners.swift; sourceTree = "<group>"; };
-		89B86DA19347DD700E4A5649 /* ConciergeDetailView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConciergeDetailView.swift; sourceTree = "<group>"; };
 		89FC891E7B6142DA9C9D7A8C /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		8AA9F45AE4E2D8D5D18B2801 /* Group.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Group.swift; sourceTree = "<group>"; };
 		8AF3168C1CA54DBCE5457AED /* InviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteSheet.swift; sourceTree = "<group>"; };
@@ -247,8 +246,9 @@
 		D072EBFA42C33BC718388D41 /* GroupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupStore.swift; sourceTree = "<group>"; };
 		D11C5EC3922C26FD0DE959A2 /* BrainstormPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainstormPaneView.swift; sourceTree = "<group>"; };
 		D7BB50D9B3D78974AF88D608 /* TripSubPagesHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripSubPagesHost.swift; sourceTree = "<group>"; };
-		D7E8E2254278E09EF7AA4A89 /* RoammatePlus.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = RoammatePlus.storekit; sourceTree = "<group>"; };
+		D7E8E2254278E09EF7AA4A89 /* RoammatePlus.storekit */ = {isa = PBXFileReference; path = RoammatePlus.storekit; sourceTree = "<group>"; };
 		D86D5AFBF2385AE4E9D0A40C /* ChatMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageBubble.swift; sourceTree = "<group>"; };
+		DC86A06D53D1F3F112BD54C5 /* ConciergeLocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConciergeLocationProvider.swift; sourceTree = "<group>"; };
 		DD03460EF395DD9021BD1331 /* TripMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripMember.swift; sourceTree = "<group>"; };
 		DE94CBA65AC5951288813623 /* TodayWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayWidget.swift; sourceTree = "<group>"; };
 		DF8B276553068230186A9E05 /* PlanTripService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanTripService.swift; sourceTree = "<group>"; };
@@ -319,6 +319,7 @@
 				EA92943D4234EE9D68E41B23 /* APIClient.swift */,
 				E92B8D1DD1A909CE692FDD0C /* AuthService.swift */,
 				18C9EE39DF0DEF9C7A477FF6 /* BrainstormService.swift */,
+				DC86A06D53D1F3F112BD54C5 /* ConciergeLocationProvider.swift */,
 				C620B9A604B06410717A1416 /* ConciergeService.swift */,
 				6F442625DEF0FC29D2FECA94 /* EventService.swift */,
 				FEA03F79185BB889EC675698 /* GroupService.swift */,
@@ -332,7 +333,6 @@
 				24137F564EF2CC7AF5B2DE2E /* TripService.swift */,
 				43F0C28795A3FD4BBAD45B41 /* TutorialService.swift */,
 				25FED9E14FA9161D171A000B /* VoteService.swift */,
-				3E45B114E206845F645FB873 /* ConciergeLocationProvider.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -461,7 +461,7 @@
 			isa = PBXGroup;
 			children = (
 				50E94D374DBDCABA041B3614 /* TripConciergeView.swift */,
-				7ECAFE6EDD788B55D9988B9B /* Concierge */,
+				9635705F04E14660C0C54D0A /* Concierge */,
 			);
 			path = SubPages;
 			sourceTree = "<group>";
@@ -504,16 +504,6 @@
 				191073234C07798558CD7CAE /* SubscriptionView.swift */,
 			);
 			path = Profile;
-			sourceTree = "<group>";
-		};
-		7ECAFE6EDD788B55D9988B9B /* Concierge */ = {
-			isa = PBXGroup;
-			children = (
-				399CB9478170BEF1894A59FA /* ConciergeCards.swift */,
-				89B86DA19347DD700E4A5649 /* ConciergeDetailView.swift */,
-			);
-			name = Concierge;
-			path = Concierge;
 			sourceTree = "<group>";
 		};
 		8307BDDA580D7C780E1851DD /* Chat */ = {
@@ -570,6 +560,15 @@
 				31DFD2CE141DB18D60303E6B /* Vote.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		9635705F04E14660C0C54D0A /* Concierge */ = {
+			isa = PBXGroup;
+			children = (
+				5863E0B0F8428D9A8E0896EF /* ConciergeCards.swift */,
+				4A734E984EC4D4151D6A29B7 /* ConciergeDetailView.swift */,
+			);
+			path = Concierge;
 			sourceTree = "<group>";
 		};
 		AD7FDC922D3A62EBE2BFD993 /* Invitations */ = {
@@ -646,6 +645,7 @@
 				9252D8DC44567D738BA4FF0C /* Sources */,
 				128246D50588080B8FF40C04 /* Resources */,
 				14A7238FCD360CB4300129F0 /* Frameworks */,
+				ED781F0049CFB8141536C61D /* Inject dev LAN host */,
 			);
 			buildRules = (
 			);
@@ -667,6 +667,8 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = FD29D1D14BC36F3189EDA83A /* Build configuration list for PBXProject "Roammate" */;
 			developmentRegion = en;
@@ -701,6 +703,28 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		ED781F0049CFB8141536C61D /* Inject dev LAN host */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Inject dev LAN host";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/bin/bash\n#\n# Inject the dev Mac's current LAN IP into the built app's Info.plist as\n# `DevLANHost`, so Config.swift can reach the backend from a physical device\n# without anyone hand-editing an IP. Runs as a post-build phase (after the\n# Info.plist is in the bundle, before code signing).\n#\n# Only relevant for Debug builds onto a physical device:\n#   - Simulator builds use localhost and ignore DevLANHost.\n#   - Release builds use the production URL and never read DevLANHost.\n#\nset -euo pipefail\n\n[ \"${CONFIGURATION:-}\" = \"Debug\" ]   || { echo \"inject-dev-host: not Debug, skipping\"; exit 0; }\n[ \"${PLATFORM_NAME:-}\" = \"iphoneos\" ] || { echo \"inject-dev-host: not a device build, skipping\"; exit 0; }\n\n# Find the LAN IP of the active interface. Wi-Fi/Ethernet vary across Macs,\n# so probe the common ones, then fall back to the default route's interface.\ndetect_ip() {\n    local ifc ip def\n    for ifc in en0 en1 en2; do\n        ip=$(ipconfig getifaddr \"$ifc\" 2>/dev/null) || true\n        if [ -n \"${ip:-}\" ]; then echo \"$ip\"; return 0; fi\n    done\n    def=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}') || true\n    if [ -n \"${def:-}\" ]; then\n        ipconfig getifaddr \"$def\" 2>/dev/null || true\n    fi\n}\n\nIP=\"$(detect_ip)\"\nif [ -z \"${IP:-}\" ]; then\n    echo \"warning: inject-dev-host could not detect a LAN IP; leaving DevLANHost untouched (Config will use its fallback)\"\n    exit 0\nfi\n\nPLIST=\"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\n/usr/libexec/PlistBuddy -c \"Set :DevLANHost ${IP}\" \"$PLIST\" 2>/dev/null \\\n    || /usr/libexec/PlistBuddy -c \"Add :DevLANHost string ${IP}\" \"$PLIST\"\n\necho \"inject-dev-host: DevLANHost = ${IP}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		9252D8DC44567D738BA4FF0C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -724,6 +748,9 @@
 				72CA30A48C38F33472149E74 /* ChatFAB.swift in Sources */,
 				CB8BB591AB35CBA25AF3DA8F /* ChatMessageBubble.swift in Sources */,
 				D3909AFF52306D0E586C8B0E /* Concierge.swift in Sources */,
+				2F2626406A1F13ADA48B0797 /* ConciergeCards.swift in Sources */,
+				8009D7CDF2FDA60938521883 /* ConciergeDetailView.swift in Sources */,
+				E9025E089C72B474EB6119A7 /* ConciergeLocationProvider.swift in Sources */,
 				FB1FE5D9C448E4D4421D85B5 /* ConciergeService.swift in Sources */,
 				9BAE57B6E5E26A6E1DBF4F76 /* ConciergeStore.swift in Sources */,
 				6F23CDB2D31C79C9F04DFB83 /* ConfettiBurst.swift in Sources */,
@@ -832,9 +859,6 @@
 				EE6ED64EE4F1F23FA0F88DFB /* Vote.swift in Sources */,
 				FC124DE0EB63D1B735A05CF9 /* VoteService.swift in Sources */,
 				7D6D97E63A596073BBFD7ED2 /* WelcomeSheet.swift in Sources */,
-				C891E639B904EE140463D735 /* ConciergeLocationProvider.swift in Sources */,
-				EC1AF4CEDBB9963396DB5BE2 /* ConciergeCards.swift in Sources */,
-				552BC6A0801D00CB73ABECAD /* ConciergeDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -903,7 +927,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 44JPJWU9AR;
 				INFOPLIST_FILE = Roammate/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -986,7 +1009,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 44JPJWU9AR;
 				INFOPLIST_FILE = Roammate/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
