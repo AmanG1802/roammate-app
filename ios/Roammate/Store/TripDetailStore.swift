@@ -144,6 +144,23 @@ final class TripDetailStore: ObservableObject {
         }
     }
 
+    /// Toggle an event's skipped flag (Concierge skips a stop; the Plan timeline
+    /// lets the user restore it). Mirrors the web `toggleEventSkip`.
+    func setEventSkipped(eventId: Int, isSkipped: Bool) async {
+        let update = EventUpdate(
+            title: nil, dayDate: nil, startTime: nil, endTime: nil,
+            sortOrder: nil, timeCategory: nil, isSkipped: isSkipped
+        )
+        do {
+            let updated = try await EventService.updateEvent(id: eventId, update: update)
+            for (date, list) in eventsByDay {
+                if let idx = list.firstIndex(where: { $0.id == eventId }) {
+                    eventsByDay[date]?[idx] = updated
+                }
+            }
+        } catch {}
+    }
+
     func moveEventToBin(eventId: Int) async {
         do {
             let idea = try await EventService.moveToBin(eventId: eventId)
