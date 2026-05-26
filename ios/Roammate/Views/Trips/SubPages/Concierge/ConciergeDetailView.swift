@@ -135,6 +135,9 @@ struct ConciergeMapView: View {
                     Annotation(pin.title, coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lng)) {
                         NearbyPin(place: pin) {
                             HapticManager.light()
+                            // Picking one result drops the other pins so the map
+                            // shows only the place being added.
+                            store.nearbyPins = []
                             store.selectPlace(pin)
                             store.detail = nil
                         }
@@ -148,6 +151,17 @@ struct ConciergeMapView: View {
             if markers.isEmpty && store.nearbyPins.isEmpty {
                 emptyState
             }
+
+            // Refresh today's route after adding/removing stops.
+            VStack {
+                HStack {
+                    Spacer()
+                    refreshRouteButton
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
 
             VStack {
                 Spacer()
@@ -164,6 +178,32 @@ struct ConciergeMapView: View {
             await detailStore.loadStoredRoute(dayDate: todayKey)
             fitCamera()
         }
+    }
+
+    private var refreshRouteButton: some View {
+        Button {
+            HapticManager.light()
+            Task { await detailStore.refreshRoute(dayDate: todayKey) }
+        } label: {
+            HStack(spacing: 6) {
+                if detailStore.isRouteLoading {
+                    ProgressView().controlSize(.small).tint(Color.roammateIndigo)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                Text(detailStore.isRouteLoading ? "Updating…" : "Refresh route")
+                    .font(.system(.footnote, design: .rounded, weight: .heavy))
+            }
+            .foregroundStyle(Color.roammateIndigo)
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(Color.roammateIndigo.opacity(0.25), lineWidth: 1))
+            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+        .disabled(detailStore.isRouteLoading)
+        .accessibilityLabel("Refresh today's route")
     }
 
     private var emptyState: some View {

@@ -106,31 +106,40 @@ struct TripConciergeView: View {
     // MARK: - Quick-action chips
 
     private var chipRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                chip("My day", "calendar") { Task { await store.todaySummary() } }
-                chip("What's next?", "arrow.right.circle") { Task { await store.whatsNext() } }
-
-                Menu {
-                    Button("15 minutes") { runningLate(15) }
-                    Button("30 minutes") { runningLate(30) }
-                    Button("1 hour") { runningLate(60) }
-                } label: {
-                    chipLabel("Running late", "clock.arrow.circlepath")
+        VStack(spacing: 8) {
+            // Query / discovery actions.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    chip("My day", "calendar") { Task { await store.todaySummary() } }
+                    chip("What's next?", "arrow.right.circle") { Task { await store.whatsNext() } }
+                    chip("Find nearby", "cup.and.saucer") {
+                        requirePlus { Task { await store.findNearby(query: "coffee", category: "Food & Dining") } }
+                    }
                 }
-                .disabled(!store.isLiveDay || store.isThinking)
-                .opacity(store.isLiveDay ? 1 : 0.5)
-
-                chip("Skip next", "forward.end") {
-                    requirePlus { Task { await store.skipNext() } }
-                }
-                chip("Find nearby", "cup.and.saucer") {
-                    requirePlus { Task { await store.findNearby(query: "coffee", category: "Food & Dining") } }
-                }
+                .padding(.horizontal, RoammateSpacing.md)
             }
-            .padding(.horizontal, RoammateSpacing.md)
-            .padding(.vertical, 8)
+
+            // Dedicated row: time-sensitive itinerary actions.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Menu {
+                        Button("15 minutes") { runningLate(15) }
+                        Button("30 minutes") { runningLate(30) }
+                        Button("1 hour") { runningLate(60) }
+                    } label: {
+                        chipLabel("Running late", "clock.arrow.circlepath")
+                    }
+                    .disabled(!store.isLiveDay || store.isThinking)
+                    .opacity(store.isLiveDay ? 1 : 0.5)
+
+                    chip("Skip next", "forward.end") {
+                        requirePlus { Task { await store.skipNext() } }
+                    }
+                }
+                .padding(.horizontal, RoammateSpacing.md)
+            }
         }
+        .padding(.vertical, 8)
         .background(Color.roammateBackground)
     }
 
