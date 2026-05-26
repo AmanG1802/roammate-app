@@ -12,7 +12,7 @@ enum Config {
         // Physical device on the same Wi-Fi as the dev Mac. Update when LAN
         // IP changes (run `ipconfig getifaddr en0` on the Mac) or override
         // via the API_BASE_URL scheme env var.
-        return "http://192.168.1.103:8000/api"
+        return "http://192.168.1.110:8000/api"
         #endif
         #else
         return "https://api.roammate.xyz/api"
