@@ -1,11 +1,14 @@
 from typing import Any, List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr
 from app.db.session import get_db
-from app.models.all_models import User, UserIdentity
+from app.models.all_models import (
+    User, UserIdentity, Trip, Group, GroupMember, TripMember,
+    IdeaVote, EventVote, Notification,
+)
 from app.core.security import get_password_hash, verify_password
 from app.api.deps import get_current_user
 from app.config.persona_catalog import Persona, get_catalog
@@ -121,16 +124,28 @@ async def delete_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    uid = current_user.id
     # Revoke Apple refresh token before deleting the record (Guideline 5.1.1(v)).
     apple_identity = (await db.execute(
         select(UserIdentity).where(
-            UserIdentity.user_id == current_user.id,
+            UserIdentity.user_id == uid,
             UserIdentity.provider == "apple",
         )
     )).scalar_one_or_none()
     if apple_identity and apple_identity.apple_refresh_token:
         await oauth_apple.revoke_token(apple_identity.apple_refresh_token)
 
+    # Explicit FK-safe cleanup for tables that lack ON DELETE CASCADE in the DB.
+    # Order matters: child rows before parent rows.
+    await db.execute(delete(IdeaVote).where(IdeaVote.user_id == uid))
+    await db.execute(delete(EventVote).where(EventVote.user_id == uid))
+    # Nullify actor on notifications sent by this user; delete ones addressed to them.
+    await db.execute(update(Notification).where(Notification.actor_id == uid).values(actor_id=None))
+    await db.execute(delete(Notification).where(Notification.user_id == uid))
+    await db.execute(delete(TripMember).where(TripMember.user_id == uid))
+    await db.execute(delete(GroupMember).where(GroupMember.user_id == uid))
+    await db.execute(update(Trip).where(Trip.created_by_id == uid).values(created_by_id=None))
+    await db.execute(update(Group).where(Group.owner_id == uid).values(owner_id=None))
     await db.delete(current_user)
     await db.commit()
     return {"detail": "Account deleted"}
