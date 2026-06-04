@@ -632,8 +632,8 @@ export default function EditProfile({ profile, onUpdate, onDeleteAccount }: Edit
   const handleAvatarUpload = async (dataUrl: string) =>
     onUpdate({ avatar_url: dataUrl });
   const handleDeleteConfirm = async () => {
-    await onDeleteAccount();
-    window.location.href = '/';
+    const ok = await onDeleteAccount();
+    if (ok) window.location.href = '/login';
   };
 
   return (
