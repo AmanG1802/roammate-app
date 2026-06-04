@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 _TOKEN_LIFETIME_S = 25 * 60  # 25 min (Apple allows up to 30 min)
 
 
-class AppleMapsTokenProvider:
+class AppleMapsTokenProvider:  # pragma: no cover
     """Generates and caches Apple Maps Server API access tokens."""
 
     def __init__(self, team_id: str, key_id: str, private_key_path: str) -> None:

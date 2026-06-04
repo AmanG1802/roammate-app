@@ -15,7 +15,9 @@ from typing import List, Optional
 
 from app.utils.tz import today_in_tz, to_utc  # noqa: F401 — used elsewhere in this module
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
+
+from app.api import pagination
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 
@@ -97,37 +99,39 @@ def _first_name(user: User) -> str:
 @router.get("/{trip_id}/brainstorm/items", response_model=List[BrainstormItemOut])
 async def list_items(
     trip_id: int,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    limit: int | None = None,
+    cursor: str | None = None,
 ):
     await require_trip_member(db, trip_id, current_user.id)
-    stmt = (
-        select(BrainstormBinItem)
-        .where(
-            BrainstormBinItem.trip_id == trip_id,
-            BrainstormBinItem.user_id == current_user.id,
-        )
-        .order_by(BrainstormBinItem.created_at)
+    stmt = select(BrainstormBinItem).where(
+        BrainstormBinItem.trip_id == trip_id,
+        BrainstormBinItem.user_id == current_user.id,
     )
-    return (await db.execute(stmt)).scalars().all()
+    if pagination.is_paginated(limit, cursor):
+        return await pagination.paginate_scalars(db, response, stmt, BrainstormBinItem.id, limit, cursor)
+    return (await db.execute(stmt.order_by(BrainstormBinItem.created_at))).scalars().all()
 
 
 @router.get("/{trip_id}/brainstorm/messages", response_model=List[BrainstormMessageOut])
 async def list_messages(
     trip_id: int,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    limit: int | None = None,
+    cursor: str | None = None,
 ):
     await require_trip_member(db, trip_id, current_user.id)
-    stmt = (
-        select(BrainstormMessage)
-        .where(
-            BrainstormMessage.trip_id == trip_id,
-            BrainstormMessage.user_id == current_user.id,
-        )
-        .order_by(BrainstormMessage.created_at)
+    stmt = select(BrainstormMessage).where(
+        BrainstormMessage.trip_id == trip_id,
+        BrainstormMessage.user_id == current_user.id,
     )
-    return (await db.execute(stmt)).scalars().all()
+    if pagination.is_paginated(limit, cursor):
+        return await pagination.paginate_scalars(db, response, stmt, BrainstormMessage.id, limit, cursor)
+    return (await db.execute(stmt.order_by(BrainstormMessage.created_at))).scalars().all()
 
 
 @router.post("/{trip_id}/brainstorm/messages/seed", response_model=BrainstormSeedResponse)
@@ -320,11 +324,17 @@ async def extract(
         raw_items, user_id=current_user.id, trip_id=trip_id, location=bias,
     )
 
-    existing_stmt = select(BrainstormBinItem).where(
+    # Dedup is fuzzy (place_id + Levenshtein on title), so it needs the existing
+    # items in Python — but only their place_id + title. Select just those two
+    # columns (backed by the (user_id, trip_id) index) instead of hydrating every
+    # full BrainstormBinItem ORM row for the trip. See docs/[31] D6.
+    existing_stmt = select(
+        BrainstormBinItem.place_id, BrainstormBinItem.title
+    ).where(
         BrainstormBinItem.trip_id == trip_id,
         BrainstormBinItem.user_id == current_user.id,
     )
-    existing_rows = (await db.execute(existing_stmt)).scalars().all()
+    existing_rows = (await db.execute(existing_stmt)).all()
     raw_items = deduplicate(raw_items, existing_rows)
 
     created: list[BrainstormBinItem] = []

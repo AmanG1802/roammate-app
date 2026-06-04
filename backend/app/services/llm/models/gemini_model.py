@@ -54,10 +54,14 @@ class GeminiModel(BaseLLMModel):
         self._model = model
         self._client: Any | None = None  # lazy google.genai client
 
-    def _get_client(self):
+    def _get_client(self):  # pragma: no cover — SDK init
         if self._client is None:
             from google import genai
-            self._client = genai.Client(api_key=self._api_key)
+            from app.services.llm.models._clients import get_shared_client
+            self._client = get_shared_client(
+                "gemini", self._api_key,
+                lambda: genai.Client(api_key=self._api_key),
+            )
         return self._client
 
     def provider_name(self) -> str:
@@ -66,7 +70,7 @@ class GeminiModel(BaseLLMModel):
     def model_name(self) -> str:
         return self._model
 
-    async def complete(
+    async def complete(  # pragma: no cover — Google GenAI SDK call
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,

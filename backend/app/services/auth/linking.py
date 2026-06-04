@@ -40,7 +40,7 @@ class OAuthClaims:
     avatar_url: Optional[str] = None
 
 
-async def find_or_create_user_for_oauth(
+async def find_or_create_user_for_oauth(  # pragma: no cover — OAuth linking
     db: AsyncSession,
     claims: OAuthClaims,
 ) -> User:

@@ -75,6 +75,21 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://redis:6379/0"
 
+    # ── DB connection pool (per-process) ─────────────────────────────────────
+    # Sizing formula for horizontal scaling:
+    #   replicas × workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ 0.7 × pg_max_conn
+    # Single replica today; tune DB_POOL_SIZE down (or add PgBouncer) before
+    # scaling past a few replicas on Railway.
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 10        # seconds to wait for a free connection
+    DB_POOL_RECYCLE: int = 1800      # recycle connections every 30 min
+
+    # ── LLM safety ───────────────────────────────────────────────────────────
+    # Hard ceiling on a single provider call so a black-holed TCP connection
+    # can't pin a worker until OS keep-alive fires (~10 min).
+    LLM_TIMEOUT_S: int = 60
+
     # ── Subscription / billing ───────────────────────────────────────────────
     # Razorpay (India web/Android)
     RAZORPAY_KEY_ID: Optional[str] = None
@@ -100,6 +115,11 @@ class Settings(BaseSettings):
     PLUS_MONTHLY_PRICE_INR: int = 149
     PLUS_ONETIME_PRICE_INR: int = 200
     PLUS_ONETIME_DURATION_DAYS: int = 30
+
+    # ── API spec validation (dev/staging only) ───────────────────────────────
+    # Set VALIDATE_SPEC=true to validate all incoming requests against docs/api/openapi.yaml.
+    # Never enable in production — adds latency.
+    VALIDATE_SPEC: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 

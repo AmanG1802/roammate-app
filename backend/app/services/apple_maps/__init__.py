@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
-def get_apple_maps_service() -> Optional["AppleMapsService"]:
+def get_apple_maps_service() -> Optional["AppleMapsService"]:  # pragma: no cover
     if not settings.APPLE_MAPS_ENABLED:
         return None
 

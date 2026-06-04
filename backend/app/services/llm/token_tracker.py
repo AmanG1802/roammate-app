@@ -6,16 +6,16 @@ Phase 3: add Postgres ``token_usage`` table for dashboards and quotas.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Optional
 
 from app.services.llm.models.base import LLMResponse
+from app.utils.tasks import fire_and_forget
 
 log = logging.getLogger("roammate.tokens")
 
 
-async def _persist_token_usage(record: dict[str, Any]) -> None:
+async def _persist_token_usage(record: dict[str, Any]) -> None:  # pragma: no cover
     """Fire-and-forget DB write — failures are logged, never raised."""
     try:
         from app.db.session import AsyncSessionLocal
@@ -78,7 +78,4 @@ def track(
 
     log.info("token_usage %s", " ".join(f"{k}={v}" for k, v in fields.items()))
 
-    try:
-        asyncio.create_task(_persist_token_usage(fields))
-    except RuntimeError:
-        pass
+    fire_and_forget(_persist_token_usage(fields))

@@ -15,6 +15,7 @@ from app.services import notification_service
 from app.services.roles import require_trip_admin
 from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
+from app.services.vote_tally import tally_votes
 
 
 def _event_to_schema(event: EventModel, up: int, down: int, mine: int) -> Event:
@@ -25,15 +26,8 @@ def _event_to_schema(event: EventModel, up: int, down: int, mine: int) -> Event:
 
 async def _event_with_votes(db, event: EventModel, user_id: int) -> Event:
     """Build an Event response schema with vote tallies attached."""
-    up = (await db.execute(
-        select(sa_func.count(EventVote.id)).where(EventVote.event_id == event.id, EventVote.value == 1)
-    )).scalar_one()
-    down = (await db.execute(
-        select(sa_func.count(EventVote.id)).where(EventVote.event_id == event.id, EventVote.value == -1)
-    )).scalar_one()
-    mine = (await db.execute(
-        select(EventVote.value).where(EventVote.event_id == event.id, EventVote.user_id == user_id)
-    )).scalars().first() or 0
+    tallies = await tally_votes(db, EventVote, EventVote.event_id, [event.id], user_id)
+    up, down, mine = tallies.get(event.id, (0, 0, 0))
     return _event_to_schema(event, up, down, mine)
 
 router = APIRouter()
@@ -289,15 +283,8 @@ async def move_event_to_bin(
         )
         await db.commit()
 
-    up = (await db.execute(
-        select(sa_func.count(IdeaVote.id)).where(IdeaVote.idea_id == idea.id, IdeaVote.value == 1)
-    )).scalar_one()
-    down = (await db.execute(
-        select(sa_func.count(IdeaVote.id)).where(IdeaVote.idea_id == idea.id, IdeaVote.value == -1)
-    )).scalar_one()
-    mine = (await db.execute(
-        select(IdeaVote.value).where(IdeaVote.idea_id == idea.id, IdeaVote.user_id == current_user.id)
-    )).scalars().first() or 0
+    idea_tallies = await tally_votes(db, IdeaVote, IdeaVote.idea_id, [idea.id], current_user.id)
+    up, down, mine = idea_tallies.get(idea.id, (0, 0, 0))
     data = IdeaBinItem.model_validate(idea, from_attributes=True).model_dump()
     data.update(up=up, down=down, my_vote=mine)
     return IdeaBinItem.model_validate(data)
@@ -325,28 +312,10 @@ async def get_events(
     if not event_ids:
         return []
 
-    up_stmt = (
-        select(EventVote.event_id, sa_func.count(EventVote.id))
-        .where(EventVote.event_id.in_(event_ids), EventVote.value == 1)
-        .group_by(EventVote.event_id)
-    )
-    up_map = dict((await db.execute(up_stmt)).all())
-
-    down_stmt = (
-        select(EventVote.event_id, sa_func.count(EventVote.id))
-        .where(EventVote.event_id.in_(event_ids), EventVote.value == -1)
-        .group_by(EventVote.event_id)
-    )
-    down_map = dict((await db.execute(down_stmt)).all())
-
-    my_stmt = (
-        select(EventVote.event_id, EventVote.value)
-        .where(EventVote.event_id.in_(event_ids), EventVote.user_id == current_user.id)
-    )
-    my_map = dict((await db.execute(my_stmt)).all())
+    tallies = await tally_votes(db, EventVote, EventVote.event_id, event_ids, current_user.id)
 
     return [
-        _event_to_schema(e, up_map.get(e.id, 0), down_map.get(e.id, 0), my_map.get(e.id, 0))
+        _event_to_schema(e, *tallies.get(e.id, (0, 0, 0)))
         for e in events
     ]
 

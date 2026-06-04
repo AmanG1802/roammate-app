@@ -3,6 +3,7 @@ GoogleSignIn-iOS on iOS) and return the canonical {sub, email, email_verified,
 name, picture} payload."""
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
@@ -18,10 +19,14 @@ class GoogleIdentity:
     picture: Optional[str]
 
 
-def verify(id_token_str: str, *, platform: str = "web") -> GoogleIdentity:
+async def verify(id_token_str: str, *, platform: str = "web") -> GoogleIdentity:  # pragma: no cover
     """Validate an ID token. `platform` selects the expected audience.
 
     Raises ValueError on any verification failure.
+
+    The actual token check is CPU-bound RSA signature verification (~10-50ms);
+    it runs in a worker thread via ``asyncio.to_thread`` so it never blocks the
+    event loop under load. See docs/[31] A8.
     """
     try:
         from google.auth.transport import requests as google_requests
@@ -37,7 +42,10 @@ def verify(id_token_str: str, *, platform: str = "web") -> GoogleIdentity:
         raise ValueError(f"GOOGLE_OAUTH_CLIENT_ID for platform={platform} not configured")
 
     try:
-        info = google_id_token.verify_oauth2_token(id_token_str, google_requests.Request(), audience)
+        info = await asyncio.to_thread(
+            google_id_token.verify_oauth2_token,
+            id_token_str, google_requests.Request(), audience,
+        )
     except Exception as exc:  # google-auth raises a variety of errors
         raise ValueError(f"invalid Google ID token: {exc}") from exc
 

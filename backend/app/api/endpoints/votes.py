@@ -13,34 +13,23 @@ from app.models.all_models import (
 )
 from app.schemas.votes import VoteRequest, VoteTally, VoterList, VoterInfo
 from app.services.roles import require_trip_member, require_vote_role
+from app.services.vote_tally import tally_votes
 from app.api.deps import get_current_user
 
 router = APIRouter()
 
 
 async def _tally_idea(db: AsyncSession, idea_id: int, user_id: int) -> VoteTally:
-    up = (await db.execute(
-        select(sa_func.count(IdeaVote.id)).where(IdeaVote.idea_id == idea_id, IdeaVote.value == 1)
-    )).scalar_one()
-    down = (await db.execute(
-        select(sa_func.count(IdeaVote.id)).where(IdeaVote.idea_id == idea_id, IdeaVote.value == -1)
-    )).scalar_one()
-    mine = (await db.execute(
-        select(IdeaVote.value).where(IdeaVote.idea_id == idea_id, IdeaVote.user_id == user_id)
-    )).scalars().first() or 0
+    up, down, mine = (
+        await tally_votes(db, IdeaVote, IdeaVote.idea_id, [idea_id], user_id)
+    ).get(idea_id, (0, 0, 0))
     return VoteTally(up=up, down=down, my_vote=mine)
 
 
 async def _tally_event(db: AsyncSession, event_id: int, user_id: int) -> VoteTally:
-    up = (await db.execute(
-        select(sa_func.count(EventVote.id)).where(EventVote.event_id == event_id, EventVote.value == 1)
-    )).scalar_one()
-    down = (await db.execute(
-        select(sa_func.count(EventVote.id)).where(EventVote.event_id == event_id, EventVote.value == -1)
-    )).scalar_one()
-    mine = (await db.execute(
-        select(EventVote.value).where(EventVote.event_id == event_id, EventVote.user_id == user_id)
-    )).scalars().first() or 0
+    up, down, mine = (
+        await tally_votes(db, EventVote, EventVote.event_id, [event_id], user_id)
+    ).get(event_id, (0, 0, 0))
     return VoteTally(up=up, down=down, my_vote=mine)
 
 

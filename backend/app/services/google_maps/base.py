@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from app.services.google_maps import cache as gmap_cache
 from app.services.google_maps.breaker import breaker
+from app.services.google_maps.http import get_shared_client
 from app.services.google_maps.tracker import track_call
 
 log = logging.getLogger(__name__)
@@ -526,11 +527,17 @@ class BaseMapService(abc.ABC):
         }
         url = "https://maps.googleapis.com/maps/api/timezone/json"
         t0 = time.monotonic()
+        shared = get_shared_client()
         try:
-            async with httpx.AsyncClient() as own:
+            if shared is not None:
                 data, attempts, http_status = await self._request_with_retry(
-                    own, url, method="GET", params=params, op="timezone",
+                    shared, url, method="GET", params=params, op="timezone",
                 )
+            else:
+                async with httpx.AsyncClient() as own:
+                    data, attempts, http_status = await self._request_with_retry(
+                        own, url, method="GET", params=params, op="timezone",
+                    )
         except Exception as exc:
             await breaker.record_failure()
             track_call(

@@ -26,3 +26,9 @@ email-validator
 razorpay
 resend
 google-auth
+# API spec tooling
+pyyaml
+openapi-spec-validator
+openapi-core
+schemathesis
+datamodel-code-generator

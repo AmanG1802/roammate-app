@@ -60,17 +60,30 @@ async def list_my_groups(
     )
     rows = (await db.execute(stmt)).all()
 
+    # Batch the per-group member/trip counts into two grouped aggregates instead
+    # of two queries per group (D5).
+    group_ids = [g.id for g, _ in rows]
+    member_counts: dict[int, int] = {}
+    trip_counts: dict[int, int] = {}
+    if group_ids:
+        member_counts = dict((await db.execute(
+            select(GroupMember.group_id, sa_func.count(GroupMember.id))
+            .where(GroupMember.group_id.in_(group_ids), GroupMember.status == "accepted")
+            .group_by(GroupMember.group_id)
+        )).all())
+        trip_counts = dict((await db.execute(
+            select(Trip.group_id, sa_func.count(Trip.id))
+            .where(Trip.group_id.in_(group_ids))
+            .group_by(Trip.group_id)
+        )).all())
+
     results: list[GroupOut] = []
     for g, role in rows:
-        member_count_stmt = select(sa_func.count(GroupMember.id)).where(
-            GroupMember.group_id == g.id, GroupMember.status == "accepted"
-        )
-        member_count = (await db.execute(member_count_stmt)).scalar_one()
-        trip_count_stmt = select(sa_func.count(Trip.id)).where(Trip.group_id == g.id)
-        trip_count = (await db.execute(trip_count_stmt)).scalar_one()
         results.append(GroupOut(
             id=g.id, name=g.name, owner_id=g.owner_id, created_at=g.created_at,
-            my_role=role, member_count=member_count, trip_count=trip_count,
+            my_role=role,
+            member_count=member_counts.get(g.id, 0),
+            trip_count=trip_counts.get(g.id, 0),
         ))
     return results
 
@@ -119,14 +132,26 @@ async def list_my_group_invitations(
     )
     members = (await db.execute(stmt)).scalars().all()
 
+    # Load every relevant group's admin (with user) in one query rather than one
+    # per invitation (D5); first admin per group wins, matching prior behaviour.
+    group_ids = [m.group_id for m in members]
+    admins_by_group: dict[int, GroupMember] = {}
+    if group_ids:
+        admin_rows = (await db.execute(
+            select(GroupMember)
+            .where(
+                GroupMember.group_id.in_(group_ids),
+                GroupMember.role == "admin",
+                GroupMember.status == "accepted",
+            )
+            .options(selectinload(GroupMember.user))
+        )).scalars().all()
+        for a in admin_rows:
+            admins_by_group.setdefault(a.group_id, a)
+
     results: list[GroupInvitationOut] = []
     for m in members:
-        admin_stmt = (
-            select(GroupMember)
-            .where(GroupMember.group_id == m.group_id, GroupMember.role == "admin", GroupMember.status == "accepted")
-            .options(selectinload(GroupMember.user))
-        )
-        admin = (await db.execute(admin_stmt)).scalars().first()
+        admin = admins_by_group.get(m.group_id)
         inviter = GroupInviterSummary(name=admin.user.name or "", email=admin.user.email) if admin and admin.user else None
         results.append(GroupInvitationOut(
             id=m.id, group_id=m.group_id, role=m.role,

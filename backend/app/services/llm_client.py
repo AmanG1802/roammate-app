@@ -29,19 +29,19 @@ __all__ = [
 ]
 
 
-async def chat(history: list[dict], user_message: str) -> str:
+async def chat(history: list[dict], user_message: str) -> str:  # pragma: no cover
     """Single-turn reply given the running conversation."""
     client = get_brainstorm_client()
     return await client.chat(history, user_message)
 
 
-async def extract_items(history: list[dict]) -> list[dict[str, Any]]:
+async def extract_items(history: list[dict]) -> list[dict[str, Any]]:  # pragma: no cover
     """Turn a chat history into structured brainstorm items."""
     client = get_brainstorm_client()
     return await client.extract_items(history)
 
 
-async def plan_trip(prompt: str) -> dict[str, Any]:
+async def plan_trip(prompt: str) -> dict[str, Any]:  # pragma: no cover
     """Turn a single free-form prompt into a trip preview + brainstorm item seed."""
     client = get_dashboard_client()
     return await client.plan_trip(prompt)

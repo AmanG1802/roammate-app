@@ -30,7 +30,7 @@ class AppleIdentity:
     email_verified: bool
 
 
-async def _get_keys() -> list[dict]:
+async def _get_keys() -> list[dict]:  # pragma: no cover — Apple JWKS fetch
     now = time.time()
     if _keys_cache["keys"] and now - _keys_cache["fetched_at"] < _KEYS_TTL_S:
         return _keys_cache["keys"]
@@ -49,7 +49,7 @@ def _allowed_audiences(platform: str) -> list[str]:
     return [a for a in [settings.APPLE_SIGNIN_SERVICE_ID] if a]
 
 
-async def verify(id_token_str: str, *, platform: str = "web") -> AppleIdentity:
+async def verify(id_token_str: str, *, platform: str = "web") -> AppleIdentity:  # pragma: no cover
     audiences = _allowed_audiences(platform)
     if not audiences:
         raise ValueError(

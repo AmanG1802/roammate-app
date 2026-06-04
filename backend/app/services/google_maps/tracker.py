@@ -17,10 +17,11 @@ daily budget caps and per-trip cost attribution.
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 from typing import Any, Optional
+
+from app.utils.tasks import fire_and_forget
 
 log = logging.getLogger("roammate.google_maps")
 
@@ -125,7 +126,4 @@ def track_call(
 
     log.info("google_api %s", " ".join(f"{k}={v}" for k, v in fields.items()))
 
-    try:
-        asyncio.create_task(_persist_maps_usage(fields))
-    except RuntimeError:
-        pass
+    fire_and_forget(_persist_maps_usage(fields))
