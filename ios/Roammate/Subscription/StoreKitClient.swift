@@ -11,8 +11,8 @@ import StoreKit
 /// SubscriptionStore wires up to call the backend `/billing/apple/verify`.
 @MainActor
 final class StoreKitClient {
-    static let monthlyProductID = "com.roammate.app.plus.monthly"
-    static let oneTimeProductID = "com.roammate.app.plus.onetime"
+    static let monthlyProductID = "app.roammate.ios.plus.monthly"
+    static let oneTimeProductID = "app.roammate.ios.plus.onetime"
     static let productID = monthlyProductID  // back-compat
 
     private var updatesTask: Task<Void, Never>?
@@ -52,14 +52,14 @@ final class StoreKitClient {
     @discardableResult
     func loadProduct() async -> Product? {
         do {
-            let products = try await Product.products(for: [
-                Self.monthlyProductID,
-                Self.oneTimeProductID,
-            ])
+            let ids: [String] = [Self.monthlyProductID, Self.oneTimeProductID]
+            let products = try await Product.products(for: ids)
             self.monthlyProduct = products.first { $0.id == Self.monthlyProductID }
             self.oneTimeProduct = products.first { $0.id == Self.oneTimeProductID }
+            print("[StoreKit] Loaded \(products.count)/\(ids.count) products: \(products.map(\.id))")
             return monthlyProduct
         } catch {
+            print("[StoreKit] Product load failed: \(error)")
             return nil
         }
     }
@@ -67,7 +67,10 @@ final class StoreKitClient {
     /// Monthly subscription purchase, optionally with a signed promotional offer.
     func purchaseMonthly(withPromotionalOffer offer: SignedPromotionalOffer? = nil) async throws -> PurchaseOutcome {
         if monthlyProduct == nil { _ = await loadProduct() }
-        guard let product = monthlyProduct else { throw PurchaseError.productUnavailable }
+        guard let product = monthlyProduct else {
+            let found = [monthlyProduct, oneTimeProduct].compactMap { $0 }.count
+            throw PurchaseError.productUnavailable(found: found, requested: 2)
+        }
 
         var options: Set<Product.PurchaseOption> = []
         if let offer {
@@ -92,7 +95,10 @@ final class StoreKitClient {
     /// `period_end`.
     func purchaseOneTime() async throws -> PurchaseOutcome {
         if oneTimeProduct == nil { _ = await loadProduct() }
-        guard let product = oneTimeProduct else { throw PurchaseError.productUnavailable }
+        guard let product = oneTimeProduct else {
+            let found = [monthlyProduct, oneTimeProduct].compactMap { $0 }.count
+            throw PurchaseError.productUnavailable(found: found, requested: 2)
+        }
         let result = try await product.purchase()
         return try await handle(result: result)
     }
@@ -149,13 +155,15 @@ final class StoreKitClient {
     }
 
     enum PurchaseError: LocalizedError {
-        case productUnavailable
+        case productUnavailable(found: Int, requested: Int)
         case unverifiedTransaction
 
         var errorDescription: String? {
             switch self {
-            case .productUnavailable:
-                return "Subscription is temporarily unavailable. Please try again."
+            case .productUnavailable(let found, let requested):
+                return "Could not load products from the App Store (\(found)/\(requested) found). " +
+                       "Ensure both products are 'Ready to Submit' in App Store Connect and " +
+                       "a Sandbox Tester is signed in under Settings → App Store."
             case .unverifiedTransaction:
                 return "Could not verify this purchase with the App Store."
             }

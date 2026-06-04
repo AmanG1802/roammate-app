@@ -18,6 +18,7 @@ struct AuthOAuthRequest: Encodable {
     let id_token: String
     let platform: String          // "ios"
     let nonce: String?
+    let authorization_code: String?
 }
 
 struct AuthVerifyRequest: Encodable {
@@ -103,14 +104,14 @@ enum AuthService {
     // MARK: - OAuth
 
     static func loginWithGoogle(idToken: String) async throws -> AuthTokenPair {
-        let body = AuthOAuthRequest(id_token: idToken, platform: "ios", nonce: nil)
+        let body = AuthOAuthRequest(id_token: idToken, platform: "ios", nonce: nil, authorization_code: nil)
         return try await APIClient.shared.request(
             "/auth/google", method: "POST", body: body, requiresAuth: false
         )
     }
 
-    static func loginWithApple(idToken: String, nonce: String?) async throws -> AuthTokenPair {
-        let body = AuthOAuthRequest(id_token: idToken, platform: "ios", nonce: nonce)
+    static func loginWithApple(idToken: String, nonce: String?, authorizationCode: String?) async throws -> AuthTokenPair {
+        let body = AuthOAuthRequest(id_token: idToken, platform: "ios", nonce: nonce, authorization_code: authorizationCode)
         return try await APIClient.shared.request(
             "/auth/apple", method: "POST", body: body, requiresAuth: false
         )

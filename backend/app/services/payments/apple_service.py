@@ -1,40 +1,36 @@
 """Apple App Store auto-renewable subscription helpers.
 
-We accept the JWS `signedTransactionInfo` blob from StoreKit 2 on the device
-and verify it server-side by decoding the JWT header to pick the right Apple
-certificate. For v1 we use a *trust-the-device* decode (no certificate chain
-verification) so the integration works in sandbox without bundling Apple's
-root CA — this is acceptable because the same transaction is later
-cross-checked by Apple's Server Notifications V2 (the webhook), which is the
-real source of truth for renewals and refunds. When we wire SSN V2 we can
-also call Apple's App Store Server API for ground-truth state.
+JWS blobs from StoreKit 2 (``jwsRepresentation``) and SSN V2 envelopes
+(``signedPayload``) are cryptographically verified against Apple's root CA
+via ``app.services.payments.app_store_server`` before any business logic
+runs. A forged or tampered JWS will raise ``VerificationException`` from
+this module's ``decode_signed_transaction``.
 
-JWS layout (per Apple docs):
-  {
-    "transactionId": "20000...",
-    "originalTransactionId": "20000...",
-    "bundleId": "com.roammate.app",
-    "productId": "com.roammate.app.plus.monthly",
-    "purchaseDate": 1715000000000,          # ms epoch
-    "expiresDate": 1717692000000,
-    "type": "Auto-Renewable Subscription",
-    "inAppOwnershipType": "PURCHASED",
-    "environment": "Sandbox" | "Production",
-    ...
-  }
+Expected ``bundleId`` / ``productId`` values are resolved from environment
+settings (see ``app.core.config``); nothing is hardcoded.
 """
 from __future__ import annotations
 
 import base64
-import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
 from app.core.config import settings
+from app.services.payments import app_store_server
+from app.services.payments.app_store_server import (  # re-exported for callers
+    VerificationException,
+)
 
 log = logging.getLogger(__name__)
+
+__all__ = [
+    "AppleTransaction",
+    "VerificationException",
+    "decode_signed_transaction",
+    "sign_promotional_offer",
+]
 
 
 @dataclass(frozen=True)
@@ -65,52 +61,39 @@ class AppleTransaction:
         return self.expires_date >= datetime.now(timezone.utc)
 
 
-def _b64url_decode(segment: str) -> bytes:
-    # Apple's JWS uses url-safe base64 without padding.
-    pad = "=" * (-len(segment) % 4)
-    return base64.urlsafe_b64decode(segment + pad)
+def _ms_to_dt(ms: Optional[int]) -> Optional[datetime]:
+    if ms is None:
+        return None
+    return datetime.fromtimestamp(int(ms) / 1000.0, tz=timezone.utc)
 
 
 def decode_signed_transaction(jws: str) -> AppleTransaction:
-    """Decode the JWS payload to an AppleTransaction.
+    """Verify and decode a StoreKit 2 ``jwsRepresentation``.
 
-    Raises ValueError on a malformed token. Does not verify the signature
-    chain — see module docstring for the trade-off.
+    Signature chain, bundle id, and environment are all checked by the SDK.
+    Raises ``VerificationException`` on tampered / invalid input, or
+    ``ValueError`` if the verified payload is missing the transaction id
+    (should never happen in well-formed Apple data, but guarded for clarity).
     """
-    parts = jws.split(".")
-    if len(parts) != 3:
-        raise ValueError("Malformed JWS — expected 3 segments")
-    try:
-        payload_bytes = _b64url_decode(parts[1])
-        payload = json.loads(payload_bytes)
-    except Exception as exc:
-        raise ValueError(f"Could not decode JWS payload: {exc}") from exc
+    payload = app_store_server.verify_transaction_jws(jws)
 
-    def _ms_to_dt(key: str) -> Optional[datetime]:
-        v = payload.get(key)
-        if v is None:
-            return None
-        return datetime.fromtimestamp(int(v) / 1000.0, tz=timezone.utc)
-
-    tx_id = str(payload.get("transactionId") or payload.get("transaction_id") or "")
-    orig_id = str(
-        payload.get("originalTransactionId")
-        or payload.get("original_transaction_id")
-        or tx_id
-    )
+    tx_id = str(payload.transactionId or "")
     if not tx_id:
-        raise ValueError("JWS payload missing transactionId")
+        raise ValueError("Verified JWS payload missing transactionId")
+
+    purchase_dt = _ms_to_dt(payload.purchaseDate) or datetime.now(timezone.utc)
+    env_value = payload.rawEnvironment or (
+        payload.environment.value if payload.environment is not None else "Sandbox"
+    )
 
     return AppleTransaction(
         transaction_id=tx_id,
-        original_transaction_id=orig_id,
-        bundle_id=str(payload.get("bundleId") or payload.get("bundle_id") or ""),
-        product_id=str(payload.get("productId") or payload.get("product_id") or ""),
-        purchase_date=_ms_to_dt("purchaseDate")
-            or _ms_to_dt("purchase_date")
-            or datetime.now(timezone.utc),
-        expires_date=_ms_to_dt("expiresDate") or _ms_to_dt("expires_date"),
-        environment=str(payload.get("environment") or "Sandbox"),
+        original_transaction_id=str(payload.originalTransactionId or tx_id),
+        bundle_id=str(payload.bundleId or ""),
+        product_id=str(payload.productId or ""),
+        purchase_date=purchase_dt,
+        expires_date=_ms_to_dt(payload.expiresDate),
+        environment=str(env_value),
     )
 
 

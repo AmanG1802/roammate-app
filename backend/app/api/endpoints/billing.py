@@ -32,7 +32,7 @@ from app.db.session import get_db
 from app.models.all_models import SubscriptionEvent, User
 from app.services import coupons as coupons_service
 from app.services import entitlements
-from app.services.payments import apple_service, razorpay_service
+from app.services.payments import app_store_server, apple_service, razorpay_service
 
 log = logging.getLogger(__name__)
 
@@ -443,6 +443,12 @@ async def verify_apple_transaction(
     """
     try:
         tx = apple_service.decode_signed_transaction(body.signed_transaction_info)
+    except apple_service.VerificationException as exc:
+        log.warning("Apple JWS signature verification failed: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_signature", "message": "Transaction signature invalid."},
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -451,6 +457,8 @@ async def verify_apple_transaction(
             status_code=400,
             detail=f"Unexpected product/bundle: {tx.bundle_id}/{tx.product_id}",
         )
+
+    current_user.subscription_environment = tx.environment
 
     is_one_time = tx.is_one_time
 
@@ -588,13 +596,13 @@ async def apple_server_notification(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Receive App Store Server Notifications V2.
+    """Receive and act on App Store Server Notifications V2.
 
-    Apple posts a JSON body `{"signedPayload": "<JWS>"}`. The signedPayload
-    encodes a notification envelope which itself contains a signed
-    transaction. For v1 we decode the inner transaction and reconcile state;
-    full notification-type handling (refunds, family sharing, etc.) lands as
-    that traffic shows up.
+    Apple posts ``{"signedPayload": "<JWS>"}``. The outer envelope is
+    verified against Apple's root CA via the SDK; we then branch on
+    ``notificationType`` (REFUND, EXPIRED, DID_CHANGE_RENEWAL_STATUS, etc.)
+    and update the user's subscription state accordingly. ``notificationUUID``
+    is the idempotency key.
     """
     body = await request.body()
     try:
@@ -602,60 +610,76 @@ async def apple_server_notification(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    jws = payload.get("signedPayload")
-    if not jws:
+    signed_payload = payload.get("signedPayload")
+    if not signed_payload:
         raise HTTPException(status_code=400, detail="Missing signedPayload")
 
-    # Decode envelope
     try:
-        envelope = apple_service.decode_signed_transaction(jws)
-        # An envelope doesn't have transactionId — but the helper falls back to
-        # bundle/product. Real implementations should walk
-        # signedTransactionInfo / signedRenewalInfo inside the envelope.
-    except ValueError as exc:
-        log.warning("apple webhook decode failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc))
+        notification = app_store_server.verify_notification(signed_payload)
+    except app_store_server.VerificationException as exc:
+        log.warning("Apple webhook signature verification failed: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_signature", "message": "Webhook signature invalid."},
+        )
 
-    # Try to walk into the inner signedTransactionInfo if present.
-    parts = jws.split(".")
-    inner_payload = {}
-    if len(parts) >= 2:
-        try:
-            inner_payload = json.loads(apple_service._b64url_decode(parts[1]))
-        except Exception:
-            inner_payload = {}
-
-    inner_jws = (
-        inner_payload.get("data", {}).get("signedTransactionInfo")
-        or inner_payload.get("signedTransactionInfo")
+    notif_type = notification.rawNotificationType or (
+        notification.notificationType.value if notification.notificationType else "UNKNOWN"
     )
-    if not inner_jws:
-        # Some notification types (e.g. DID_RENEW) only have renewal info; we
-        # accept the envelope as-is and rely on the next verify call from the
-        # app for an exact period_end update.
-        log.info("apple webhook: no signedTransactionInfo, ignored type=%s",
-                 inner_payload.get("notificationType"))
-        return {"ok": True, "ignored": True}
+    notif_subtype = notification.rawSubtype or (
+        notification.subtype.value if notification.subtype else None
+    )
+    notif_uuid = notification.notificationUUID
 
-    try:
-        tx = apple_service.decode_signed_transaction(inner_jws)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    # Decode the inner transaction (if the notification carries one).
+    tx = None
+    inner_signed_tx = (
+        notification.data.signedTransactionInfo if notification.data else None
+    )
+    if inner_signed_tx:
+        try:
+            tx = apple_service.decode_signed_transaction(inner_signed_tx)
+        except app_store_server.VerificationException as exc:
+            log.warning("Apple webhook: inner signedTransactionInfo invalid: %s", exc)
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "invalid_signature", "message": "Inner transaction signature invalid."},
+            )
 
-    stmt = select(User).where(User.subscription_external_id == tx.original_transaction_id)
-    user = (await db.execute(stmt)).scalars().first()
+    # Find the user. For notifications without a transaction (e.g. summary-only)
+    # or for original_transaction_ids we've never seen, we still log and ack.
+    user = None
+    if tx is not None:
+        stmt = select(User).where(
+            User.subscription_external_id == tx.original_transaction_id
+        )
+        user = (await db.execute(stmt)).scalars().first()
+
     if user is None:
-        log.warning("apple webhook: no user for original_transaction_id=%s", tx.original_transaction_id)
+        log.info(
+            "apple webhook ignored: type=%s subtype=%s uuid=%s reason=%s",
+            notif_type, notif_subtype, notif_uuid,
+            "no inner tx" if tx is None else "no matching user",
+        )
         return {"ok": True, "ignored": True}
 
+    # Idempotency: dedupe on notificationUUID per Apple's recommendation.
     insert_stmt = (
         pg_insert(SubscriptionEvent)
         .values(
             user_id=user.id,
             provider="apple",
-            event_id=tx.transaction_id,
-            event_type=inner_payload.get("notificationType", "apple.notification"),
-            raw_payload=inner_payload,
+            event_id=notif_uuid or tx.transaction_id,
+            event_type=notif_type,
+            raw_payload={
+                "notification_type": notif_type,
+                "subtype": notif_subtype,
+                "notification_uuid": notif_uuid,
+                "transaction_id": tx.transaction_id,
+                "original_transaction_id": tx.original_transaction_id,
+                "environment": tx.environment,
+                "expires_date": tx.expires_date.isoformat() if tx.expires_date else None,
+            },
         )
         .on_conflict_do_nothing(index_elements=["provider", "event_id"])
         .returning(SubscriptionEvent.id)
@@ -663,15 +687,65 @@ async def apple_server_notification(
     if (await db.execute(insert_stmt)).first() is None:
         return {"ok": True, "replay": True}
 
-    user.subscription_current_period_end = tx.expires_date
-    if tx.is_active:
-        user.subscription_tier = "plus"
-        user.subscription_status = "active"
-    else:
+    # Always update period_end + environment from the verified transaction.
+    user.subscription_environment = tx.environment
+    if tx.expires_date is not None:
+        user.subscription_current_period_end = tx.expires_date
+
+    _apply_notification_state(user, notif_type, notif_subtype)
+
+    await db.commit()
+    return {"ok": True, "notification_type": notif_type, "subtype": notif_subtype}
+
+
+# ── Notification-type → user state branching ─────────────────────────────────
+
+# Refund / revoke variants — immediate downgrade.
+_DOWNGRADE_NOW = {"REFUND", "REVOKE"}
+# Lifecycle end — downgrade once the period has actually closed.
+_EXPIRED_TYPES = {"EXPIRED", "GRACE_PERIOD_EXPIRED"}
+# Active states — extend Plus.
+_ACTIVATE_TYPES = {"SUBSCRIBED", "DID_RENEW", "OFFER_REDEEMED"}
+
+
+def _apply_notification_state(
+    user: User, notif_type: str, subtype: Optional[str]
+) -> None:
+    """Mutate ``user`` subscription fields based on the notification type.
+
+    Idempotent: callers should already have deduped on notificationUUID, but
+    repeating this function with the same args produces the same end state.
+    """
+    if notif_type in _DOWNGRADE_NOW:
+        user.subscription_tier = "free"
+        user.subscription_status = "canceled"
+        return
+
+    if notif_type in _EXPIRED_TYPES:
         user.subscription_tier = "free"
         user.subscription_status = "expired"
-    await db.commit()
-    return {"ok": True}
+        return
+
+    if notif_type in _ACTIVATE_TYPES:
+        user.subscription_tier = "plus"
+        user.subscription_status = "active"
+        return
+
+    if notif_type == "DID_CHANGE_RENEWAL_STATUS":
+        if subtype == "AUTO_RENEW_DISABLED":
+            # User opted out of renewal; Plus stays until period_end.
+            user.subscription_status = "canceled"
+        elif subtype == "AUTO_RENEW_ENABLED":
+            user.subscription_status = "active"
+        return
+
+    if notif_type == "DID_FAIL_TO_RENEW":
+        user.subscription_status = "past_due"
+        return
+
+    # CONSUMPTION_REQUEST, PRICE_INCREASE, TEST, MIGRATION, METADATA_UPDATE, etc.
+    # — log only via the SubscriptionEvent audit row; no state change.
+    log.info("apple webhook: no state change for type=%s subtype=%s", notif_type, subtype)
 
 
 # ── 6. Cancel ────────────────────────────────────────────────────────────────

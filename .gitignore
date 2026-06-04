@@ -6,6 +6,12 @@
 .env.production
 *.pem
 *.key
+*.p8
+*.cer
+# backend/secrets/ holds .p8 / .cer files; keep the dir's README documented
+# but block every file in it by default. New file types should be added below.
+backend/secrets/*
+!backend/secrets/README.md
 
 # ── Python ─────────────────────────────────────────────────────────────────────
 __pycache__/

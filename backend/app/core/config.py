@@ -36,9 +36,13 @@ class Settings(BaseSettings):
     # ── OAuth providers ──────────────────────────────────────────────────────
     GOOGLE_OAUTH_CLIENT_ID_WEB: Optional[str] = None
     GOOGLE_OAUTH_CLIENT_ID_IOS: Optional[str] = None
-    APPLE_SIGNIN_BUNDLE_ID: Optional[str] = "com.roammate.app"
-    APPLE_SIGNIN_SERVICE_ID: Optional[str] = None     # e.g. com.roammate.app.web
+    APPLE_SIGNIN_BUNDLE_ID: Optional[str] = None      # e.g. app.roammate.ios
+    APPLE_SIGNIN_SERVICE_ID: Optional[str] = None     # e.g. app.roammate.web
     APPLE_SIGNIN_TEAM_ID: Optional[str] = None
+    # Key used to sign SIWA client-secret JWTs (token exchange + revocation).
+    # Create at: Apple Developer → Keys → + → Sign in with Apple.
+    APPLE_SIGNIN_KEY_ID: Optional[str] = None
+    APPLE_SIGNIN_PRIVATE_KEY_PATH: Optional[str] = None  # path to .p8 file
 
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
@@ -97,13 +101,17 @@ class Settings(BaseSettings):
     RAZORPAY_WEBHOOK_SECRET: Optional[str] = None
     RAZORPAY_PLAN_ID_MONTHLY: Optional[str] = None  # e.g. plan_NXXXXXXXXXXXX
 
-    # Apple IAP (iOS)
-    APPLE_BUNDLE_ID: str = "com.roammate.app"
-    APPLE_IAP_PRODUCT_ID_MONTHLY: str = "com.roammate.app.plus.monthly"
-    APPLE_IAP_PRODUCT_ID_ONETIME: str = "com.roammate.app.plus.onetime"
+    # Apple IAP (iOS) — bundle + product IDs must be supplied via environment
+    # (no hardcoded defaults; values come from .env / Railway / docker-compose).
+    APPLE_BUNDLE_ID: Optional[str] = None
+    APPLE_IAP_PRODUCT_ID_MONTHLY: Optional[str] = None
+    APPLE_IAP_PRODUCT_ID_ONETIME: Optional[str] = None
     APPLE_ISSUER_ID: Optional[str] = None
     APPLE_KEY_ID: Optional[str] = None
     APPLE_PRIVATE_KEY_PATH: Optional[str] = None  # .p8 file for App Store Server API
+    # Apple Root CA (G3) for verifying JWS/JWE signatures from StoreKit + SSN V2.
+    # Download once from https://www.apple.com/certificateauthority/AppleRootCA-G3.cer
+    APPLE_ROOT_CA_PATH: Optional[str] = None
     APPLE_USE_SANDBOX: bool = True
     # Dedicated key for signing Subscription Promotional Offers (separate from API key)
     APPLE_PROMO_OFFER_KEY_ID: Optional[str] = None

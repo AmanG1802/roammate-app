@@ -40,6 +40,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Roammate needs microphone access to transcribe your voice messages.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Roammate uses speech recognition to let you dictate messages in the AI chat.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

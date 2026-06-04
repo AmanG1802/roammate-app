@@ -55,6 +55,9 @@ class User(Base):
     subscription_provider = Column(String(16), nullable=True)         # "razorpay" | "apple" | "internal_grant"
     subscription_current_period_end = Column(DateTime(timezone=True), nullable=True)
     subscription_external_id = Column(String, nullable=True, index=True)
+    # "Sandbox" | "Production" for Apple; null for non-Apple. Lets sandbox and
+    # prod transaction IDs coexist and helps admin tooling split the two.
+    subscription_environment = Column(String(16), nullable=True)
     # One-time (₹200 / 30d) plan tracking
     last_one_time_purchase_at = Column(DateTime(timezone=True), nullable=True)
     last_one_time_external_id = Column(String, nullable=True)
@@ -425,6 +428,9 @@ class UserIdentity(Base):
     provider = Column(String(16), nullable=False)        # 'google' | 'apple'
     subject = Column(String(255), nullable=False)        # provider's stable sub
     email_at_link = Column(String(320), nullable=True)
+    # Apple-only: stored after code exchange so we can revoke on account deletion
+    # (App Store Guideline 5.1.1(v)).
+    apple_refresh_token = Column(String(2048), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

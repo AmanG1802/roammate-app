@@ -17,6 +17,7 @@
 		0CF8545F08647BC489B05108 /* ViewModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABBC072FB2D49E9A82D527D4 /* ViewModifiers.swift */; };
 		0DB74015C8178C56BDA1CA60 /* SubscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191073234C07798558CD7CAE /* SubscriptionView.swift */; };
 		0F9A859BEEB55F2892A26316 /* MapMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD8AF23E8A93FCB6244D23B /* MapMarker.swift */; };
+		118776DF5A72C25CD9BA0EC5 /* ImageUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D4CA9437B99875EC59B165 /* ImageUtils.swift */; };
 		129BD778CDF2A5A88EC604D7 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = EEFF70F7D4C509DF803562D1 /* GoogleSignIn */; };
 		12B9D1419CEBC29F392CA85F /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE8E734A6E170DB8529BE6D0 /* RegisterView.swift */; };
 		13EF8BB50B04CF14432F1900 /* CouponInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166F38D3CD60FADDA5ABE4B8 /* CouponInputView.swift */; };
@@ -186,7 +187,7 @@
 		4F5375BE5A94103912CAFD5E /* BrainstormMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainstormMessageBubble.swift; sourceTree = "<group>"; };
 		5054E3FC28355D9CB0328AF5 /* PersonasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonasView.swift; sourceTree = "<group>"; };
 		50E94D374DBDCABA041B3614 /* TripConciergeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripConciergeView.swift; sourceTree = "<group>"; };
-		5582219BF23003A97860E900 /* Roammate.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Roammate.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5582219BF23003A97860E900 /* Roammate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Roammate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		567ED1DAE5D634AB7368A822 /* GroupsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsTabView.swift; sourceTree = "<group>"; };
 		5863E0B0F8428D9A8E0896EF /* ConciergeCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConciergeCards.swift; sourceTree = "<group>"; };
 		58EF3B7299121D5C46DFEBA8 /* Entitlement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entitlement.swift; sourceTree = "<group>"; };
@@ -208,6 +209,7 @@
 		7F6136CD967B3A0CAB460752 /* PaneSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSlider.swift; sourceTree = "<group>"; };
 		8173F7FCFF08D0204B8C2C36 /* MapPinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPinView.swift; sourceTree = "<group>"; };
 		849A59FE726DA77F5EBE3196 /* PlusBanners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusBanners.swift; sourceTree = "<group>"; };
+		8984F401E71E0B0D64158B14 /* Roammate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Roammate.entitlements; sourceTree = "<group>"; };
 		89FC891E7B6142DA9C9D7A8C /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		8AA9F45AE4E2D8D5D18B2801 /* Group.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Group.swift; sourceTree = "<group>"; };
 		8AF3168C1CA54DBCE5457AED /* InviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteSheet.swift; sourceTree = "<group>"; };
@@ -237,6 +239,7 @@
 		B21C72066FAD8D21A7F8A60B /* IdeaBinItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaBinItem.swift; sourceTree = "<group>"; };
 		B339C7520687EF0C052500F0 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		B6054DBA2F849544FE02E427 /* TripDetailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDetailStore.swift; sourceTree = "<group>"; };
+		B6D4CA9437B99875EC59B165 /* ImageUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtils.swift; sourceTree = "<group>"; };
 		BE8E734A6E170DB8529BE6D0 /* RegisterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
 		BEAB7638C3426BBE1E47609A /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
 		C066745D6FE16BF456F180E3 /* TimelineRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineRow.swift; sourceTree = "<group>"; };
@@ -246,7 +249,7 @@
 		D072EBFA42C33BC718388D41 /* GroupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupStore.swift; sourceTree = "<group>"; };
 		D11C5EC3922C26FD0DE959A2 /* BrainstormPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainstormPaneView.swift; sourceTree = "<group>"; };
 		D7BB50D9B3D78974AF88D608 /* TripSubPagesHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripSubPagesHost.swift; sourceTree = "<group>"; };
-		D7E8E2254278E09EF7AA4A89 /* RoammatePlus.storekit */ = {isa = PBXFileReference; path = RoammatePlus.storekit; sourceTree = "<group>"; };
+		D7E8E2254278E09EF7AA4A89 /* RoammatePlus.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = RoammatePlus.storekit; sourceTree = "<group>"; };
 		D86D5AFBF2385AE4E9D0A40C /* ChatMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageBubble.swift; sourceTree = "<group>"; };
 		DC86A06D53D1F3F112BD54C5 /* ConciergeLocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConciergeLocationProvider.swift; sourceTree = "<group>"; };
 		DD03460EF395DD9021BD1331 /* TripMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripMember.swift; sourceTree = "<group>"; };
@@ -340,6 +343,7 @@
 		2B372ABC3229C241B7028150 /* Roammate */ = {
 			isa = PBXGroup;
 			children = (
+				8984F401E71E0B0D64158B14 /* Roammate.entitlements */,
 				6CC4A424002F54BFD4B931F4 /* App */,
 				8BE7B9F7446135AF0E899ECA /* Models */,
 				24A5677AA386291327A3AC5C /* Network */,
@@ -629,6 +633,7 @@
 			children = (
 				2B6C988158033E1C7C54E0D0 /* Config.swift */,
 				1A6D999AFC9D81A87AF7CFFC /* DiskCache.swift */,
+				B6D4CA9437B99875EC59B165 /* ImageUtils.swift */,
 				C70831DDC928AE753075DFF7 /* JSONValue.swift */,
 				7B4AF2BFC7AE0B0D33E0D2A5 /* KeychainHelper.swift */,
 			);
@@ -667,8 +672,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = FD29D1D14BC36F3189EDA83A /* Build configuration list for PBXProject "Roammate" */;
 			developmentRegion = en;
@@ -777,6 +780,7 @@
 				49DCC10F2C9FE477EB130F51 /* IdeaBinView.swift in Sources */,
 				4BBE6CCD95ACD47036B25D0D /* IdeaRow.swift in Sources */,
 				A7FF6FCB11E379B4E6056BE4 /* IdeaService.swift in Sources */,
+				118776DF5A72C25CD9BA0EC5 /* ImageUtils.swift in Sources */,
 				FD89EFC85E8C7DF1AF2C2C42 /* IntroCardScaffold.swift in Sources */,
 				BC35705CDAD95DC82151148B /* IntroCardsFlag.swift in Sources */,
 				D846800C93885CCA807F1D61 /* IntroCardsView.swift in Sources */,
@@ -925,15 +929,17 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Roammate/App/Roammate.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 44JPJWU9AR;
 				INFOPLIST_FILE = Roammate/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.amangupta.roammate;
+				PRODUCT_BUNDLE_IDENTIFIER = app.roammate.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1007,15 +1013,17 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Roammate/App/Roammate.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 44JPJWU9AR;
 				INFOPLIST_FILE = Roammate/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.amangupta.roammate;
+				PRODUCT_BUNDLE_IDENTIFIER = app.roammate.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";

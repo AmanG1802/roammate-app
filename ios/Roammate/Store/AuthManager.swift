@@ -10,6 +10,8 @@ final class AuthManager: NSObject, ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var pendingVerificationEmail: String?
+    @Published var isOAuthUser: Bool = UserDefaults.standard.bool(forKey: "isOAuthUser")
+    @Published var oauthProvider: String? = UserDefaults.standard.string(forKey: "oauthProvider")
 
     private var sessionObserver: NSObjectProtocol?
     private var appleNonce: String?
@@ -65,6 +67,7 @@ final class AuthManager: NSObject, ObservableObject {
         await run {
             do {
                 let pair = try await AuthService.login(email: email, password: password)
+                self.setOAuthUser(false, provider: nil)
                 self.persist(pair)
             } catch APIError.serverError(409, _) {
                 self.pendingVerificationEmail = email
@@ -118,6 +121,7 @@ final class AuthManager: NSObject, ObservableObject {
     func signInWithGoogle(idToken: String) async {
         await run {
             let pair = try await AuthService.loginWithGoogle(idToken: idToken)
+            self.setOAuthUser(true, provider: "google")
             self.persist(pair)
         }
     }
@@ -143,8 +147,10 @@ final class AuthManager: NSObject, ObservableObject {
         }
         let nonce = appleNonce
         appleNonce = nil
+        let authCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
         await run {
-            let pair = try await AuthService.loginWithApple(idToken: idToken, nonce: nonce)
+            let pair = try await AuthService.loginWithApple(idToken: idToken, nonce: nonce, authorizationCode: authCode)
+            self.setOAuthUser(true, provider: "apple")
             self.persist(pair)
         }
     }
@@ -186,6 +192,13 @@ final class AuthManager: NSObject, ObservableObject {
     }
 
     // MARK: - Helpers
+
+    private func setOAuthUser(_ value: Bool, provider: String?) {
+        isOAuthUser = value
+        oauthProvider = provider
+        UserDefaults.standard.set(value, forKey: "isOAuthUser")
+        UserDefaults.standard.set(provider, forKey: "oauthProvider")
+    }
 
     private func persist(_ pair: AuthTokenPair) {
         KeychainHelper.saveToken(pair.access_token)

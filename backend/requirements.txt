@@ -24,6 +24,7 @@ httpx
 aiosqlite
 email-validator
 razorpay
+app-store-server-library
 resend
 google-auth
 # API spec tooling

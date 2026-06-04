@@ -3,7 +3,7 @@ import Foundation
 struct User: Codable, Identifiable {
     let id: Int
     let email: String
-    let name: String
+    let name: String?
     let personas: [String]?
     let avatarUrl: String?
     let homeCity: String?
@@ -20,8 +20,14 @@ struct User: Codable, Identifiable {
         case createdAt = "created_at"
     }
 
+    /// Returns nil for Apple's synthetic no-email addresses so the UI shows blank.
+    var displayEmail: String? {
+        email.hasSuffix("@no-email.local") ? nil : email
+    }
+
     var initials: String {
-        name.split(separator: " ")
+        (name ?? email.prefix(1).uppercased())
+            .split(separator: " ")
             .prefix(2)
             .compactMap { $0.first.map(String.init) }
             .joined()
