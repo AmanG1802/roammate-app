@@ -8,7 +8,7 @@ struct EditProfileView: View {
     // Profile fields
     @State private var name: String = ""
     @State private var homeCity: String = ""
-    @State private var timezone: String = "Asia/Calcutta"
+    @State private var timezone: String = "Asia/Kolkata"
     @State private var currency: String = "INR"
     @State private var travelBlurb: String = ""
 
@@ -26,13 +26,24 @@ struct EditProfileView: View {
     @State private var isSaving = false
     @State private var error: String?
 
+    // Unsaved-changes tracking
+    @State private var isDirty = false
+    @State private var showDiscardConfirm = false
+
+    // Hydrated values for dirty comparison
+    @State private var hydratedName: String = ""
+    @State private var hydratedHomeCity: String = ""
+    @State private var hydratedTimezone: String = "Asia/Kolkata"
+    @State private var hydratedCurrency: String = "INR"
+    @State private var hydratedTravelBlurb: String = ""
+
     private let currencies = ["USD", "EUR", "GBP", "INR", "JPY", "CAD", "AUD", "SGD"]
 
     private var canSave: Bool {
         if showPasswordSection {
             return !name.isEmpty &&
                    !currentPassword.isEmpty &&
-                   newPassword.count >= 6 &&
+                   newPassword.count >= 8 &&
                    newPassword == confirmPassword
         }
         return !name.isEmpty || avatarData != nil
@@ -68,7 +79,22 @@ struct EditProfileView: View {
         }
         .navigationTitle("Edit Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(isDirty)
         .toolbar {
+            if isDirty {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showDiscardConfirm = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Back")
+                        }
+                        .foregroundStyle(Color.roammateIndigo)
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await save() }
@@ -80,7 +106,19 @@ struct EditProfileView: View {
                 .disabled(!canSave || isSaving)
             }
         }
+        .confirmationDialog("Discard changes?", isPresented: $showDiscardConfirm, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("Your unsaved changes will be lost.")
+        }
         .onAppear(perform: hydrate)
+        .onChange(of: name) { _, _ in markDirty() }
+        .onChange(of: homeCity) { _, _ in markDirty() }
+        .onChange(of: timezone) { _, _ in markDirty() }
+        .onChange(of: currency) { _, _ in markDirty() }
+        .onChange(of: travelBlurb) { _, _ in markDirty() }
+        .onChange(of: selectedPhoto) { _, _ in markDirty() }
     }
 
     // MARK: - Sub-views
@@ -250,7 +288,7 @@ struct EditProfileView: View {
             if showPasswordSection {
                 VStack(spacing: 10) {
                     secureField("Current password", text: $currentPassword)
-                    secureField("New password (min 6 chars)", text: $newPassword)
+                    secureField("New password (min 8 chars)", text: $newPassword)
                     secureField("Confirm new password", text: $confirmPassword)
 
                     if !newPassword.isEmpty && newPassword != confirmPassword {
@@ -363,9 +401,25 @@ struct EditProfileView: View {
         guard let u = authManager.currentUser else { return }
         name = u.name ?? ""
         homeCity = u.homeCity ?? ""
-        timezone = u.timezone ?? "Asia/Calcutta"
+        timezone = u.timezone ?? "Asia/Kolkata"
         currency = u.currency ?? "INR"
         travelBlurb = u.travelBlurb ?? ""
+        // Store baseline for dirty tracking and reset dirty flag
+        hydratedName = name
+        hydratedHomeCity = homeCity
+        hydratedTimezone = timezone
+        hydratedCurrency = currency
+        hydratedTravelBlurb = travelBlurb
+        isDirty = false
+    }
+
+    private func markDirty() {
+        isDirty = name != hydratedName
+            || homeCity != hydratedHomeCity
+            || timezone != hydratedTimezone
+            || currency != hydratedCurrency
+            || travelBlurb != hydratedTravelBlurb
+            || avatarData != nil
     }
 
     private func save() async {
@@ -389,6 +443,7 @@ struct EditProfileView: View {
             )
             let updated = try await AuthService.updateMe(update)
             authManager.currentUser = updated
+            isDirty = false
             HapticManager.success()
             dismiss()
         } catch let e as APIError {

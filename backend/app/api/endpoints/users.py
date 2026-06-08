@@ -1,4 +1,6 @@
 from typing import Any, List, Optional
+import logging
+import zoneinfo
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select, update
@@ -13,6 +15,12 @@ from app.core.security import get_password_hash, verify_password
 from app.api.deps import get_current_user
 from app.config.persona_catalog import Persona, get_catalog
 from app.services.auth import oauth_apple
+from app.services.auth.email import send_password_changed_notice, send_account_deleted_notice
+
+log = logging.getLogger(__name__)
+
+_VALID_CURRENCIES = {"INR", "USD", "EUR", "GBP", "AUD", "JPY", "CAD", "SGD"}
+_TRAVEL_BLURB_MAX = 280
 
 router = APIRouter()
 
@@ -60,6 +68,15 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # --- Field validation ---
+    if profile_in.travel_blurb is not None and len(profile_in.travel_blurb) > _TRAVEL_BLURB_MAX:
+        raise HTTPException(status_code=422, detail=f"travel_blurb must be {_TRAVEL_BLURB_MAX} characters or fewer")
+    if profile_in.timezone is not None and profile_in.timezone not in zoneinfo.available_timezones():
+        raise HTTPException(status_code=422, detail=f"Unknown timezone: {profile_in.timezone!r}")
+    if profile_in.currency is not None and profile_in.currency not in _VALID_CURRENCIES:
+        raise HTTPException(status_code=422, detail=f"Unsupported currency: {profile_in.currency!r}. Must be one of {sorted(_VALID_CURRENCIES)}")
+
+    password_changed = False
     if profile_in.password:
         if not profile_in.current_password:
             raise HTTPException(status_code=400, detail="Current password required to set a new password")
@@ -70,6 +87,7 @@ async def update_me(
         current_user.auth_version = (current_user.auth_version or 1) + 1
         from app.services.auth.tokens import revoke_all_for_user
         await revoke_all_for_user(db, current_user.id)
+        password_changed = True
 
     if profile_in.name is not None:
         current_user.name = profile_in.name
@@ -86,6 +104,10 @@ async def update_me(
 
     await db.commit()
     await db.refresh(current_user)
+
+    if password_changed:
+        send_password_changed_notice(current_user.email, current_user.name)
+
     return current_user
 
 
@@ -125,6 +147,22 @@ async def delete_me(
     db: AsyncSession = Depends(get_db),
 ):
     uid = current_user.id
+    # Capture before deletion so we can send the confirmation email after commit.
+    user_email = current_user.email
+    user_name = current_user.name
+
+    # Cancel active Razorpay subscription so the user isn't billed after deletion.
+    if (
+        current_user.subscription_provider == "razorpay"
+        and current_user.subscription_external_id
+        and current_user.subscription_status in ("active", "authenticated")
+    ):
+        try:
+            from app.services.payments import razorpay_service
+            razorpay_service.cancel_subscription(current_user.subscription_external_id)
+        except Exception as exc:
+            log.warning("Razorpay cancel failed for user %s on account deletion: %s", uid, exc)
+
     # Revoke Apple refresh token before deleting the record (Guideline 5.1.1(v)).
     apple_identity = (await db.execute(
         select(UserIdentity).where(
@@ -148,4 +186,6 @@ async def delete_me(
     await db.execute(update(Group).where(Group.owner_id == uid).values(owner_id=None))
     await db.delete(current_user)
     await db.commit()
+
+    send_account_deleted_notice(user_email, user_name)
     return {"detail": "Account deleted"}
