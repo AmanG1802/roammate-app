@@ -119,8 +119,10 @@ export function useProfile() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to delete account');
+      // Clear localStorage and the rm_access / rm_refresh cookies.
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
       return true;
     } catch (e: any) {
       setError(e.message);

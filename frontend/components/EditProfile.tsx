@@ -58,6 +58,7 @@ function InlineField({
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [fieldError, setFieldError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
@@ -66,30 +67,39 @@ function InlineField({
   const commit = async () => {
     if (draft === value) { setEditing(false); return; }
     setSaving(true);
+    setFieldError('');
     const ok = await onSave(draft);
     setSaving(false);
-    if (ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
-    setEditing(false);
+    if (ok) {
+      setSaved(true);
+      setEditing(false);
+      setTimeout(() => setSaved(false), 1500);
+    } else {
+      setFieldError('Failed to save. Please try again.');
+    }
   };
-  const cancel = () => { setDraft(value); setEditing(false); };
+  const cancel = () => { setDraft(value); setFieldError(''); setEditing(false); };
 
   if (editing) {
     return (
-      <div className={`flex items-center gap-2 ${compact ? PREF_WIDTH : ''}`}>
-        <input
-          ref={inputRef}
-          type={type}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
-          className={`text-sm font-bold text-slate-800 border border-indigo-400 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 ${compact ? 'flex-1' : 'flex-1'}`}
-        />
-        <button onClick={commit} disabled={saving} className="text-indigo-600 hover:text-indigo-800 cursor-pointer shrink-0">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-        </button>
-        <button onClick={cancel} className="text-slate-400 hover:text-slate-600 cursor-pointer shrink-0">
-          <X className="w-4 h-4" />
-        </button>
+      <div className={compact ? PREF_WIDTH : ''}>
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type={type}
+            value={draft}
+            onChange={(e) => { setDraft(e.target.value); setFieldError(''); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
+            className={`text-sm font-bold text-slate-800 border ${fieldError ? 'border-rose-400' : 'border-indigo-400'} rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 flex-1`}
+          />
+          <button onClick={commit} disabled={saving} className="text-indigo-600 hover:text-indigo-800 cursor-pointer shrink-0">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          </button>
+          <button onClick={cancel} className="text-slate-400 hover:text-slate-600 cursor-pointer shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {fieldError && <p className="text-xs text-rose-500 font-medium mt-1">{fieldError}</p>}
       </div>
     );
   }
@@ -307,7 +317,11 @@ function DeleteAccountModal({ email, onConfirm, onCancel }: { email: string; onC
   const handleDelete = async () => {
     if (input !== email) return;
     setDeleting(true);
-    await onConfirm();
+    try {
+      await onConfirm();
+    } finally {
+      setDeleting(false);
+    }
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
@@ -632,8 +646,8 @@ export default function EditProfile({ profile, onUpdate, onDeleteAccount }: Edit
   const handleAvatarUpload = async (dataUrl: string) =>
     onUpdate({ avatar_url: dataUrl });
   const handleDeleteConfirm = async () => {
-    await onDeleteAccount();
-    window.location.href = '/';
+    const ok = await onDeleteAccount();
+    if (ok) window.location.href = '/login';
   };
 
   return (

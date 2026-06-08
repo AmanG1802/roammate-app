@@ -34,7 +34,12 @@ export default function useAuth(requireAuth: boolean = true) {
         }
         if (res.status === 401) {
           // Try silent refresh once.
-          const r = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+          const r = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          });
           if (r.ok) {
             const pair = await r.json();
             setToken(pair.access_token);

@@ -13,20 +13,23 @@ export default function PersonaPage() {
     fetchProfile();
   }, [fetchProfile]);
 
+  const showBanner = (text: string, color: string) => {
+    const banner = document.createElement('div');
+    banner.textContent = text;
+    banner.style.cssText = `position:fixed;bottom:24px;right:24px;background:${color};color:white;font-weight:800;font-size:13px;padding:10px 18px;border-radius:12px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.15)`;
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 2500);
+  };
+
   const handleSave = async (selected: string[]) => {
     const ok = await updatePersonas(selected);
     if (ok) {
-      // Show toast feedback
       const msg = selected.length === 0
         ? 'Preferences cleared.'
         : `${selected.length} persona${selected.length > 1 ? 's' : ''} saved!`;
-      // Simple browser notification since react-hot-toast may not be installed
-      const banner = document.createElement('div');
-      banner.textContent = `✓ ${msg}`;
-      banner.style.cssText =
-        'position:fixed;bottom:24px;right:24px;background:#4f46e5;color:white;font-weight:800;font-size:13px;padding:10px 18px;border-radius:12px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.15)';
-      document.body.appendChild(banner);
-      setTimeout(() => banner.remove(), 2500);
+      showBanner(`✓ ${msg}`, '#4f46e5');
+    } else {
+      showBanner('✗ Failed to save personas. Please try again.', '#f43f5e');
     }
   };
 

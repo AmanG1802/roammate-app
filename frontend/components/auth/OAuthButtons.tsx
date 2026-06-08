@@ -3,7 +3,7 @@
 import Script from 'next/script';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { auth, type TokenPair } from '@/lib/api';
+import { ApiError, auth, type TokenPair } from '@/lib/api';
 import { setToken } from '@/lib/auth';
 
 declare global {
@@ -29,6 +29,22 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
+function _oauthErrMsg(err: unknown, provider: 'Google' | 'Apple'): string {
+  if (err instanceof ApiError) {
+    if (err.status === 409) {
+      const detail = (err.data as any)?.detail;
+      const email: string | undefined = typeof detail === 'object' ? detail?.email : undefined;
+      return email
+        ? `An account with ${email} already exists. Please sign in with email first, then link ${provider} from your profile.`
+        : 'This account is linked to an existing email. Please sign in with email first.';
+    }
+    // err.message is already user-friendly (set by api.ts)
+    return err.message;
+  }
+  console.error(`[OAuthButtons] Unexpected ${provider} sign-in error:`, err);
+  return `${provider} sign-in failed. Please try again.`;
+}
+
 export function OAuthButtons({
   onSuccess,
   onError,
@@ -50,11 +66,15 @@ export function OAuthButtons({
       setGoogleLoading(true);
       try {
         const pair = await auth.google(response.credential);
+        if (!pair) {
+          onErrorRef.current('Sign-in failed. Please try again.');
+          return;
+        }
         setToken(pair.access_token);
         if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
         onSuccessRef.current(pair);
       } catch (err: any) {
-        onErrorRef.current(err?.message ?? 'Google sign-in failed');
+        onErrorRef.current(_oauthErrMsg(err, 'Google'));
       } finally {
         setGoogleLoading(false);
       }
@@ -95,16 +115,20 @@ export function OAuthButtons({
     const onSuccessEvent = async (event: any) => {
       const id_token = event?.detail?.authorization?.id_token;
       if (!id_token) {
-        onError('Apple sign-in did not return an identity token');
+        onError('Sign-in failed. Please try again.');
         return;
       }
       try {
         const pair = await auth.apple(id_token);
+        if (!pair) {
+          onError('Sign-in failed. Please try again.');
+          return;
+        }
         setToken(pair.access_token);
         if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
         onSuccess(pair);
       } catch (err: any) {
-        onError(err?.message ?? 'Apple sign-in failed');
+        onError(_oauthErrMsg(err, 'Apple'));
       }
     };
     const onFail = () => onError('Apple sign-in cancelled or failed');

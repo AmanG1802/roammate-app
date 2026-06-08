@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import AuthenticationServices
 import CryptoKit
+import GoogleSignIn
 
 @MainActor
 final class AuthManager: NSObject, ObservableObject {
@@ -162,6 +163,7 @@ final class AuthManager: NSObject, ObservableObject {
         if let uid = currentUser?.id {
             PlusOnboardingFlag.clear(userId: uid)
         }
+        GIDSignIn.sharedInstance.signOut()
         KeychainHelper.clearAll()
         DiskCache.shared.clearAll()
         currentUser = nil

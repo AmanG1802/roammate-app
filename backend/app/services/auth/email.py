@@ -71,3 +71,13 @@ def send_email_changed_notice(to: str, name: Optional[str], new_email: str) -> N
         new_email=new_email,
     )
     _send(to, "Your Roammate email was changed", html)
+
+
+def send_password_changed_notice(to: str, name: Optional[str]) -> None:
+    html = _load_template("password_changed.html").format(name=name or "traveler")
+    _send(to, "Your Roammate password was changed", html)
+
+
+def send_account_deleted_notice(to: str, name: Optional[str]) -> None:
+    html = _load_template("account_deleted.html").format(name=name or "traveler")
+    _send(to, "Your Roammate account has been deleted", html)
