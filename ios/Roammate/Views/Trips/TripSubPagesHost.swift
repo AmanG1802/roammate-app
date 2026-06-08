@@ -16,6 +16,17 @@ enum SubPage: String, CaseIterable, Identifiable, Hashable {
         case .people: return "person.2.fill"
         }
     }
+
+    /// Accent color for the page-title pill — mirrors the Trip Landing section
+    /// buttons so each surface keeps a consistent identity color.
+    var accentColor: Color {
+        switch self {
+        case .plan: return .roammateEmerald
+        case .brainstorm: return .roammateAmber
+        case .concierge: return .roammateViolet
+        case .people: return .roammateSky
+        }
+    }
 }
 
 struct TripSubPagesHost: View {
@@ -23,17 +34,17 @@ struct TripSubPagesHost: View {
     let initialPage: SubPage
     let popToRoot: () -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var detailStore: TripDetailStore
     @EnvironmentObject var tabBarVisibility: TabBarVisibility
-    @EnvironmentObject var tripStore: TripStore
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var tutorial: TutorialStore
     @StateObject private var brainstormStore: BrainstormStore
+    @StateObject private var conciergeStore: ConciergeStore
 
     @State private var currentPage: SubPage
     @State private var showMenu = false
-    @State private var showDeleteConfirm = false
 
     init(trip: Trip, initialPage: SubPage = .plan, popToRoot: @escaping () -> Void) {
         self.trip = trip
@@ -41,6 +52,14 @@ struct TripSubPagesHost: View {
         self.popToRoot = popToRoot
         _currentPage = State(initialValue: initialPage)
         _brainstormStore = StateObject(wrappedValue: BrainstormStore(tripId: trip.id))
+        _conciergeStore = StateObject(wrappedValue: ConciergeStore(trip: trip))
+    }
+
+    /// Mirrors the web admin gate for the Concierge action surface.
+    private var isConciergeAdmin: Bool {
+        if trip.myRole == "admin" { return true }
+        guard let uid = authManager.currentUser?.id else { return false }
+        return detailStore.members.first(where: { $0.userId == uid })?.role == "admin"
     }
 
     var body: some View {
@@ -82,25 +101,17 @@ struct TripSubPagesHost: View {
             applyTutorialPage()
         }
         .onChange(of: tutorial.currentStep) { _, _ in applyTutorialPage() }
-        .alert("Delete trip?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) {
-                Task {
-                    try? await TripService.deleteTrip(id: trip.id)
-                    tripStore.trips.removeAll { $0.id == trip.id }
-                    HapticManager.success()
-                    popToRoot()
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will permanently delete \"\(trip.name)\" and all its data. This cannot be undone.")
-        }
         .task {
             brainstormStore.onIdeasPromoted = { promoted in
                 detailStore.ideas.insert(contentsOf: promoted, at: 0)
             }
             brainstormStore.onIdeasTimeUpdated = { [weak detailStore] in
                 await detailStore?.reloadIdeas()
+            }
+            // After a Concierge mutation (ripple / skip / add), refresh the
+            // shared itinerary so the Map/Timeline destinations stay in sync.
+            conciergeStore.onEventsChanged = { [weak detailStore] in
+                await detailStore?.loadAll()
             }
         }
     }
@@ -119,24 +130,29 @@ struct TripSubPagesHost: View {
         HStack(spacing: 8) {
             Button {
                 HapticManager.light()
-                popToRoot()
+                // Pop one level back to the Trip Landing page (not all the way
+                // to the Dashboard, which is what popToRoot would do).
+                dismiss()
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Color.roammateInk)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.roammateSurface))
+                    .overlay(Circle().stroke(Color.roammateBorder, lineWidth: 0.5))
             }
 
-            Spacer(minLength: 4)
-
-            Text(trip.name)
-                .font(.system(.title3, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.roammateInk)
-                .lineLimit(1)
+            pageTitlePill
 
             Spacer(minLength: 4)
 
             if currentPage == .brainstorm {
                 BrainstormQuotaPill()
+            }
+
+            if currentPage == .concierge && isConciergeAdmin {
+                conciergeNavIcon("mappin.and.ellipse", .map, label: "Open map")
+                conciergeNavIcon("list.bullet.rectangle", .timeline, label: "Open timeline")
             }
 
             Button {
@@ -159,6 +175,39 @@ struct TripSubPagesHost: View {
         .padding(.vertical, 12)
         .background(Color.roammateSurface.ignoresSafeArea(edges: .top))
         .zIndex(1)
+    }
+
+    /// Colored page-title pill mirroring the Trip Landing "TRIP OVERVIEW" chip,
+    /// tinted with the current sub-page's accent color.
+    private var pageTitlePill: some View {
+        HStack(spacing: 6) {
+            Image(systemName: currentPage.icon)
+                .font(.system(size: 10, weight: .black))
+            Text(currentPage.rawValue.uppercased())
+                .font(.system(size: 10, weight: .black))
+                .tracking(3)
+        }
+        .foregroundStyle(currentPage.accentColor)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Capsule().fill(currentPage.accentColor.opacity(0.10)))
+        .overlay(Capsule().stroke(currentPage.accentColor.opacity(0.25), lineWidth: 1))
+    }
+
+    /// Concierge-only top-bar icon that opens a full-screen Map / Timeline.
+    private func conciergeNavIcon(_ icon: String, _ target: ConciergeDetail, label: String) -> some View {
+        Button {
+            HapticManager.light()
+            conciergeStore.detail = target
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.roammateInk)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color.roammateSurface))
+                .overlay(Circle().stroke(Color.roammateBorder, lineWidth: 0.5))
+        }
+        .accessibilityLabel(label)
     }
 
     // MARK: - Dropdown Menu
@@ -209,42 +258,18 @@ struct TripSubPagesHost: View {
                     Divider().padding(.horizontal, RoammateSpacing.md)
                 }
             }
-
-            Divider().padding(.horizontal, RoammateSpacing.md)
-
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    showMenu = false
-                }
-                showDeleteConfirm = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 16, weight: .medium))
-                        .frame(width: 24)
-                        .foregroundStyle(Color.roammateDanger)
-
-                    Text("Delete Trip")
-                        .font(.system(.body, design: .rounded, weight: .medium))
-                        .foregroundStyle(Color.roammateDanger)
-
-                    Spacer()
-                }
-                .padding(.horizontal, RoammateSpacing.md)
-                .padding(.vertical, 14)
-            }
-            .buttonStyle(.plain)
         }
         .frame(width: 220)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.roammateSurface)
-                .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
-        )
+        .background(Color.roammateSurface)
+        // Clip the content (including the highlighted current-page row's tint)
+        // to the rounded shape, otherwise a highlighted first/last row paints
+        // square corners over the container's rounding.
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.roammateBorder, lineWidth: 0.5)
         )
+        .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
     }
 
     @ViewBuilder
@@ -265,5 +290,6 @@ struct TripSubPagesHost: View {
         .id(currentPage)
         .environmentObject(detailStore)
         .environmentObject(brainstormStore)
+        .environmentObject(conciergeStore)
     }
 }

@@ -16,28 +16,34 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Roammate uses the mic so you can speak to the AI travel assistant.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Speech recognition turns your voice into chat messages.</string>
-	<key>GIDClientID</key>
-	<string>376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignIn</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.googleusercontent.apps.376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh</string>
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>DevLANHost</key>
+	<string></string>
+	<key>GIDClientID</key>
+	<string>376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Roammate needs microphone access to transcribe your voice messages.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Roammate uses speech recognition to let you dictate messages in the AI chat.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

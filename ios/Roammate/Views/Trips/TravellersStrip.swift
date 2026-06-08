@@ -62,14 +62,18 @@ struct AvatarCircle: View {
 
     var body: some View {
         Group {
-            if let avatarUrl, !avatarUrl.isEmpty, let imageURL = URL(string: avatarUrl) {
-                AsyncImage(url: imageURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        initialsView
+            if let avatarUrl, !avatarUrl.isEmpty {
+                if avatarUrl.hasPrefix("data:"), let uiImage = UIImage.fromDataURI(avatarUrl) {
+                    Image(uiImage: uiImage).resizable().scaledToFill()
+                } else if let imageURL = URL(string: avatarUrl) {
+                    AsyncImage(url: imageURL) { phase in
+                        switch phase {
+                        case .success(let image): image.resizable().scaledToFill()
+                        default: initialsView
+                        }
                     }
+                } else {
+                    initialsView
                 }
             } else {
                 initialsView

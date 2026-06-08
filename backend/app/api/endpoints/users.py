@@ -1,13 +1,15 @@
 from typing import Any, List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr
 from app.db.session import get_db
-from app.models.all_models import User
+from app.models.all_models import User, UserIdentity
 from app.core.security import get_password_hash, verify_password
 from app.api.deps import get_current_user
 from app.config.persona_catalog import Persona, get_catalog
+from app.services.auth import oauth_apple
 
 router = APIRouter()
 
@@ -15,7 +17,7 @@ router = APIRouter()
 class UserOut(BaseModel):
     id: int
     email: EmailStr
-    name: str
+    name: Optional[str] = None
     personas: Optional[list] = None
     avatar_url: Optional[str] = None
     home_city: Optional[str] = None
@@ -119,6 +121,16 @@ async def delete_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Revoke Apple refresh token before deleting the record (Guideline 5.1.1(v)).
+    apple_identity = (await db.execute(
+        select(UserIdentity).where(
+            UserIdentity.user_id == current_user.id,
+            UserIdentity.provider == "apple",
+        )
+    )).scalar_one_or_none()
+    if apple_identity and apple_identity.apple_refresh_token:
+        await oauth_apple.revoke_token(apple_identity.apple_refresh_token)
+
     await db.delete(current_user)
     await db.commit()
     return {"detail": "Account deleted"}

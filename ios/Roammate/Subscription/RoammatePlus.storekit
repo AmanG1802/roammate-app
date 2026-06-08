@@ -12,7 +12,7 @@
           "locale" : "en_IN"
         }
       ],
-      "productID" : "com.roammate.app.plus.onetime",
+      "productID" : "app.roammate.ios.plus.onetime",
       "referenceName" : "Plus One-Time 30 Days",
       "type" : "NonRenewingSubscription"
     }
@@ -45,7 +45,7 @@
               "locale" : "en_IN"
             }
           ],
-          "productID" : "com.roammate.app.plus.monthly",
+          "productID" : "app.roammate.ios.plus.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Plus Monthly",
           "subscriptionGroupID" : "21745869",

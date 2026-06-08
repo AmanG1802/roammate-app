@@ -62,7 +62,9 @@ async def find_or_create_user_for_oauth(  # pragma: no cover — OAuth linking
         ).scalar_one_or_none()
 
     if user is not None:
-        if not (user.email_verified and claims.email_verified):
+        # For OAuth, the provider asserts identity — only block if our own record
+        # is unverified (meaning a local signup with unconfirmed email exists).
+        if not user.email_verified:
             raise OAuthLinkBlocked(claims.email or "")
         # safe to auto-link
         db.add(UserIdentity(
@@ -83,8 +85,8 @@ async def find_or_create_user_for_oauth(  # pragma: no cover — OAuth linking
         email=(claims.email or f"{claims.provider}_{claims.subject}@no-email.local"),
         name=claims.name,
         avatar_url=claims.avatar_url,
-        email_verified=bool(claims.email and claims.email_verified),
-        email_verified_at=utc_now() if (claims.email and claims.email_verified) else None,
+        email_verified=True,  # OAuth provider asserts identity; no email step needed
+        email_verified_at=utc_now(),
     )
     db.add(new_user)
     await db.flush()

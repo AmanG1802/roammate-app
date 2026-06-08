@@ -10,38 +10,61 @@ enum ConciergeIntent: String, Codable {
     case chatOnly = "chat_only"
 }
 
+/// How a confirmable action card is currently rendered.
+enum ActionStatus: String { case pending, confirmed, cancelled }
+
+/// The rich payload a chat turn renders. `.text` is a plain bubble; the rest
+/// drive the inline cards (place carousel, day summary, what's-next, ripple
+/// result, error). Mirrors the web `MessageType` union.
+enum ConciergeCard {
+    case text
+    case actionCard
+    case placeCards([PlaceCard])
+    case summary(TodaySummaryResponse)
+    case whatsNext(WhatsNextResponse)
+    case rippleResult(shifted: Int, minutes: Int)
+    case error(retryQuery: String?)
+}
+
 /// A single chat turn rendered in the concierge UI.
-struct ChatMessage: Identifiable, Hashable {
+struct ChatMessage: Identifiable {
     let id: UUID
     let role: Role
     let text: String
+    let card: ConciergeCard
+    var status: ActionStatus?
     let intent: ConciergeIntent?
     let params: [String: JSONValue]
-    let requiresConfirmation: Bool
-    let messageType: String
     let timestamp: Date
 
-    enum Role: String, Hashable { case user, assistant }
+    enum Role: String { case user, assistant }
 
     init(
         id: UUID = UUID(),
         role: Role,
-        text: String,
+        text: String = "",
+        card: ConciergeCard = .text,
+        status: ActionStatus? = nil,
         intent: ConciergeIntent? = nil,
         params: [String: JSONValue] = [:],
-        requiresConfirmation: Bool = false,
-        messageType: String = "text",
         timestamp: Date = Date()
     ) {
         self.id = id
         self.role = role
         self.text = text
+        self.card = card
+        self.status = status
         self.intent = intent
         self.params = params
-        self.requiresConfirmation = requiresConfirmation
-        self.messageType = messageType
         self.timestamp = timestamp
     }
+}
+
+/// Which full-screen destination the Concierge is showing over the chat.
+/// `Identifiable` so it can drive `.fullScreenCover(item:)`.
+enum ConciergeDetail: String, Identifiable, Hashable {
+    case map, timeline
+    var id: String { rawValue }
 }
 
 struct ConciergeChatRequest: Encodable {
@@ -167,5 +190,57 @@ struct TodaySummaryResponse: Codable {
     enum CodingKeys: String, CodingKey {
         case date, completed, upcoming, skipped, events
         case totalEvents = "total_events"
+    }
+}
+
+// MARK: - JSONValue helpers (concierge event payloads)
+
+extension JSONValue {
+    var doubleValue: Double? {
+        switch self {
+        case .double(let d): return d
+        case .int(let i): return Double(i)
+        case .string(let s): return Double(s)
+        default: return nil
+        }
+    }
+
+    var stringArray: [String]? { arrayValue?.compactMap { $0.stringValue } }
+}
+
+extension Event {
+    /// Build an `Event` from a backend concierge event dict (the shape returned
+    /// by `whats-next` / `today-summary` / `execute.updated_events`, produced by
+    /// `_event_dict_for_response`). Those payloads omit vote tallies, so we
+    /// default `up`/`down`/`myVote` to 0.
+    init?(conciergeJSON j: JSONValue) {
+        guard let id = j["id"]?.intValue,
+              let title = j["title"]?.stringValue else { return nil }
+        self.init(
+            id: id,
+            tripId: j["trip_id"]?.intValue ?? 0,
+            title: title,
+            description: j["description"]?.stringValue,
+            category: j["category"]?.stringValue,
+            placeId: j["place_id"]?.stringValue,
+            lat: j["lat"]?.doubleValue,
+            lng: j["lng"]?.doubleValue,
+            address: j["address"]?.stringValue,
+            photoUrl: j["photo_url"]?.stringValue,
+            rating: j["rating"]?.doubleValue,
+            priceLevel: j["price_level"]?.intValue,
+            types: j["types"]?.stringArray,
+            timeCategory: j["time_category"]?.stringValue,
+            addedBy: j["added_by"]?.stringValue,
+            locationName: j["location_name"]?.stringValue,
+            dayDate: j["day_date"]?.stringValue,
+            startTime: (j["start_time"]?.stringValue).flatMap { TimeOfDay($0) },
+            endTime: (j["end_time"]?.stringValue).flatMap { TimeOfDay($0) },
+            isLocked: j["is_locked"]?.boolValue ?? false,
+            eventType: j["event_type"]?.stringValue,
+            sortOrder: j["sort_order"]?.intValue ?? 0,
+            isSkipped: j["is_skipped"]?.boolValue ?? false,
+            up: 0, down: 0, myVote: 0
+        )
     }
 }

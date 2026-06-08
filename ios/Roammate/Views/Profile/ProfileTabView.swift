@@ -107,19 +107,24 @@ struct ProfileTabView: View {
     private var header: some View {
         HStack(spacing: RoammateSpacing.md) {
             Group {
-                if let url = authManager.currentUser?.avatarUrl,
-                   !url.isEmpty,
-                   let imageURL = URL(string: url) {
-                    AsyncImage(url: imageURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            initialsAvatar
+                if let url = authManager.currentUser?.avatarUrl, !url.isEmpty {
+                    if url.hasPrefix("data:"), let uiImage = UIImage.fromDataURI(url) {
+                        Image(uiImage: uiImage)
+                            .resizable().scaledToFill()
+                            .frame(width: 64, height: 64)
+                            .clipShape(Circle())
+                    } else if let imageURL = URL(string: url) {
+                        AsyncImage(url: imageURL) { phase in
+                            switch phase {
+                            case .success(let image): image.resizable().scaledToFill()
+                            default: initialsAvatar
+                            }
                         }
+                        .frame(width: 64, height: 64)
+                        .clipShape(Circle())
+                    } else {
+                        initialsAvatar
                     }
-                    .frame(width: 64, height: 64)
-                    .clipShape(Circle())
                 } else {
                     initialsAvatar
                 }
@@ -130,7 +135,7 @@ struct ProfileTabView: View {
                 Text(authManager.currentUser?.name ?? "")
                     .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundStyle(Color.roammateInk)
-                Text(authManager.currentUser?.email ?? "")
+                Text(authManager.currentUser?.displayEmail ?? "")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(Color.roammateMuted)
             }
@@ -157,7 +162,7 @@ struct ProfileTabView: View {
                     )
                 )
                 .frame(width: 64, height: 64)
-            Text(initials(authManager.currentUser?.name ?? ""))
+            Text(authManager.currentUser?.initials ?? "?")
                 .font(.system(size: 24, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
         }

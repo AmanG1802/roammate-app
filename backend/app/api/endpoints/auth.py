@@ -77,7 +77,8 @@ class ResendIn(BaseModel):
 class OAuthIn(BaseModel):
     id_token: str
     platform: Literal["web", "ios"] = "web"
-    nonce: Optional[str] = None    # Apple-only; ignored by Google
+    nonce: Optional[str] = None              # Apple-only; ignored by Google
+    authorization_code: Optional[str] = None # Apple-only; used to obtain refresh token for revocation
 
 
 class ForgotIn(BaseModel):
@@ -331,6 +332,20 @@ async def login_with_apple(
             status_code=409,
             detail={"code": "verify_existing_email_first", "email": exc.email},
         )
+
+    # Exchange the one-time authorization_code for a long-lived Apple refresh
+    # token so we can revoke it on account deletion (Guideline 5.1.1(v)).
+    if body.authorization_code:
+        refresh_token = await oauth_apple.exchange_code(body.authorization_code)
+        if refresh_token:
+            identity = (await db.execute(
+                select(UserIdentity).where(
+                    UserIdentity.user_id == user.id,
+                    UserIdentity.provider == "apple",
+                )
+            )).scalar_one_or_none()
+            if identity:
+                identity.apple_refresh_token = refresh_token
 
     pair = await _issue_session(db, response, user, device_label=_device_label(request))
     await db.commit()

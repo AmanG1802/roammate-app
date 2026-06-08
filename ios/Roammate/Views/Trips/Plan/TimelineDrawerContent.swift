@@ -33,7 +33,16 @@ struct TimelineDrawerContent: View {
     private var currentEvents: [Event] {
         guard let day = currentDay else { return [] }
         let key = EventService.isoDateString(from: day.date)
-        return (store.eventsByDay[key] ?? []).sorted { $0.sortOrder < $1.sortOrder }
+        // Match the map render and the web timeline: timed events ordered by
+        // start time, untimed (TBD) events fall back to sort order. Sorting by
+        // sort_order alone put Concierge-touched stops out of chronological
+        // order and mis-attributed time conflicts.
+        return (store.eventsByDay[key] ?? []).sorted {
+            if let aTime = $0.startTime, let bTime = $1.startTime { return aTime < bTime }
+            if $0.startTime != nil { return true }
+            if $1.startTime != nil { return false }
+            return $0.sortOrder < $1.sortOrder
+        }
     }
 
     private var conflictIds: Set<Int> {

@@ -112,8 +112,10 @@ async def test_validate_coupon_post(client: AsyncClient, auth_headers: dict):
 # ── POST /api/billing/apple/verify ─────────────────────────────────────────
 
 async def test_verify_apple_transaction_post(client: AsyncClient, auth_headers: dict):
-    # Test 7a - POST - 400 Bad Request - Invalid signed transaction
+    # Test 7a - POST - 400 Bad Request - Invalid signed transaction (ValueError)
     with patch("app.api.endpoints.billing.apple_service") as mock_apple:
+        # Make the VerificationException attribute resolve to a real exception class
+        mock_apple.VerificationException = type("VerificationException", (Exception,), {})
         mock_apple.decode_signed_transaction = MagicMock(side_effect=ValueError("bad token"))
         resp = await client.post("/api/billing/apple/verify", headers=auth_headers, json={
             "signed_transaction_info": "bad_jws",
@@ -123,6 +125,27 @@ async def test_verify_apple_transaction_post(client: AsyncClient, auth_headers: 
     # Test 7b - POST - 422 Unprocessable Entity - Missing field
     resp = await client.post("/api/billing/apple/verify", headers=auth_headers, json={})
     assert resp.status_code == 422
+
+
+async def test_verify_apple_invalid_signature_returns_400(
+    client: AsyncClient, auth_headers: dict,
+):
+    """Test 7c - Tampered JWS surfaces as 400 with code=invalid_signature."""
+    fake_exc = type("VerificationException", (Exception,), {})
+    with patch("app.api.endpoints.billing.apple_service") as mock_apple:
+        mock_apple.VerificationException = fake_exc
+        mock_apple.decode_signed_transaction = MagicMock(
+            side_effect=fake_exc("chain invalid")
+        )
+        resp = await client.post(
+            "/api/billing/apple/verify",
+            headers=auth_headers,
+            json={"signed_transaction_info": "tampered_jws"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        # detail may be nested dict; just confirm the code is present somewhere
+        assert "invalid_signature" in resp.text
 
 
 # ── POST /api/billing/apple/redeem-offer ───────────────────────────────────
@@ -151,6 +174,71 @@ async def test_apple_server_notification_post(client: AsyncClient):
     # Test 9b - POST - 400 Bad Request - Invalid JSON
     resp = await client.post("/api/billing/apple/webhook", content=b'not json')
     assert resp.status_code == 400
+
+
+async def test_apple_webhook_invalid_signature_returns_400(client: AsyncClient):
+    """Test 9c - Tampered signedPayload surfaces as 400."""
+    fake_exc = type("VerificationException", (Exception,), {})
+    with patch("app.api.endpoints.billing.app_store_server") as mock_ass:
+        mock_ass.VerificationException = fake_exc
+        mock_ass.verify_notification = MagicMock(side_effect=fake_exc("bad sig"))
+        resp = await client.post(
+            "/api/billing/apple/webhook",
+            json={"signedPayload": "tampered"},
+        )
+        assert resp.status_code == 400
+        assert "invalid_signature" in resp.text
+
+
+def _mock_verified_notification(notif_type: str, subtype: str | None = None):
+    """Build a MagicMock shaped like ResponseBodyV2DecodedPayload."""
+    n = MagicMock()
+    n.rawNotificationType = notif_type
+    n.rawSubtype = subtype
+    n.notificationUUID = f"uuid-{notif_type}-{subtype or 'none'}"
+    n.data = MagicMock()
+    n.data.signedTransactionInfo = "inner_jws"
+    return n
+
+
+def _mock_apple_transaction(original_id: str = "orig-1", expires_iso: str | None = None):
+    """Build a MagicMock shaped like AppleTransaction."""
+    tx = MagicMock()
+    tx.transaction_id = "txn-1"
+    tx.original_transaction_id = original_id
+    tx.bundle_id = "app.roammate.ios"
+    tx.product_id = "app.roammate.ios.plus.monthly"
+    tx.environment = "Sandbox"
+    if expires_iso:
+        from datetime import datetime
+        tx.expires_date = datetime.fromisoformat(expires_iso)
+    else:
+        tx.expires_date = None
+    tx.is_one_time = False
+    tx.is_active = True
+    tx.is_valid_product = True
+    return tx
+
+
+async def test_apple_webhook_unknown_user_is_acked(client: AsyncClient):
+    """Test 9d - Notification for unseen original_transaction_id is logged + acked."""
+    fake_exc = type("VerificationException", (Exception,), {})
+    with patch("app.api.endpoints.billing.app_store_server") as mock_ass, \
+         patch("app.api.endpoints.billing.apple_service") as mock_apple:
+        mock_ass.VerificationException = fake_exc
+        mock_ass.verify_notification = MagicMock(
+            return_value=_mock_verified_notification("REFUND")
+        )
+        mock_apple.VerificationException = fake_exc
+        mock_apple.decode_signed_transaction = MagicMock(
+            return_value=_mock_apple_transaction(original_id="never-seen")
+        )
+        resp = await client.post(
+            "/api/billing/apple/webhook",
+            json={"signedPayload": "ok"},
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("ignored") is True
 
 
 # ── POST /api/billing/cancel ──────────────────────────────────────────────

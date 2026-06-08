@@ -222,6 +222,7 @@ struct PlanMapPage: View {
             .animation(.easeInOut(duration: 0.2), value: selectedEventId)
             .animation(.easeInOut(duration: 0.2), value: selectedLegIndex)
 
+
             // Bottom drawer
             BottomDrawer(
                 detents: [.minimised(140), .fraction(0.6), .fraction(0.9)],

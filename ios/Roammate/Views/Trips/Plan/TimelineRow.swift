@@ -33,6 +33,8 @@ struct TimelineRow: View {
         return s
     }
 
+    private var isSkipped: Bool { event.isSkipped }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -43,33 +45,70 @@ struct TimelineRow: View {
                     HStack(alignment: .top) {
                         Text(event.title)
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(Color.roammateInk)
+                            .foregroundStyle(isSkipped ? Color.roammateMuted : Color.roammateInk)
+                            .strikethrough(isSkipped)
                             .lineLimit(expanded ? nil : 2)
+                            .opacity(isSkipped ? 0.55 : 1)
 
                         Spacer(minLength: 8)
 
-                        Button {
-                            HapticManager.light()
-                            Task { await store.moveEventToBin(eventId: event.id) }
-                        } label: {
-                            Image(systemName: "tray.and.arrow.down")
-                                .font(.system(size: 13, weight: .medium))
+                        if isSkipped {
+                            // SKIPPED tag sits with the title; the RESTORE action
+                            // drops to the category row below it.
+                            Text("SKIPPED")
+                                .font(.system(size: 9, weight: .black))
                                 .foregroundStyle(Color.roammateMuted)
-                                .frame(width: 28, height: 28)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(Color.roammateBackground)
-                                )
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.roammateBackground))
+                                .overlay(Capsule().stroke(Color.roammateBorder, lineWidth: 0.5))
+                        } else {
+                            Button {
+                                HapticManager.light()
+                                Task { await store.moveEventToBin(eventId: event.id) }
+                            } label: {
+                                Image(systemName: "tray.and.arrow.down")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(Color.roammateMuted)
+                                    .frame(width: 28, height: 28)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(Color.roammateBackground)
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
 
-                    if let category = event.category {
-                        PillLabel(
-                            text: category.capitalized,
-                            background: Color.categoryTint(category),
-                            foreground: Color.categoryColor(category)
-                        )
+                    if event.category != nil || isSkipped {
+                        HStack {
+                            if let category = event.category {
+                                PillLabel(
+                                    text: category.capitalized,
+                                    background: Color.categoryTint(category),
+                                    foreground: Color.categoryColor(category)
+                                )
+                                .opacity(isSkipped ? 0.55 : 1)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            if isSkipped {
+                                Button {
+                                    HapticManager.light()
+                                    Task { await store.setEventSkipped(eventId: event.id, isSkipped: false) }
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "arrow.uturn.backward")
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text("RESTORE")
+                                            .font(.system(size: 10, weight: .black))
+                                    }
+                                    .foregroundStyle(Color.roammateIndigo)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
 
                     HStack {
@@ -106,6 +145,7 @@ struct TimelineRow: View {
                             }
                         )
                     }
+                    .opacity(isSkipped ? 0.55 : 1)
                 }
             }
 
@@ -117,11 +157,21 @@ struct TimelineRow: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: RoammateRadius.small, style: .continuous)
-                .fill(isConflict ? Color.roammateDanger.opacity(0.04) : Color.roammateSurface)
+                .fill(
+                    isSkipped
+                        ? Color.roammateBackground
+                        : (isConflict ? Color.roammateDanger.opacity(0.04) : Color.roammateSurface)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: RoammateRadius.small, style: .continuous)
-                .stroke(isConflict ? Color.roammateDanger : Color.roammateBorder, lineWidth: isConflict ? 1.5 : 0.5)
+                .strokeBorder(
+                    isSkipped ? Color.roammateBorder : (isConflict ? Color.roammateDanger : Color.roammateBorder),
+                    style: StrokeStyle(
+                        lineWidth: isConflict && !isSkipped ? 1.5 : 0.5,
+                        dash: isSkipped ? [4, 3] : []
+                    )
+                )
         )
         .contentShape(Rectangle())
         .onTapGesture {

@@ -15,13 +15,12 @@ enum DrawerDetent: Equatable {
 struct BottomDrawer<Content: View>: View {
     let detents: [DrawerDetent]
     @Binding var current: DrawerDetent
-    /// Optional tutorial anchor id applied to the visible drawer panel so the
-    /// spotlight can highlight the whole drawer (not the full-screen container).
     var panelAnchorID: String? = nil
     @ViewBuilder let content: () -> Content
 
+    // Tracks live drag position. Kept as @State (not @GestureState) so that
+    // onEnded can animate it back to 0 together with the detent snap.
     @State private var dragOffset: CGFloat = 0
-    @State private var drawerHeight: CGFloat = 0
 
     private let cornerRadius: CGFloat = 28
     private let handleHeight: CGFloat = 28
@@ -36,15 +35,18 @@ struct BottomDrawer<Content: View>: View {
                     .gesture(
                         DragGesture()
                             .onChanged { v in
+                                // Direct assignment — no animation, pure finger tracking.
                                 dragOffset = v.translation.height
                             }
                             .onEnded { v in
-                                let projected = targetH - v.translation.height
+                                // predictedEndTranslation incorporates velocity so fast
+                                // flicks snap to the correct detent without full travel.
+                                let projected = targetH - v.predictedEndTranslation.height
                                 let nearest = detents.min(by: {
                                     abs($0.height(in: totalH) - projected) <
                                     abs($1.height(in: totalH) - projected)
                                 }) ?? current
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                withAnimation(.interactiveSpring(response: 0.4, dampingFraction: 0.82)) {
                                     current = nearest
                                     dragOffset = 0
                                 }
@@ -54,9 +56,14 @@ struct BottomDrawer<Content: View>: View {
                 ScrollView {
                     content()
                 }
-                .scrollDisabled(current == .minimised(140))
+                // Disable scroll both at minimised detent and during an active
+                // drag so the two gesture recognisers don't compete.
+                .scrollDisabled(current == .minimised(140) || dragOffset != 0)
             }
-            .frame(height: max(0, targetH - dragOffset))
+            // Frame stays FIXED at targetH — no layout work during drag.
+            .frame(height: max(0, targetH))
+            // Live drag position via a GPU-only offset transform (zero layout cost).
+            .offset(y: dragOffset)
             .frame(maxWidth: .infinity)
             .background(
                 UnevenRoundedRectangle(
@@ -68,7 +75,10 @@ struct BottomDrawer<Content: View>: View {
             )
             .tutorialAnchorIf(panelAnchorID)
             .frame(maxHeight: .infinity, alignment: .bottom)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: current)
+            // Animate detent changes. dragOffset changes during drag are NOT
+            // wrapped in withAnimation so this implicit animation never fires
+            // for raw tracking — only for the snap in onEnded.
+            .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.82), value: current)
         }
     }
 

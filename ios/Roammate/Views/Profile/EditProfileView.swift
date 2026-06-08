@@ -8,8 +8,8 @@ struct EditProfileView: View {
     // Profile fields
     @State private var name: String = ""
     @State private var homeCity: String = ""
-    @State private var timezone: String = TimeZone.current.identifier
-    @State private var currency: String = "USD"
+    @State private var timezone: String = "Asia/Calcutta"
+    @State private var currency: String = "INR"
     @State private var travelBlurb: String = ""
 
     // Avatar
@@ -29,13 +29,13 @@ struct EditProfileView: View {
     private let currencies = ["USD", "EUR", "GBP", "INR", "JPY", "CAD", "AUD", "SGD"]
 
     private var canSave: Bool {
-        guard !name.isEmpty else { return false }
         if showPasswordSection {
-            return !currentPassword.isEmpty &&
+            return !name.isEmpty &&
+                   !currentPassword.isEmpty &&
                    newPassword.count >= 6 &&
                    newPassword == confirmPassword
         }
-        return true
+        return !name.isEmpty || avatarData != nil
     }
 
     var body: some View {
@@ -48,7 +48,11 @@ struct EditProfileView: View {
                     nameCard
                     homeCard
                     travelStyleCard
-                    passwordCard
+                    if authManager.isOAuthUser {
+                        oauthProviderCard
+                    } else {
+                        passwordCard
+                    }
 
                     if let error {
                         Text(error)
@@ -94,19 +98,24 @@ struct EditProfileView: View {
                             .scaledToFill()
                             .frame(width: 96, height: 96)
                             .clipShape(Circle())
-                    } else if let url = avatarUrl,
-                              !url.isEmpty,
-                              let imageURL = URL(string: url) {
-                        AsyncImage(url: imageURL) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().scaledToFill()
-                            default:
-                                initialsCircle
+                    } else if let url = avatarUrl, !url.isEmpty {
+                        if url.hasPrefix("data:"), let uiImage = UIImage.fromDataURI(url) {
+                            Image(uiImage: uiImage)
+                                .resizable().scaledToFill()
+                                .frame(width: 96, height: 96)
+                                .clipShape(Circle())
+                        } else if let imageURL = URL(string: url) {
+                            AsyncImage(url: imageURL) { phase in
+                                switch phase {
+                                case .success(let image): image.resizable().scaledToFill()
+                                default: initialsCircle
+                                }
                             }
+                            .frame(width: 96, height: 96)
+                            .clipShape(Circle())
+                        } else {
+                            initialsCircle
                         }
-                        .frame(width: 96, height: 96)
-                        .clipShape(Circle())
                     } else {
                         initialsCircle
                     }
@@ -135,9 +144,11 @@ struct EditProfileView: View {
             }
             .shadow(color: Color.roammateIndigo.opacity(0.35), radius: 16, x: 0, y: 6)
 
-            Text(authManager.currentUser?.email ?? "")
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(Color.roammateMuted)
+            if let displayEmail = authManager.currentUser?.displayEmail {
+                Text(displayEmail)
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(Color.roammateMuted)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, RoammateSpacing.sm)
@@ -192,6 +203,33 @@ struct EditProfileView: View {
                     .scrollContentBackground(.hidden)
             }
         }
+    }
+
+    private var oauthProviderCard: some View {
+        let isApple = authManager.oauthProvider == "apple"
+        let icon = isApple ? "applelogo" : "globe"
+        let label = isApple ? "Signed in with Apple" : "Signed in with Google"
+        return HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.roammateInk)
+                .frame(width: 22)
+            Text(label)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.roammateInk)
+            Spacer()
+            Image(systemName: "lock.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.roammateMuted)
+        }
+        .padding(RoammateSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: RoammateRadius.card, style: .continuous)
+                .fill(Color.roammateSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: RoammateRadius.card, style: .continuous)
+                .stroke(Color.roammateBorder, lineWidth: 1)
+        )
     }
 
     private var passwordCard: some View {
@@ -323,10 +361,10 @@ struct EditProfileView: View {
 
     private func hydrate() {
         guard let u = authManager.currentUser else { return }
-        name = u.name
+        name = u.name ?? ""
         homeCity = u.homeCity ?? ""
-        timezone = u.timezone ?? TimeZone.current.identifier
-        currency = u.currency ?? "USD"
+        timezone = u.timezone ?? "Asia/Calcutta"
+        currency = u.currency ?? "INR"
         travelBlurb = u.travelBlurb ?? ""
     }
 

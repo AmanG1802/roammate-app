@@ -23,7 +23,7 @@ struct DashboardView: View {
     @State private var advanceAfterDemoDismiss = false
 
     private var firstName: String {
-        authManager.currentUser?.name
+        authManager.currentUser?.name?
             .split(separator: " ")
             .first
             .map(String.init) ?? "there"
@@ -77,6 +77,16 @@ struct DashboardView: View {
                 .padding(.trailing, RoammateSpacing.lg)
                 .padding(.bottom, RoammateLayout.tabBarHeight + RoammateLayout.tabBarBottomInset + 12)
 
+                if showNotifications {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.55)
+                        .overlay(Color.black.opacity(0.15))
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { toggleNotifications() }
+                        .transition(.opacity)
+                }
                 if showNotifications {
                     notificationsOverlay
                 }
@@ -275,16 +285,6 @@ struct DashboardView: View {
 
     private var notificationsOverlay: some View {
         ZStack(alignment: .topTrailing) {
-            // Scrim: soft black with a subtle material blur for a richer dim
-            // than a flat overlay. Tap to dismiss.
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.55)
-                .overlay(Color.black.opacity(0.15))
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { toggleNotifications() }
-
             // Keep the bell crisp above the scrim so it feels like the focal
             // point users tapped to open the panel. Mirrors the dashboard
             // bell's position (top-right with the same padding) and forwards
@@ -337,7 +337,6 @@ struct DashboardView: View {
                             .font(.system(.subheadline, design: .rounded, weight: .medium))
                             .foregroundStyle(Color.roammateMuted)
                     }
-                    .frame(maxWidth: .infinity)
                     .padding(.vertical, RoammateSpacing.xl)
                 } else {
                     ScrollView {
@@ -348,9 +347,9 @@ struct DashboardView: View {
                             }
                         }
                     }
+                    .frame(maxHeight: UIScreen.main.bounds.height * 0.38)
                 }
             }
-            .frame(maxHeight: UIScreen.main.bounds.height * 0.45)
             .frame(width: UIScreen.main.bounds.width * 0.82)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
