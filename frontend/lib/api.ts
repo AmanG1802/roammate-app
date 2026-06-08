@@ -42,7 +42,12 @@ async function refreshSession(): Promise<boolean> {
   if (refreshing) return refreshing;
   refreshing = (async () => {
     try {
-      const r = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+      const r = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
       return r.ok;
     } catch {
       return false;
@@ -61,7 +66,17 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
     if (ok) res = await doFetch(path, opts);
   }
   const ct = res.headers.get('content-type') ?? '';
-  const data = ct.includes('application/json') ? await res.json().catch(() => null) : await res.text();
+  let data: unknown;
+  if (ct.includes('application/json')) {
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      console.error(`[api] JSON parse error — status ${res.status} from ${path}:`, parseErr);
+      throw new ApiError(res.status, 'Unexpected response from server. Please try again.');
+    }
+  } else {
+    data = await res.text();
+  }
   if (!res.ok) {
     const detail =
       (data && typeof data === 'object' && 'detail' in data && (data as any).detail) ||
