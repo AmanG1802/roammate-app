@@ -4,17 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, Lock, RotateCcw, Send, Sparkles, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { AnimatePresence, motion } from 'framer-motion';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
 import { BrainstormQuotaPill } from '@/components/billing/QuotaPill';
 import VoiceInputButton from '@/components/common/VoiceInputButton';
 
 type Msg = { id: number; role: 'user' | 'assistant'; content: string; created_at: string };
-
-function authHeaders(): HeadersInit {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 export default function BrainstormChat({
   tripId,
@@ -38,16 +33,8 @@ export default function BrainstormChat({
   useEffect(() => {
     const controller = new AbortController();
     setLoadError(false);
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/messages`, {
-      headers: authHeaders(),
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`status ${r.status}`);
-        return r.json();
-      })
-      .then((data: Msg[]) => setMessages(data))
+    api<Msg[]>(`/api/trips/${tripId}/brainstorm/messages`, { cache: 'no-store', signal: controller.signal })
+      .then((data) => setMessages(data))
       .catch((err) => {
         if (err?.name === 'AbortError') return;
         setLoadError(true);
@@ -88,17 +75,38 @@ export default function BrainstormChat({
     }
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/chat`, {
+      const data = await api<{ history: Msg[] }>(`/api/trips/${tripId}/brainstorm/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ message: msg }),
+        json: { message: msg },
       });
-      if (res.status === 402) {
+      const history = data.history;
+      if (!optimistic) {
+        // No optimistic bubble was shown; use full history to restore state
+        setMessages(history);
+      } else {
+        // Normal send: optimistic user message already in state.
+        // Swap it for the server's real user message + append the assistant reply.
+        const assistantMsg = history[history.length - 1];
+        const realUserMsg = history[history.length - 2];
+        if (assistantMsg?.role === 'assistant') {
+          setMessages((prev) => [
+            ...prev.slice(0, -1),
+            ...(realUserMsg?.role === 'user' ? [realUserMsg] : []),
+            assistantMsg,
+          ]);
+        } else {
+          setMessages(history);
+        }
+      }
+      // Counter ticked up on the server — refresh the entitlement so the
+      // QuotaPill reflects the new remaining count immediately.
+      void refreshEntitlement();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
         // Roll back the optimistic message and open the paywall. If the user
         // subscribes, automatically retry the send.
         if (optimistic) setMessages((prev) => prev.slice(0, -1));
-        const body = await res.json().catch(() => null);
-        const needs = isNeedsPlus(body);
+        const needs = isNeedsPlus(err.data);
         const subscribed = await requirePlus(needs?.feature ?? 'brainstorm_quota');
         setSending(false);
         if (subscribed) {
@@ -109,34 +117,6 @@ export default function BrainstormChat({
         }
         return;
       }
-      if (res.ok) {
-        const data = await res.json();
-        const history: Msg[] = data.history;
-        if (!optimistic) {
-          // No optimistic bubble was shown; use full history to restore state
-          setMessages(history);
-        } else {
-          // Normal send: optimistic user message already in state.
-          // Swap it for the server's real user message + append the assistant reply.
-          const assistantMsg = history[history.length - 1];
-          const realUserMsg = history[history.length - 2];
-          if (assistantMsg?.role === 'assistant') {
-            setMessages((prev) => [
-              ...prev.slice(0, -1),
-              ...(realUserMsg?.role === 'user' ? [realUserMsg] : []),
-              assistantMsg,
-            ]);
-          } else {
-            setMessages(history);
-          }
-        }
-        // Counter ticked up on the server — refresh the entitlement so the
-        // QuotaPill reflects the new remaining count immediately.
-        void refreshEntitlement();
-      } else {
-        setFailedMessage(msg);
-      }
-    } catch {
       setFailedMessage(msg);
     } finally {
       setSending(false);
@@ -150,11 +130,10 @@ export default function BrainstormChat({
   const extract = async () => {
     setExtracting(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/extract`, {
-        method: 'POST',
-        headers: authHeaders(),
-      });
-      if (res.ok) onItemsCreated();
+      await api(`/api/trips/${tripId}/brainstorm/extract`, { method: 'POST' });
+      onItemsCreated();
+    } catch {
+      // non-fatal
     } finally {
       setExtracting(false);
     }

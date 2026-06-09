@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 
 export type ProfileData = {
   id: number;
@@ -33,17 +33,10 @@ export function useProfile() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchProfile = useCallback(async () => {
-    const token = getToken();
-    if (!token) return;
     setIsLoading(true);
     setError(null);
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-      const res = await fetch(`${API}/users/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Failed to load profile');
-      const data = await res.json();
+      const data = await api<ProfileData>('/api/users/me');
       setProfile(data);
       localStorage.setItem('user', JSON.stringify(data));
     } catch (e: any) {
@@ -54,49 +47,20 @@ export function useProfile() {
   }, []);
 
   const updateProfile = useCallback(async (updates: ProfileUpdate): Promise<boolean> => {
-    const token = getToken();
-    if (!token) return false;
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-      const res = await fetch(`${API}/users/me`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Update failed');
-      }
-      const data = await res.json();
+      const data = await api<ProfileData>('/api/users/me', { method: 'PUT', json: updates });
       setProfile(data);
       localStorage.setItem('user', JSON.stringify(data));
       return true;
     } catch (e: any) {
-      setError(e.message);
+      setError(e instanceof ApiError ? e.message : 'Update failed');
       return false;
     }
   }, []);
 
   const updatePersonas = useCallback(async (personas: string[]): Promise<boolean> => {
-    const token = getToken();
-    if (!token) return false;
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-      const res = await fetch(`${API}/users/me/personas`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ personas }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to save personas');
-      }
+      await api('/api/users/me/personas', { method: 'PUT', json: { personas } });
       if (profile) {
         const updated = { ...profile, personas };
         setProfile(updated);
@@ -104,28 +68,21 @@ export function useProfile() {
       }
       return true;
     } catch (e: any) {
-      setError(e.message);
+      setError(e instanceof ApiError ? e.message : 'Failed to save personas');
       return false;
     }
   }, [profile]);
 
   const deleteAccount = useCallback(async (): Promise<boolean> => {
-    const token = getToken();
-    if (!token) return false;
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-      const res = await fetch(`${API}/users/me`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Failed to delete account');
+      await api('/api/users/me', { method: 'DELETE' });
       // Clear localStorage and the rm_access / rm_refresh cookies.
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
       return true;
     } catch (e: any) {
-      setError(e.message);
+      setError(e instanceof ApiError ? e.message : 'Failed to delete account');
       return false;
     }
   }, []);

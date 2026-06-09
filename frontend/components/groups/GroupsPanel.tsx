@@ -3,19 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Users, Plus, Loader2, Check, XCircle, ChevronLeft, X, Mail, Trash2, Link2, MapPin, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-import { getToken } from '@/lib/auth';
-
-function auth(): Record<string, string> {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-function authJson(): Record<string, string> {
-  return { ...auth(), 'Content-Type': 'application/json' };
-}
+import { api, ApiError } from '@/lib/api';
 
 type Group = {
   id: number;
@@ -77,8 +65,8 @@ export default function GroupsPanel({ onInvitationsChange }: { onInvitationsChan
     setLoading(true);
     try {
       const [g, inv] = await Promise.all([
-        fetch(`${API}/groups/`, { headers: auth() }).then((r) => (r.ok ? r.json() : [])),
-        fetch(`${API}/groups/invitations/pending`, { headers: auth() }).then((r) => (r.ok ? r.json() : [])),
+        api<Group[]>('/api/groups/').catch(() => [] as Group[]),
+        api<GroupInvitation[]>('/api/groups/invitations/pending').catch(() => [] as GroupInvitation[]),
       ]);
       setGroups(g);
       setInvitations(inv);
@@ -192,12 +180,14 @@ function GroupInviteCard({ inv, onChange }: { inv: GroupInvitation; onChange: ()
   const [busy, setBusy] = useState(false);
   const accept = async () => {
     setBusy(true);
-    try { await fetch(`${API}/groups/invitations/${inv.id}/accept`, { method: 'POST', headers: auth() }); }
+    try { await api(`/api/groups/invitations/${inv.id}/accept`, { method: 'POST' }); }
+    catch { /* ignore */ }
     finally { setBusy(false); onChange(); }
   };
   const decline = async () => {
     setBusy(true);
-    try { await fetch(`${API}/groups/invitations/${inv.id}/decline`, { method: 'DELETE', headers: auth() }); }
+    try { await api(`/api/groups/invitations/${inv.id}/decline`, { method: 'DELETE' }); }
+    catch { /* ignore */ }
     finally { setBusy(false); onChange(); }
   };
   return (
@@ -241,16 +231,12 @@ function CreateGroupModal({ open, onClose, onCreated }: { open: boolean; onClose
     if (!name.trim()) return;
     setSaving(true); setErr('');
     try {
-      const res = await fetch(`${API}/groups/`, { method: 'POST', headers: authJson(), body: JSON.stringify({ name }) });
-      if (res.ok) {
-        const data = await res.json();
-        setName('');
-        onCreated(data.id);
-      } else {
-        const j = await res.json().catch(() => null);
-        setErr(j?.detail ?? `Failed (${res.status})`);
-      }
-    } catch { setErr('Network error'); } finally { setSaving(false); }
+      const data = await api<{ id: number }>('/api/groups/', { method: 'POST', json: { name } });
+      setName('');
+      onCreated(data.id);
+    } catch (err) {
+      setErr(err instanceof ApiError ? (err.data as any)?.detail ?? `Failed (${err.status})` : 'Network error');
+    } finally { setSaving(false); }
   };
 
   return (
@@ -309,10 +295,10 @@ function GroupDetailView({ groupId, onBack }: { groupId: number; onBack: () => v
     setLoading(true);
     try {
       const [g, m, t, i] = await Promise.all([
-        fetch(`${API}/groups/${groupId}`, { headers: auth() }).then((r) => r.ok ? r.json() : null),
-        fetch(`${API}/groups/${groupId}/members`, { headers: auth() }).then((r) => r.ok ? r.json() : []),
-        fetch(`${API}/groups/${groupId}/trips`, { headers: auth() }).then((r) => r.ok ? r.json() : []),
-        fetch(`${API}/groups/${groupId}/ideas`, { headers: auth() }).then((r) => r.ok ? r.json() : []),
+        api<GroupDetail>(`/api/groups/${groupId}`).catch(() => null),
+        api<GroupMember[]>(`/api/groups/${groupId}/members`).catch(() => [] as GroupMember[]),
+        api<GroupTrip[]>(`/api/groups/${groupId}/trips`).catch(() => [] as GroupTrip[]),
+        api<Idea[]>(`/api/groups/${groupId}/ideas`).catch(() => [] as Idea[]),
       ]);
       setGroup(g); setMembers(m); setTrips(t); setIdeas(i);
     } catch {
@@ -325,17 +311,17 @@ function GroupDetailView({ groupId, onBack }: { groupId: number; onBack: () => v
   const isAdmin = group?.my_role === 'admin';
 
   const handleDelete = async () => {
-    await fetch(`${API}/groups/${groupId}`, { method: 'DELETE', headers: auth() });
+    try { await api(`/api/groups/${groupId}`, { method: 'DELETE' }); } catch { /* ignore */ }
     onBack();
   };
 
   const handleRemoveMember = async (memberId: number) => {
-    await fetch(`${API}/groups/${groupId}/members/${memberId}`, { method: 'DELETE', headers: auth() });
+    try { await api(`/api/groups/${groupId}/members/${memberId}`, { method: 'DELETE' }); } catch { /* ignore */ }
     refetch();
   };
 
   const handleDetachTrip = async (tripId: number) => {
-    await fetch(`${API}/groups/${groupId}/trips/${tripId}`, { method: 'DELETE', headers: auth() });
+    try { await api(`/api/groups/${groupId}/trips/${tripId}`, { method: 'DELETE' }); } catch { /* ignore */ }
     refetch();
   };
 
@@ -578,14 +564,10 @@ function InviteToGroupModal({ open, groupId, onClose, onInvited }: { open: boole
     e.preventDefault();
     setBusy(true); setErr('');
     try {
-      const res = await fetch(`${API}/groups/${groupId}/invite`, {
-        method: 'POST', headers: authJson(), body: JSON.stringify({ email, role }),
-      });
-      if (res.ok) { setEmail(''); onInvited(); }
-      else {
-        const j = await res.json().catch(() => null);
-        setErr(j?.detail ?? `Failed (${res.status})`);
-      }
+      await api(`/api/groups/${groupId}/invite`, { method: 'POST', json: { email, role } });
+      setEmail(''); onInvited();
+    } catch (err) {
+      setErr(err instanceof ApiError ? (err.data as any)?.detail ?? `Failed (${err.status})` : 'Network error');
     } finally { setBusy(false); }
   };
 
@@ -639,18 +621,19 @@ function AttachTripModal({ open, groupId, onClose, onAttached }: { open: boolean
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetch(`${API}/trips/`, { headers: auth() })
-      .then((r) => r.ok ? r.json() : [])
+    api<any[]>('/api/trips/')
       .then((data) => setTrips(data.filter((t: any) => t.my_role === 'admin' && !t.group_id)))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [open]);
 
   const attach = async (tripId: number) => {
     setAttachingId(tripId);
     try {
-      await fetch(`${API}/groups/${groupId}/trips/${tripId}`, { method: 'POST', headers: auth() });
+      await api(`/api/groups/${groupId}/trips/${tripId}`, { method: 'POST' });
       onAttached();
-    } finally { setAttachingId(null); }
+    } catch { /* ignore */ }
+    finally { setAttachingId(null); }
   };
 
   return (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTripStore, reEnrichItem } from '@/lib/store';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { formatTimeOfDay, parseTimeOfDay, type TimeOfDay } from '@/lib/time';
 import { MapPin, Loader2, Sparkles, Plus, Clock, Pencil, Trash2, Check, X, UserCircle, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -90,17 +90,10 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
 
   const loadIdeas = useCallback((signal?: AbortSignal) => {
     if (!tripId) return;
-    const token = getToken();
-    if (!token) return;
     setIsLoadingIdeas(true);
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-      signal,
-    })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: any[]) => {
+    api<any[]>(`/api/trips/${tripId}/ideas`, { cache: 'no-store', signal })
+      .then((data) => {
         setIdeas(
           data.map((item) => {
             // Backend already sends TIME-only "HH:MM:SS" strings — pass
@@ -145,23 +138,12 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
     setIsIngesting(true);
 
     try {
-      const token = getToken();
-
-      if (tripId && token) {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ingest`,
-          {
+      if (tripId) {
+        try {
+          const newItems = await api<any[]>(`/api/trips/${tripId}/ingest`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ text: inputText }),
-          }
-        );
-
-        if (response.ok) {
-          const newItems = await response.json();
+            json: { text: inputText },
+          });
           newItems.forEach((item: any) => {
             addIdea({
               id: item.id.toString(),
@@ -176,6 +158,8 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
           });
           setInputText('');
           return;
+        } catch {
+          // fall through to local parsing
         }
       }
 
@@ -197,15 +181,10 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
   const handleDeleteIdea = async (ideaId: string) => {
     removeIdea(ideaId);
     if (!tripId) return;
-    const token = getToken();
-    if (!token) return;
     const numericId = parseInt(ideaId, 10);
     if (isNaN(numericId)) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas/${numericId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api(`/api/trips/${tripId}/ideas/${numericId}`, { method: 'DELETE' });
     } catch { /* optimistic removal already done */ }
   };
 
@@ -215,15 +194,12 @@ export default function IdeaBin({ tripId, readOnly = false, canVote = false }: {
     setEditingTimeId(null);
 
     if (!tripId) return;
-    const token = getToken();
-    if (!token) return;
     const numericId = parseInt(ideaId, 10);
     if (isNaN(numericId)) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas/${numericId}`, {
+      await api(`/api/trips/${tripId}/ideas/${numericId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ start_time: newTod }),
+        json: { start_time: newTod },
       });
     } catch { /* optimistic update already done */ }
   };

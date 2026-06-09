@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
-import { getToken } from '@/lib/auth';
+import useAuth from '@/hooks/useAuth';
 import { motionTokens, useAppMotion } from '@/lib/motion';
 import { PlusWordmark } from '@/components/billing/PlusCrest';
 import { TierComparison } from '@/components/billing/TierComparison';
@@ -35,9 +35,10 @@ export default function PricingPage() {
   const router = useRouter();
   const { reduce } = useAppMotion();
   const [choice, setChoice] = useState<BillingChoice>('monthly');
+  const { user } = useAuth(false);
 
   const subscribe = async (plan: BillingChoice) => {
-    if (!getToken()) {
+    if (!user) {
       router.push('/login?next=/profile/subscription');
       return;
     }

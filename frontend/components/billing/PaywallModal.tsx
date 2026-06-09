@@ -20,15 +20,13 @@ import {
   CalendarClock, Infinity as InfinityIcon, MapPinned, Sparkles, X, Check,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 import { motionTokens, useAppMotion } from '@/lib/motion';
 import { PlusCrest, PlusWordmark } from './PlusCrest';
 import { CouponInput, type CouponQuote } from './CouponInput';
 import { PlanToggle, type PlanChoice } from './PlanToggle';
 import type { PaywallFeature } from '@/hooks/useEntitlement';
 import { useEntitlement } from '@/hooks/useEntitlement';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 interface FeatureCopy {
   title: string;
@@ -158,34 +156,14 @@ export function PaywallModal() {
     setError(null);
     setPhase('submitting');
     try {
-      const token = getToken();
-      if (!token) {
-        setError('Please sign in to subscribe.');
-        setPhase('idle');
-        return;
-      }
-      const res = await fetch(`${API}/billing/razorpay/subscription`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ coupon_code: coupon?.code ?? null }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ detail: 'Could not start subscription' }));
-        const msg = typeof body.detail === 'string'
-          ? body.detail
-          : body.detail?.message ?? 'Could not start subscription';
-        setError(msg);
-        setPhase('idle');
-        return;
-      }
-      const data = await res.json() as {
+      const data = await api<{
         subscription_id: string;
         razorpay_key_id: string;
         user: { email: string; name: string | null };
-      };
+      }>('/api/billing/razorpay/subscription', {
+        method: 'POST',
+        json: { coupon_code: coupon?.code ?? null },
+      });
 
       await loadRazorpay();
       const Razorpay = (window as any).Razorpay;
@@ -214,8 +192,13 @@ export function PaywallModal() {
         setPhase('idle');
       });
       rzp.open();
-    } catch (e) {
-      setError((e as Error).message || 'Something went wrong.');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const body = err.data as any;
+        setError(typeof body?.detail === 'string' ? body.detail : body?.detail?.message ?? 'Could not start subscription');
+      } else {
+        setError((err as Error).message || 'Something went wrong.');
+      }
       setPhase('idle');
     }
   }, [close, coupon, entitlement.price_inr]);
@@ -225,30 +208,7 @@ export function PaywallModal() {
     setError(null);
     setPhase('submitting');
     try {
-      const token = getToken();
-      if (!token) {
-        setError('Please sign in to purchase.');
-        setPhase('idle');
-        return;
-      }
-      const res = await fetch(`${API}/billing/razorpay/one-time`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ coupon_code: coupon?.code ?? null }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ detail: 'Could not start purchase' }));
-        const msg = typeof body.detail === 'string'
-          ? body.detail
-          : body.detail?.message ?? 'Could not start purchase';
-        setError(msg);
-        setPhase('idle');
-        return;
-      }
-      const data = await res.json() as
+      const data = await api<
         | { granted: true; period_end: string }
         | {
             granted: false;
@@ -257,7 +217,11 @@ export function PaywallModal() {
             razorpay_key_id: string;
             user: { email: string; name: string | null };
             coupon: CouponQuote | null;
-          };
+          }
+      >('/api/billing/razorpay/one-time', {
+        method: 'POST',
+        json: { coupon_code: coupon?.code ?? null },
+      });
 
       // Free-grant path
       if (data.granted) {
@@ -286,29 +250,24 @@ export function PaywallModal() {
         handler: async (resp: any) => {
           // Verify on backend before celebrating
           try {
-            const vres = await fetch(`${API}/billing/razorpay/one-time/verify`, {
+            await api('/api/billing/razorpay/one-time/verify', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
+              json: {
                 order_id: resp.razorpay_order_id,
                 payment_id: resp.razorpay_payment_id,
                 signature: resp.razorpay_signature,
                 coupon_id: coupon?.coupon_id ?? null,
-              }),
+              },
             });
-            if (!vres.ok) {
-              const b = await vres.json().catch(() => ({}));
-              setError(b.detail?.message || b.detail || 'Could not verify payment.');
-              setPhase('idle');
-              return;
-            }
             setPhase('success');
             setTimeout(() => { close(true); }, 2400);
-          } catch {
-            setError('Could not verify payment.');
+          } catch (err) {
+            if (err instanceof ApiError) {
+              const b = err.data as any;
+              setError(b?.detail?.message || b?.detail || 'Could not verify payment.');
+            } else {
+              setError('Could not verify payment.');
+            }
             setPhase('idle');
           }
         },
@@ -319,8 +278,13 @@ export function PaywallModal() {
         setPhase('idle');
       });
       rzp.open();
-    } catch (e) {
-      setError((e as Error).message || 'Something went wrong.');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const body = err.data as any;
+        setError(typeof body?.detail === 'string' ? body.detail : body?.detail?.message ?? 'Could not start purchase');
+      } else {
+        setError((err as Error).message || 'Something went wrong.');
+      }
       setPhase('idle');
     }
   }, [close, coupon]);

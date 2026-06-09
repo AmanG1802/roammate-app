@@ -1,10 +1,8 @@
 import { create } from 'zustand';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { toastBus } from '@/lib/toast-bus';
 import type { TimeOfDay } from '@/lib/time';
 import { compareTimeOfDay } from '@/lib/time';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 /** Create a temporary local event (used when API is unavailable).
  *
@@ -242,28 +240,23 @@ export const useTripStore = create<TripState>((set, get) => ({
       return { events: s.events.filter((e) => e.id !== eventId), legsByDay: nextLegs };
     }),
 
-  loadEvents: async (tripId, token) => {
+  loadEvents: async (tripId, _token) => {
     try {
-      const res = await fetch(`${API}/events/?trip_id=${tripId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      });
-      if (!res.ok) return;
-      const raw: Record<string, unknown>[] = await res.json();
+      const raw = await api<Record<string, unknown>[]>(`/api/events/?trip_id=${tripId}`, { cache: 'no-store' });
       set({ events: sortEvents(raw.map(mapApiEvent)) });
     } catch {
       // Network error – keep current state
     }
   },
 
-  moveIdeaToTimeline: async (ideaId, tripId, token, startTime?, dayDate?) => {
+  moveIdeaToTimeline: async (ideaId, tripId, _token, startTime?, dayDate?) => {
     const { ideas, events } = get();
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
 
     set({ ideas: ideas.filter((i) => i.id !== ideaId) });
 
-    if (!tripId || !token) {
+    if (!tripId) {
       const maxOrder = events.reduce((m, e) => Math.max(m, e.sort_order), 0);
       const localEvent: Event = {
         id: Math.random().toString(36).slice(2, 9),
@@ -284,10 +277,9 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     try {
       const numId = parseInt(ideaId, 10);
-      const res = await fetch(`${API}/events/`, {
+      const raw = await api<Record<string, unknown>>('/api/events/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
+        json: {
           trip_id: parseInt(tripId, 10),
           title: idea.title,
           lat: idea.lat,
@@ -298,27 +290,18 @@ export const useTripStore = create<TripState>((set, get) => ({
           sort_order: maxOrder + 1,
           added_by: idea.added_by ?? null,
           source_idea_id: !isNaN(numId) ? numId : null,
-        }),
+        },
       });
 
-      if (res.ok) {
-        const raw = await res.json();
-        set((s) => ({ events: sortEvents([...s.events, mapApiEvent(raw)]) }));
+      set((s) => ({ events: sortEvents([...s.events, mapApiEvent(raw)]) }));
 
-        const numericId = parseInt(ideaId, 10);
-        if (!isNaN(numericId)) {
-          try {
-            await fetch(`${API}/trips/${tripId}/ideas/${numericId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
-          } catch {
-            toastBus("Saved to your timeline, but couldn't clear it from the bin", { kind: 'info' });
-          }
+      const numericId = parseInt(ideaId, 10);
+      if (!isNaN(numericId)) {
+        try {
+          await api(`/api/trips/${tripId}/ideas/${numericId}`, { method: 'DELETE' });
+        } catch {
+          toastBus("Saved to your timeline, but couldn't clear it from the bin", { kind: 'info' });
         }
-      } else {
-        set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events, dayDate ?? null)]) }));
-        toastBus("Couldn't save to the server — kept locally", { kind: 'error' });
       }
     } catch {
       set((s) => ({ events: sortEvents([...s.events, makeLocalEvent(idea, startTime, s.events, dayDate ?? null)]) }));
@@ -326,7 +309,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
 
-  moveEventToIdea: async (eventId, tripId, token) => {
+  moveEventToIdea: async (eventId, tripId, _token) => {
     const { events } = get();
     const event = events.find((e) => e.id === eventId);
     if (!event) return;
@@ -352,38 +335,30 @@ export const useTripStore = create<TripState>((set, get) => ({
     };
     set((s) => ({ ideas: [restoredIdea, ...s.ideas] }));
 
-    if (tripId && token) {
+    if (tripId) {
       try {
-        const res = await fetch(`${API}/events/${eventId}/move-to-bin`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const idea = await res.json();
-          set((s) => ({
-            ideas: s.ideas.map((i) =>
-              i.id === `restored-${eventId}`
-                ? {
-                    id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0,
-                    place_id: idea.place_id ?? null,
-                    start_time: (idea.start_time as TimeOfDay | null) ?? null,
-                    end_time: (idea.end_time as TimeOfDay | null) ?? null,
-                    added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0,
-                  }
-                : i
-            ),
-          }));
-          set((s) => ({ ideasLastUpdated: s.ideasLastUpdated + 1 }));
-        } else {
-          toastBus("Couldn't move event back to the bin", { kind: 'error' });
-        }
+        const idea = await api<Record<string, any>>(`/api/events/${eventId}/move-to-bin`, { method: 'POST' });
+        set((s) => ({
+          ideas: s.ideas.map((i) =>
+            i.id === `restored-${eventId}`
+              ? {
+                  id: String(idea.id), title: idea.title, lat: idea.lat ?? 0, lng: idea.lng ?? 0,
+                  place_id: idea.place_id ?? null,
+                  start_time: (idea.start_time as TimeOfDay | null) ?? null,
+                  end_time: (idea.end_time as TimeOfDay | null) ?? null,
+                  added_by: idea.added_by ?? null, up: idea.up ?? 0, down: idea.down ?? 0, my_vote: idea.my_vote ?? 0,
+                }
+              : i
+          ),
+        }));
+        set((s) => ({ ideasLastUpdated: s.ideasLastUpdated + 1 }));
       } catch {
         toastBus('Network error — change may not be saved', { kind: 'error' });
       }
     }
   },
 
-  updateEventTime: async (eventId, startTime, endTime, token) => {
+  updateEventTime: async (eventId, startTime, endTime, _token) => {
     const prev = get().events.find((e) => e.id === eventId);
     set((s) => ({
       events: sortEvents(
@@ -393,33 +368,26 @@ export const useTripStore = create<TripState>((set, get) => ({
       ),
     }));
 
-    if (token) {
-      try {
-        const res = await fetch(`${API}/events/${eventId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            start_time: startTime ?? null,
-            end_time: endTime ?? null,
-          }),
-        });
-        if (!res.ok) throw new Error(`status ${res.status}`);
-      } catch {
-        if (prev) {
-          set((s) => ({
-            events: sortEvents(
-              s.events.map((e) =>
-                e.id === eventId ? { ...e, start_time: prev.start_time, end_time: prev.end_time } : e
-              )
-            ),
-          }));
-        }
-        toastBus("Couldn't update event time — reverted", { kind: 'error' });
+    try {
+      await api(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        json: { start_time: startTime ?? null, end_time: endTime ?? null },
+      });
+    } catch {
+      if (prev) {
+        set((s) => ({
+          events: sortEvents(
+            s.events.map((e) =>
+              e.id === eventId ? { ...e, start_time: prev.start_time, end_time: prev.end_time } : e
+            )
+          ),
+        }));
       }
+      toastBus("Couldn't update event time — reverted", { kind: 'error' });
     }
   },
 
-  toggleEventSkip: async (eventId, token) => {
+  toggleEventSkip: async (eventId, _token) => {
     const { events } = get();
     const event = events.find((e) => e.id === eventId);
     if (!event) return;
@@ -431,47 +399,33 @@ export const useTripStore = create<TripState>((set, get) => ({
       ),
     }));
 
-    if (token) {
-      try {
-        const res = await fetch(`${API}/events/${eventId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ is_skipped: newSkipped }),
-        });
-        if (!res.ok) throw new Error(`status ${res.status}`);
-      } catch {
-        set((s) => ({
-          events: s.events.map((e) =>
-            e.id === eventId ? { ...e, is_skipped: !newSkipped } : e
-          ),
-        }));
-        toastBus(newSkipped ? "Couldn't skip event — reverted" : "Couldn't restore event — reverted", { kind: 'error' });
-      }
+    try {
+      await api(`/api/events/${eventId}`, { method: 'PATCH', json: { is_skipped: newSkipped } });
+    } catch {
+      set((s) => ({
+        events: s.events.map((e) =>
+          e.id === eventId ? { ...e, is_skipped: !newSkipped } : e
+        ),
+      }));
+      toastBus(newSkipped ? "Couldn't skip event — reverted" : "Couldn't restore event — reverted", { kind: 'error' });
     }
   },
 
-  reorderEvent: async (eventId, newSortOrder, token) => {
+  reorderEvent: async (eventId, newSortOrder, _token) => {
     const prevOrder = get().events.find((e) => e.id === eventId)?.sort_order;
     set((s) => ({
       events: s.events.map((e) => (e.id === eventId ? { ...e, sort_order: newSortOrder } : e)),
     }));
 
-    if (token) {
-      try {
-        const res = await fetch(`${API}/events/${eventId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ sort_order: newSortOrder }),
-        });
-        if (!res.ok) throw new Error(`status ${res.status}`);
-      } catch {
-        if (typeof prevOrder === 'number') {
-          set((s) => ({
-            events: s.events.map((e) => (e.id === eventId ? { ...e, sort_order: prevOrder } : e)),
-          }));
-        }
-        toastBus("Couldn't save the new order — reverted", { kind: 'error' });
+    try {
+      await api(`/api/events/${eventId}`, { method: 'PATCH', json: { sort_order: newSortOrder } });
+    } catch {
+      if (typeof prevOrder === 'number') {
+        set((s) => ({
+          events: s.events.map((e) => (e.id === eventId ? { ...e, sort_order: prevOrder } : e)),
+        }));
       }
+      toastBus("Couldn't save the new order — reverted", { kind: 'error' });
     }
   },
 
@@ -484,14 +438,9 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   setTripDays: (days) => set({ tripDays: days }),
 
-  loadTripDays: async (tripId, token) => {
+  loadTripDays: async (tripId, _token) => {
     try {
-      const res = await fetch(`${API}/trips/${tripId}/days`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      });
-      if (!res.ok) return;
-      const raw: Record<string, unknown>[] = await res.json();
+      const raw = await api<Record<string, unknown>[]>(`/api/trips/${tripId}/days`, { cache: 'no-store' });
       set({
         tripDays: raw.map((d) => ({
           id: String(d.id),
@@ -505,15 +454,12 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
 
-  addTripDay: async (tripId, date, token) => {
+  addTripDay: async (tripId, date, _token) => {
     try {
-      const res = await fetch(`${API}/trips/${tripId}/days`, {
+      const raw = await api<Record<string, unknown>>(`/api/trips/${tripId}/days`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ date }),
+        json: { date },
       });
-      if (!res.ok) return null;
-      const raw = await res.json();
       const day: TripDay = {
         id: String(raw.id),
         trip_id: String(raw.trip_id),
@@ -531,40 +477,31 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
 
-  deleteTripDay: async (tripId, dayId, token, itemsAction = 'bin') => {
+  deleteTripDay: async (tripId, dayId, _token, itemsAction = 'bin') => {
     let success = false;
     try {
       const dayDate = get().tripDays.find((d) => d.id === dayId)?.date;
-      const res = await fetch(`${API}/trips/${tripId}/days/${dayId}?items_action=${itemsAction}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok || res.status === 204) {
-        success = true;
-        if (dayDate) {
-          set((s) => {
-            const nextLegs = { ...s.legsByDay };
-            delete nextLegs[legsKey(tripId, dayDate)];
-            return { legsByDay: nextLegs };
-          });
-        }
-        // Re-fetch days to get renumbered/re-dated state from backend
-        const listRes = await fetch(`${API}/trips/${tripId}/days`, {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: 'no-store',
+      await api(`/api/trips/${tripId}/days/${dayId}?items_action=${itemsAction}`, { method: 'DELETE' });
+      success = true;
+      if (dayDate) {
+        set((s) => {
+          const nextLegs = { ...s.legsByDay };
+          delete nextLegs[legsKey(tripId, dayDate)];
+          return { legsByDay: nextLegs };
         });
-        if (listRes.ok) {
-          const raw: Record<string, unknown>[] = await listRes.json();
-          set({
-            tripDays: raw.map((d) => ({
-              id: String(d.id),
-              trip_id: String(d.trip_id),
-              date: d.date as string,
-              day_number: d.day_number as number,
-            })),
-          });
-        }
       }
+      // Re-fetch days to get renumbered/re-dated state from backend
+      try {
+        const raw = await api<Record<string, unknown>[]>(`/api/trips/${tripId}/days`, { cache: 'no-store' });
+        set({
+          tripDays: raw.map((d) => ({
+            id: String(d.id),
+            trip_id: String(d.trip_id),
+            date: d.date as string,
+            day_number: d.day_number as number,
+          })),
+        });
+      } catch { /* keep current */ }
     } catch {
       // handled below
     }
@@ -621,18 +558,8 @@ export interface ReEnrichResult {
 }
 
 export async function reEnrichItem(kind: ReEnrichKind, itemId: number): Promise<ReEnrichResult> {
-  const token = getToken();
-  const res = await fetch(`${API}/trips/enrich`, {
+  return api<ReEnrichResult>('/api/trips/enrich', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ kind, item_id: itemId }),
+    json: { kind, item_id: itemId },
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.detail ?? 'Enrichment failed');
-  }
-  return res.json();
 }

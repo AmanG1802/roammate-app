@@ -14,13 +14,11 @@ import {
   Check, CheckCircle2, ChevronDown, Crown, Loader2, ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { motionTokens, useAppMotion } from '@/lib/motion';
 import { PlusCrest, PlusWordmark } from '@/components/billing/PlusCrest';
 import { TierComparison } from '@/components/billing/TierComparison';
 import { useEntitlement } from '@/hooks/useEntitlement';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 const FAQ_ITEMS = [
   {
@@ -265,12 +263,10 @@ function PlusState({ requirePlus }: { requirePlus: (f: 'concierge') => Promise<b
   const cancel = async () => {
     setCancelling(true);
     try {
-      const token = getToken();
-      await fetch(`${API}/billing/cancel`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
+      await api('/api/billing/cancel', { method: 'POST' });
       await refresh();
+    } catch {
+      // best-effort — reset UI regardless
     } finally {
       setCancelling(false);
       setConfirmingCancel(false);

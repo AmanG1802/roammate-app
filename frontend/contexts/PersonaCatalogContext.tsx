@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { api } from '@/lib/api';
 
 export type PersonaCatalogItem = {
   slug: string;
@@ -24,9 +25,7 @@ export function PersonaCatalogProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-    fetch(`${API}/users/personas/catalog`)
-      .then((r) => r.json())
+    api<PersonaCatalogItem[]>('/api/users/personas/catalog')
       .then((data) => {
         if (Array.isArray(data)) setCatalog(data);
       })

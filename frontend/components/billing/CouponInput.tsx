@@ -18,10 +18,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Loader2, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 import { motionTokens } from '@/lib/motion';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export type CouponTarget = 'one_time' | 'subscription';
 
@@ -57,29 +55,22 @@ export function CouponInput({ target, initialCode, autoApply, onApplied }: Props
     setError(null);
     setSubmitting(true);
     try {
-      const token = getToken();
-      const res = await fetch(`${API}/billing/coupons/validate`, {
+      const body = await api<CouponQuote>('/api/billing/coupons/validate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ code: trimmed, target }),
+        json: { code: trimmed, target },
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      setQuote(body);
+      onApplied(body);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const detail = (err.data as any)?.detail;
         const msg =
-          (body && body.detail && body.detail.message) ||
-          (typeof body.detail === 'string' ? body.detail : 'This code is not valid.');
+          (detail && detail.message) ||
+          (typeof detail === 'string' ? detail : 'This code is not valid.');
         setError(msg);
-        setQuote(null);
-        onApplied(null);
       } else {
-        setQuote(body as CouponQuote);
-        onApplied(body as CouponQuote);
+        setError('Could not check that code. Please try again.');
       }
-    } catch {
-      setError('Could not check that code. Please try again.');
       setQuote(null);
       onApplied(null);
     } finally {

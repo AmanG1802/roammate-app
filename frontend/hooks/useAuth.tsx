@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { clearSession, getToken, setToken } from '@/lib/auth';
+import { clearSession } from '@/lib/auth';
 import { toastBus } from '@/lib/toast-bus';
 
 /**
@@ -41,8 +41,6 @@ export default function useAuth(requireAuth: boolean = true) {
             body: '{}',
           });
           if (r.ok) {
-            const pair = await r.json();
-            setToken(pair.access_token);
             const me = await fetch('/api/auth/me', { credentials: 'include' });
             if (me.ok) {
               const userData = await me.json();
@@ -86,7 +84,5 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // rm_refresh cookies. This component now just runs useAuth so the in-page
   // user state is hydrated; no extra redirect is needed.
   useAuth(true);
-  // Suppress unused-import warning when getToken isn't referenced elsewhere
-  void getToken;
   return <>{children}</>;
 }
