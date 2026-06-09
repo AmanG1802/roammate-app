@@ -1,3 +1,16 @@
+# ── System / CLI tools (install via Homebrew or official installers) ──────────
+# colima      →  brew install colima
+# docker      →  brew install --cask docker
+# docker-compose  →  brew install docker-compose
 colima
 docker
 docker-compose
+
+# Vercel CLI  →  npm i -g vercel
+vercel
+
+# Railway CLI →  brew install railway
+railway
+
+# PostgreSQL client (psql)  →  brew install postgresql
+postgresql
