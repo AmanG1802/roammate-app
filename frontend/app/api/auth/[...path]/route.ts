@@ -39,7 +39,13 @@ async function proxy(req: NextRequest, segments: string[]) {
   const res = await fetch(url, init);
   const respHeaders = new Headers();
   res.headers.forEach((value, key) => {
-    // pass everything including Set-Cookie
+    // Node.js fetch auto-decompresses the body, so forwarding Content-Encoding
+    // would cause the browser to attempt a second decompression and fail with
+    // ERR_CONTENT_DECODING_FAILED. Strip it (and Content-Length, whose value
+    // changes after decompression) so the browser reads the raw bytes directly.
+    const lower = key.toLowerCase();
+    if (lower === 'content-encoding' || lower === 'content-length') return;
+    // pass everything else including Set-Cookie
     respHeaders.append(key, value);
   });
   const body = await res.arrayBuffer();

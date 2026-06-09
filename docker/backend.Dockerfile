@@ -12,6 +12,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN chmod +x /app/scripts/decode-secrets.sh
+
+ENTRYPOINT ["/app/scripts/decode-secrets.sh"]
 # Production default (Railway): trust the TLS-terminating proxy's X-Forwarded-*
 # headers so FastAPI builds https:// redirects, not http://. No --reload in prod.
 # docker-compose overrides this with --reload for local dev.
