@@ -67,18 +67,27 @@ export default function DashboardPage() {
     bellRef.current?.refresh();
   }, []);
 
-  // Show persona onboarding modal once per login session when no persona is set
+  // Show persona onboarding modal once per login session when no persona is set.
+  // Always runs after the Plus onboarding modal (Tour → Plus → Persona order).
   useEffect(() => {
     if (!user) return;
     if (tutorialBlocksOnboarding) return;
-    const shownKey = `persona_modal_shown_${(user as any).id}`;
+    // Wait for entitlement to confirm so we know whether the Plus modal is
+    // about to open. Without this, Persona could race ahead of Plus.
+    if (!entitlementConfirmed) return;
+    const userId = (user as any).id;
+    // Plus onboarding goes first. Defer if it's currently showing or still
+    // pending (not yet seen + user is on the free tier).
+    const plusStillPending = entitlement.tier === 'free' && !hasSeenPlusOnboarding(userId);
+    if (showPlusOnboarding || plusStillPending) return;
+    const shownKey = `persona_modal_shown_${userId}`;
     if (sessionStorage.getItem(shownKey)) return;
     const p = (user as any).personas;
     if (p === null || (Array.isArray(p) && p.length === 0)) {
       sessionStorage.setItem(shownKey, '1');
       setShowPersonaModal(true);
     }
-  }, [user, tutorialBlocksOnboarding]);
+  }, [user, tutorialBlocksOnboarding, entitlementConfirmed, entitlement.tier, showPlusOnboarding]);
 
   const savePersonas = async (personas: string[]): Promise<boolean> => {
     try {
@@ -129,8 +138,7 @@ export default function DashboardPage() {
 
     if (entitlement.tier !== 'free') return;
     if (hasSeenPlusOnboarding(userId)) return;
-    // Defer briefly so the persona modal (if it's also opening this session)
-    // doesn't get stacked underneath.
+    // Safety net: don't open if Persona somehow got there first.
     if (showPersonaModal) return;
     markPlusOnboardingSeen(userId);
     setShowPlusOnboarding(true);

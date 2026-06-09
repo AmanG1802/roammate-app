@@ -107,8 +107,8 @@ struct MainShell: View {
         }
     }
 
-    /// Decide which onboarding sheet (if any) to present. Persona picker takes
-    /// precedence; the Plus pitch waits until the persona flow is done.
+    /// Decide which onboarding sheet (if any) to present.
+    /// Order: Tour (blocks both) → Plus pitch → Persona picker.
     private func evaluateOnboarding() {
         guard let user = authManager.currentUser else { return }
 
@@ -117,32 +117,35 @@ struct MainShell: View {
             return
         }
 
-        // 1. Persona picker — once per session when personas are unset/empty.
+        // Require a confirmed entitlement before showing anything: the optimistic
+        // default is tier "free", so acting before confirmation would upsell a
+        // paying user whose status hasn't loaded yet.
+        guard subscriptionStore.isConfirmed else { return }
+
+        // 1. Plus onboarding — free users see this first, once per device.
+        if subscriptionStore.entitlement.tier == "free",
+           !PlusOnboardingFlag.hasSeen(userId: user.id),
+           !showPlusOnboarding {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                // Re-check after the delay — state may have changed.
+                guard subscriptionStore.isConfirmed,
+                      subscriptionStore.entitlement.tier == "free",
+                      !PlusOnboardingFlag.hasSeen(userId: user.id) else { return }
+                PlusOnboardingFlag.markSeen(userId: user.id)
+                showPlusOnboarding = true
+            }
+            return
+        }
+
+        // 2. Persona picker — once per session when personas are unset/empty.
+        // Only shown after the Plus sheet has been seen (or skipped for Plus users).
+        guard !showPlusOnboarding else { return }
         let needsPersona = (user.personas?.isEmpty ?? true)
         if needsPersona, !personaSheetShownThisSession, !showPersonaOnboarding {
             personaSheetShownThisSession = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 showPersonaOnboarding = true
             }
-            return
-        }
-
-        // 2. Plus onboarding — only for free users, once per device. Defer if
-        // the persona sheet is currently open.
-        guard !showPersonaOnboarding else { return }
-        // Require a confirmed entitlement: the optimistic default is tier "free",
-        // so pitching off the unconfirmed state would upsell a paying user whose
-        // status hasn't loaded (or whose fetch failed).
-        guard subscriptionStore.isConfirmed else { return }
-        guard subscriptionStore.entitlement.tier == "free" else { return }
-        guard !PlusOnboardingFlag.hasSeen(userId: user.id) else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            // Re-check after the delay — the user's state may have changed.
-            guard subscriptionStore.isConfirmed,
-                  subscriptionStore.entitlement.tier == "free",
-                  !PlusOnboardingFlag.hasSeen(userId: user.id) else { return }
-            PlusOnboardingFlag.markSeen(userId: user.id)
-            showPlusOnboarding = true
         }
     }
 }
