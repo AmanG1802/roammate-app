@@ -125,11 +125,6 @@ export function EntitlementProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    // Re-check entitlement on tab focus so cancellations/upgrades made in
-    // another window propagate quickly.
-    const onFocus = () => { refresh(); };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
   }, [refresh]);
 
   const requirePlus = useCallback((feature: PaywallFeature, opts?: PaywallOptions) => {

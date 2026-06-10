@@ -149,30 +149,30 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
     setError(null);
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const data = await api<Preview>(‘/api/llm/plan-trip’, {
-        method: ‘POST’,
+      const data = await api<Preview>('/api/llm/plan-trip', {
+        method: 'POST',
         json: { prompt: p, timezone },
       });
-      planMessagesRef.current.push({ role: ‘user’, content: p });
+      planMessagesRef.current.push({ role: 'user', content: p });
       if (data.user_output) {
-        planMessagesRef.current.push({ role: ‘assistant’, content: data.user_output });
+        planMessagesRef.current.push({ role: 'assistant', content: data.user_output });
       }
       setPreview(data);
       void refreshEntitlement();
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {
         const needs = isNeedsPlus(err.data);
-        const subscribed = await requirePlus(needs?.feature ?? ‘brainstorm_quota’);
+        const subscribed = await requirePlus(needs?.feature ?? 'brainstorm_quota');
         if (subscribed) {
           await refreshEntitlement();
           setPlanning(false);
           plan();
           return;
         }
-        setError(‘You have used up this month’s free planner messages.’);
+        setError("You have used up this month's free planner messages.");
         return;
       }
-      setError((err as any)?.message ?? ‘Something went wrong — your prompt is saved, just hit Plan again.’);
+      setError((err as any)?.message ?? 'Something went wrong — your prompt is saved, just hit Plan again.');
     } finally {
       setPlanning(false);
     }

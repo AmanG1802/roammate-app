@@ -74,18 +74,6 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [refresh]);
 
-  // After login/logout the auth cookie state changes silently. Re-fetch when
-  // the page becomes visible again (covers tab-switch + post-login redirect).
-  useEffect(() => {
-    function onFocus() { void refresh(); }
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onFocus);
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onFocus);
-    };
-  }, [refresh]);
-
   const post = useCallback(
     async (path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown) => {
       const data = await api<TutorialState>(path, {
