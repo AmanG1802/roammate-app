@@ -3,9 +3,12 @@ import MapKit
 
 struct PlanMapPage: View {
     @EnvironmentObject var store: TripDetailStore
+    @EnvironmentObject var tutorial: TutorialStore
 
     @State private var cameraPosition: MapCameraPosition = .automatic
-    @State private var drawerDetent: DrawerDetent = .fraction(0.6)
+    @State private var drawerDetent: PresentationDetent = .fraction(0.6)
+    @State private var drawerTab: DrawerTab = .timeline
+    @State private var sheetTopY: CGFloat = UIScreen.main.bounds.height
     @State private var selectedDayIndex = 0
     @State private var selectedEventId: Int?
     @State private var selectedLegIndex: Int?
@@ -154,41 +157,15 @@ struct PlanMapPage: View {
 
             // Map overlay controls
             VStack(spacing: 0) {
-                // Top row: day badge (leading) + refresh button (centered/trailing) + map controls (trailing)
+                // Top row: day badge (leading) + map controls (trailing).
+                // Refresh Route button floats above the sheet — see floatingRouteCluster.
                 HStack(alignment: .top, spacing: 8) {
                     dayBadge
-                    Spacer(minLength: 8)
-                    refreshRouteButton
-                    Spacer(minLength: 8)
+                    Spacer()
                     mapControls
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
-
-                // Route context message (stale / gated) — lives on its own row
-                // beneath the top controls so it doesn't crowd the day badge.
-                if let msg = refreshContextMessage, !store.isRouteLoading {
-                    HStack {
-                        Spacer()
-                        Text(msg)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(gateMessage != nil ? Color.roammateDanger : Color.roammateAmber)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule().fill(
-                                    gateMessage != nil
-                                        ? Color.roammateDanger.opacity(0.1)
-                                        : Color.roammateAmber.opacity(0.1)
-                                )
-                            )
-                            .lineLimit(1)
-                            .transition(.opacity)
-                        Spacer()
-                    }
-                    .padding(.top, 6)
-                    .padding(.horizontal, 16)
-                }
 
                 Spacer()
 
@@ -223,20 +200,43 @@ struct PlanMapPage: View {
             .animation(.easeInOut(duration: 0.2), value: selectedLegIndex)
 
 
-            // Bottom drawer
-            BottomDrawer(
-                detents: [.minimised(140), .fraction(0.6), .fraction(0.9)],
-                current: $drawerDetent,
-                panelAnchorID: "timeline-day-1"
-            ) {
-                TimelineDrawerContent(selectedDayIndex: $selectedDayIndex)
-                    .environmentObject(store)
+        }
+        // Refresh Route button + optional route-state label float just above the sheet.
+        .overlay { floatingRouteCluster }
+        // Native sheet — always present, non-dismissible.
+        .sheet(isPresented: .constant(true)) {
+            VStack(spacing: 0) {
+                // Zero-height tracker reports the sheet content's top-edge Y in
+                // window coordinates at display refresh rate → drives floatingRouteCluster.
+                SheetPositionTracker(sheetTopY: $sheetTopY)
+                    .frame(height: 0)
+
+                DrawerTabStrip(selection: $drawerTab)
+
+                if drawerTab == .timeline {
+                    TimelineDrawerContent(selectedDayIndex: $selectedDayIndex)
+                        .environmentObject(store)
+                } else {
+                    IdeaBinView()
+                        .environmentObject(store)
+                }
             }
+            .presentationDetents(
+                [.height(140), .fraction(0.6), .large],
+                selection: $drawerDetent
+            )
+            .presentationDragIndicator(.visible)
+            .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.6)))
+            .presentationCornerRadius(28)
+            .interactiveDismissDisabled()
+            .background { ScrollableAtAnyDetent() }
         }
         .onAppear {
             fitCamera()
             loadRouteForCurrentDay()
+            applyTutorialTab()
         }
+        .onChange(of: tutorial.currentStep) { _, _ in applyTutorialTab() }
         .onChange(of: selectedDayIndex) { _, _ in
             fitCamera()
             store.clearRoute()
@@ -246,6 +246,68 @@ struct PlanMapPage: View {
             if let day = currentDayDate {
                 store.checkRouteStaleness(dayDate: day)
             }
+        }
+    }
+
+    /// Mirrors the old PlanPaneView.applyTutorialPane(): when the tutorial drives
+    /// paneIndex 1 on the Plan sub-page, switch the drawer tab to Idea Bin.
+    private func applyTutorialTab() {
+        guard tutorial.isActive else { return }
+        let loc = TutorialScript.location(for: tutorial.currentStep)
+        guard loc.subPage == .plan, let idx = loc.paneIndex else { return }
+        let target: DrawerTab = idx == 1 ? .ideaBin : .timeline
+        if drawerTab != target {
+            withAnimation(.easeInOut(duration: 0.3)) { drawerTab = target }
+        }
+    }
+
+    // MARK: - Floating Route Cluster
+
+    /// Refresh Route button + optional route-state label, floating pixel-perfect
+    /// above the native sheet's top edge. Tracks the sheet during live drags via
+    /// sheetTopY (fed by SheetPositionTracker at display refresh rate).
+    /// Fades out when the sheet reaches large detent.
+    @ViewBuilder
+    private var floatingRouteCluster: some View {
+        GeometryReader { geo in
+            let localSheetTop = sheetTopY - geo.frame(in: .global).minY
+            // Place button bottom 12pt above the sheet content area (≈ inside the
+            // drag-indicator zone, which reads as "just above the sheet edge").
+            let buttonCenterY = localSheetTop - 28
+            // Only show when the computed position is within the visible area —
+            // guards against the initial sheetTopY = UIScreen.main.bounds.height.
+            let visible = buttonCenterY > 50 && buttonCenterY < geo.size.height - 10
+
+            ZStack {
+                // Context label: gate error or stale warning, shown above the button.
+                if let msg = refreshContextMessage, !store.isRouteLoading {
+                    let isGated = gateMessage != nil
+                    let accent: Color = isGated ? .roammateDanger : .roammateAmber
+
+                    Text(msg)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule()
+                                .fill(accent.opacity(0.1))
+                                .overlay(Capsule().stroke(accent.opacity(0.25), lineWidth: 0.5))
+                        )
+                        .shadow(color: .black.opacity(0.05), radius: 4, y: 1)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .position(x: geo.size.width / 2, y: buttonCenterY - 26)
+                        .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .bottom)))
+                }
+
+                // Refresh Route button
+                refreshRouteButton
+                    .fixedSize()
+                    .position(x: geo.size.width / 2, y: buttonCenterY)
+            }
+            .opacity((drawerDetent == .large || !visible) ? 0 : 1)
+            .animation(.easeInOut(duration: 0.18), value: drawerDetent == .large)
         }
     }
 
@@ -351,8 +413,6 @@ struct PlanMapPage: View {
         .animation(.easeInOut(duration: 0.2), value: store.isRouteLoading)
     }
 
-    /// Mirrors the legacy `contextMessage` computed property; lifted out so the
-    /// top-row HStack can render it on its own line beneath the controls.
     private var refreshContextMessage: String? { contextMessage }
 
     private var buttonForeground: Color {
