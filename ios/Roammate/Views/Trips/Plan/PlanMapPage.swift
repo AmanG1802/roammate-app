@@ -76,9 +76,6 @@ struct PlanMapPage: View {
     }
 
     private var gateMessage: String? {
-        if activeEvents.contains(where: { $0.lat == nil && $0.lng == nil && $0.placeId == nil }) {
-            // Some events have no location — but this is soft, not a gate
-        }
         if hasMissingTimes && hasConflicts {
             return "Add missing start times and resolve conflicts before generating the route."
         }
@@ -228,6 +225,7 @@ struct PlanMapPage: View {
             .presentationDragIndicator(.visible)
             .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.6)))
             .presentationCornerRadius(28)
+            .presentationBackground(Color.roammateSurface)
             .interactiveDismissDisabled()
             .background { ScrollableAtAnyDetent() }
         }
@@ -306,8 +304,9 @@ struct PlanMapPage: View {
                     .fixedSize()
                     .position(x: geo.size.width / 2, y: buttonCenterY)
             }
-            .opacity((drawerDetent == .large || !visible) ? 0 : 1)
+            .opacity((drawerDetent == .large || !visible || drawerTab == .ideaBin) ? 0 : 1)
             .animation(.easeInOut(duration: 0.18), value: drawerDetent == .large)
+            .animation(.easeInOut(duration: 0.18), value: drawerTab == .ideaBin)
         }
     }
 

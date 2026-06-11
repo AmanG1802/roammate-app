@@ -198,6 +198,12 @@ class BaseMapService(abc.ABC):
         self._current_trip_id: Optional[int] = None
         self._last_failure_reason: Optional[FailureReason] = None
 
+    def _has_valid_auth(self) -> bool:
+        """Returns True if this service has valid auth credentials.
+        Subclasses that use non-API-key auth (e.g. JWT) must override this.
+        """
+        return bool(self.api_key)
+
     def _track(self, **kwargs: Any) -> None:
         """Wrapper around track_call that injects current user/trip context."""
         kwargs.setdefault("user_id", self._current_user_id)
@@ -396,7 +402,7 @@ class BaseMapService(abc.ABC):
         """Parallel hydration with bounded concurrency."""
         if not items:
             return items
-        if not self._is_mock and not self.api_key:
+        if not self._is_mock and not self._has_valid_auth():
             track_call(op="enrich_batch", status="no_api_key", batch_size=len(items), user_id=user_id, trip_id=trip_id)
             return items
 
@@ -445,7 +451,7 @@ class BaseMapService(abc.ABC):
         if not items:
             return items, EnrichmentSummary(status="full", total=0, enriched=0, skipped=0)
 
-        if not self._is_mock and not self.api_key:
+        if not self._is_mock and not self._has_valid_auth():
             self._last_failure_reason = "missing_api_key"
             return items, EnrichmentSummary(
                 status="none", total=total, enriched=0, skipped=total,

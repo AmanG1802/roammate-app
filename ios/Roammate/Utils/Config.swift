@@ -55,7 +55,7 @@ enum Config {
 
     /// Last-resort LAN IP if build-time injection produced nothing. Normal
     /// device builds overwrite this automatically; keep it roughly current.
-    private static let fallbackLANHost = "192.168.1.102"
+    private static let fallbackLANHost = "192.168.1.107"
     #endif
 }
 
