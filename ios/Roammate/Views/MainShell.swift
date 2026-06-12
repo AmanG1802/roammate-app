@@ -51,9 +51,12 @@ struct MainShell: View {
         }
         .onChange(of: authManager.currentUser?.id) { _, _ in evaluateOnboarding() }
         // The guided tour runs on the Dashboard tab — jump there when it starts
-        // so steps 1–2 (and the trip we push) land on the right screen.
+        // (inProgress) or when the user replays (notStarted), so the Welcome
+        // Banner always appears over the dashboard, not the Profile screen.
         .onChange(of: tutorialStore.status) { _, newStatus in
-            if newStatus == .inProgress { selection = .dashboard }
+            if newStatus == .inProgress || newStatus == .notStarted {
+                selection = .dashboard
+            }
         }
         .onChange(of: subscriptionStore.entitlement.tier) { _, newTier in
             // Detect plus → free downgrade; clear the seen flag so the pitch

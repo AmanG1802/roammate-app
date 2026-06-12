@@ -174,6 +174,22 @@ export default function DashboardPage() {
     return () => controller.abort();
   }, []);
 
+  // When the tutorial deletes its seeded trip, drop it optimistically (instant
+  // UI update even though we're already on /dashboard) then refetch from the DB
+  // to reconcile. Mirrors the iOS optimistic-delete in TutorialCoordinator.
+  useEffect(() => {
+    const onTutorialTripDeleted = (evt: Event) => {
+      const id = (evt as CustomEvent).detail?.tripId;
+      if (id != null) {
+        setTrips((prev) => prev.filter((t) => String(t.id) !== String(id)));
+      }
+      fetchTrips(); // reconcile with DB
+    };
+    window.addEventListener('tutorial:trip-deleted', onTutorialTripDeleted as EventListener);
+    return () =>
+      window.removeEventListener('tutorial:trip-deleted', onTutorialTripDeleted as EventListener);
+  }, []);
+
   const fetchTrips = async (signal?: AbortSignal) => {
     setTripsError(false);
     try {

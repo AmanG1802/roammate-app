@@ -77,6 +77,15 @@ final class TripStore: ObservableObject {
         }
     }
 
+    /// Optimistically drop a trip from the in-memory list + cache without a
+    /// network round-trip. Used when another flow (e.g. the tutorial) deletes a
+    /// trip server-side so the dashboard updates instantly; callers should
+    /// follow with `load()` to reconcile against the DB.
+    func removeLocally(id: Int) {
+        trips.removeAll { $0.id == id }
+        DiskCache.shared.store(trips, key: cacheKey)
+    }
+
     // MARK: - Invitations
 
     func acceptInvitation(memberId: Int) async {

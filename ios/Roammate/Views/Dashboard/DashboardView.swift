@@ -15,12 +15,20 @@ struct DashboardView: View {
     @State private var activeTripEvents: [Event] = []
     // id of the tutorial trip we've pushed onto `path`, so we push/pop exactly once.
     @State private var tutorialTripPushed: Int? = nil
-    // True while the Plan-a-trip sheet is running the tutorial's canned demo.
-    @State private var planDemoMode = false
     // Set when the demo's "Create Trip" is tapped so the tour advances (and the
     // trip is pushed) only after the sheet has fully dismissed — pushing onto the
     // stack while the sheet is still animating away intermittently drops the push.
     @State private var advanceAfterDemoDismiss = false
+
+    // True for both the plan-trip step (2) and the preview step (3) so the demo
+    // Create button stays visible after the preview is shown — derived from live
+    // tutorial state, no separate flag to desync.
+    private var isPlanDemoMode: Bool {
+        tutorial.isActive && (
+            tutorial.currentStep == TutorialScript.number(of: .planTrip) ||
+            tutorial.currentStep == TutorialScript.number(of: .planPreview)
+        )
+    }
 
     private var firstName: String {
         authManager.currentUser?.name?
@@ -102,7 +110,6 @@ struct DashboardView: View {
                 await loadActiveTripEvents()
             }
             .sheet(isPresented: $showPlanTrip, onDismiss: {
-                planDemoMode = false
                 // Advance only after the sheet is fully gone, so applyTutorialNav
                 // pushes the trip onto a settled NavigationStack rather than
                 // racing the sheet's dismiss animation (which sometimes left
@@ -119,7 +126,7 @@ struct DashboardView: View {
                         // Push the newly created trip's landing view.
                         path.append(created)
                     },
-                    demoMode: planDemoMode,
+                    demoMode: isPlanDemoMode,
                     onDemoPreviewShown: {
                         Task { await tutorial.advance(to: TutorialScript.number(of: .planPreview)) }
                     },
@@ -128,7 +135,6 @@ struct DashboardView: View {
                         // exists. Just close the sheet; the advance + trip push
                         // happen in onDismiss once the sheet has fully dismissed.
                         advanceAfterDemoDismiss = true
-                        planDemoMode = false
                         showPlanTrip = false
                     }
                 )
@@ -136,12 +142,7 @@ struct DashboardView: View {
                 .presentationDragIndicator(.visible)
             }
             .onReceive(NotificationCenter.default.publisher(for: .tutorialStartPlanDemo)) { _ in
-                // Commit `planDemoMode` first, then present on the next runloop.
-                // Flipping both in the same update let the sheet capture a stale
-                // `demoMode = false`, so the drawer opened without running the
-                // demo on the first "Try Now" tap.
-                planDemoMode = true
-                DispatchQueue.main.async { showPlanTrip = true }
+                showPlanTrip = true
             }
             .onChange(of: path) { _, newPath in
                 if newPath.isEmpty {

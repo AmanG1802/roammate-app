@@ -5,6 +5,7 @@ import SwiftUI
 /// `tutorialAnchor(_:)` modifiers placed deep in the view tree.
 struct TutorialCoordinator<Content: View>: View {
     @EnvironmentObject var tutorial: TutorialStore
+    @EnvironmentObject var tripStore: TripStore
     @State private var welcomeOpen = false
     @State private var finishPromptOpen = false
     @State private var tryItLoading = false
@@ -21,40 +22,54 @@ struct TutorialCoordinator<Content: View>: View {
                     overlayBody(anchors: anchors, geo: geo)
                 }
             }
+            .overlay {
+                if welcomeOpen {
+                    ZStack {
+                        Color.black.opacity(0.45)
+                            .ignoresSafeArea()
+                            .onTapGesture { } // absorb taps — not dismissible by tapping outside
+                        WelcomeSheet(
+                            onStart: {
+                                Task {
+                                    await tutorial.start()
+                                    welcomeOpen = false
+                                }
+                            },
+                            onSkip: {
+                                Task {
+                                    await tutorial.skip()
+                                    welcomeOpen = false
+                                }
+                            }
+                        )
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.88), value: welcomeOpen)
             .task {
                 await tutorial.loadStatus()
                 evaluateWelcome()
             }
             .onChange(of: tutorial.status) { _, _ in evaluateWelcome() }
-            .sheet(isPresented: $welcomeOpen) {
-                WelcomeSheet(
-                    onStart: {
-                        Task {
-                            await tutorial.start()
-                            welcomeOpen = false
-                        }
-                    },
-                    onSkip: {
-                        Task {
-                            await tutorial.skip()
-                            welcomeOpen = false
-                        }
-                    }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
             .sheet(isPresented: $finishPromptOpen) {
                 FinishPrompt(
                     onDelete: {
+                        // Optimistically drop the seeded trip from the list so
+                        // the dashboard updates instantly, delete it server-side,
+                        // then reconcile against the DB.
+                        let id = tutorial.tutorialTripId
+                        if let id { tripStore.removeLocally(id: id) }
                         Task {
                             await tutorial.deleteTutorialTrip()
+                            await tripStore.load()
                             finishPromptOpen = false
                         }
                     },
                     onKeep: { finishPromptOpen = false }
                 )
                 .presentationDetents([.fraction(0.32)])
+                .presentationBackground(Color.roammateSurface)
             }
     }
 
@@ -82,7 +97,17 @@ struct TutorialCoordinator<Content: View>: View {
 
     private func evaluateWelcome() {
         guard !tutorial.isLoading else { return }
-        welcomeOpen = (tutorial.status == .notStarted)
+        if tutorial.status == .notStarted {
+            // Delay so the tab-switch animation to Dashboard (triggered by the
+            // same status change in MainShell, 180ms easeInOut) completes before
+            // the Welcome overlay fades in.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                guard tutorial.status == .notStarted else { return }
+                welcomeOpen = true
+            }
+        } else {
+            welcomeOpen = false
+        }
     }
 
     private func advance(from step: TutorialStep, isLast: Bool) async {

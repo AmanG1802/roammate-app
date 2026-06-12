@@ -16,6 +16,7 @@ struct TripConciergeView: View {
     @EnvironmentObject var detailStore: TripDetailStore
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var tutorial: TutorialStore
 
     @State private var inputText = ""
     @StateObject private var speech = SpeechRecognizer()
@@ -41,6 +42,7 @@ struct TripConciergeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .tutorialConciergeSend)) { note in
             guard let text = note.userInfo?["message"] as? String else { return }
+            tutorial.conciergeSampleSent = true
             Task { await store.send(text) }
         }
         .onAppear { primeFallbackCoordinate() }

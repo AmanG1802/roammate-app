@@ -42,6 +42,12 @@ enum TutorialService {
         try await APIClient.shared.request("/tutorial/replay", method: "POST")
     }
 
+    // Resets to not_started (deletes trip, clears progress) so the Welcome
+    // banner shows again on iOS. The next /start seeds a fresh tutorial trip.
+    static func reset() async throws -> TutorialState {
+        try await APIClient.shared.request("/tutorial/reset", method: "POST")
+    }
+
     static func deleteTrip() async throws -> TutorialState {
         try await APIClient.shared.request("/tutorial/trip", method: "DELETE")
     }

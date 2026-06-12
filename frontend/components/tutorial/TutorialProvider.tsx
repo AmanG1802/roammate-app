@@ -197,8 +197,19 @@ function TutorialDriverInner() {
   }, [currentStep, tutorial.trip_id]);
 
   const handleDeleteFinish = useCallback(async () => {
+    // Capture before the mutation — the returned state clears trip_id.
+    const deletedId = tutorial.trip_id;
     await tutorial.deleteTutorialTrip();
     setFinishPromptOpen(false);
+    // Mirror the iOS optimistic-delete: tell the dashboard to drop the trip
+    // immediately and refetch from the DB. Needed because the user finishes the
+    // tour on /dashboard, where router.push('/dashboard') is a no-op and won't
+    // remount/refetch — leaving the deleted trip on screen until reload.
+    if (deletedId != null) {
+      window.dispatchEvent(
+        new CustomEvent('tutorial:trip-deleted', { detail: { tripId: deletedId } })
+      );
+    }
     router.push('/dashboard');
   }, [tutorial, router]);
 

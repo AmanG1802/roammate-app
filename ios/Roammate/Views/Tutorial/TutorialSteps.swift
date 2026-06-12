@@ -29,7 +29,7 @@ struct TutorialStep: Identifiable {
 }
 
 enum PopoverPlacement {
-    case top, bottom, center
+    case top, bottom, center, bottomForced
 }
 
 enum TryItAction {
@@ -76,12 +76,12 @@ enum TutorialScript {
               title: "Day-by-day timeline",
               body: "Your itinerary, sorted by day. Conflicts and travel times surface automatically.",
               anchorID: nil, tryItLabel: nil, tryItAction: nil,
-              placement: .center),
+              placement: .top),
         .init(id: .ideaBin, number: 8,
               title: "Shared ideas → timeline",
               body: "Promote a shared idea, then refresh the route to see the map redraw.",
               anchorID: nil, tryItLabel: nil, tryItAction: nil,
-              placement: .center),
+              placement: .top),
         .init(id: .concierge, number: 9,
               title: "Meet Concierge",
               body: "Your on-trip copilot — normally Plus, but the tour gives you a free taste.",

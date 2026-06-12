@@ -75,14 +75,14 @@ struct SpotlightOverlay: View {
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: rect)
         .animation(.easeInOut(duration: 0.28), value: revealed)
-        .animation(.easeInOut(duration: 0.2), value: popoverVisible)
+        .animation(.easeInOut(duration: 0.4), value: popoverVisible)
         .task(id: step.number) {
             // Hide the spotlight immediately so it doesn't linger over the
             // outgoing screen, then let the page/navigation transition settle
             // before revealing it on the destination page.
             revealed = false
             showFallback = false
-            try? await Task.sleep(nanoseconds: 340_000_000)
+            try? await Task.sleep(nanoseconds: 500_000_000)
             revealed = true
             // Anchorless steps (wrap-up) and any never-resolving anchor still get
             // a centred popover after a short grace period.
@@ -213,8 +213,8 @@ struct SpotlightOverlay: View {
             if h > 0, abs(h - cardHeight) > 1 { cardHeight = h }
         }
         .position(position)
-        .animation(.easeInOut(duration: 0.2), value: position)
-        .transition(.scale(scale: 0.97).combined(with: .opacity))
+        .animation(.spring(response: 0.45, dampingFraction: 0.78), value: position)
+        .transition(.opacity)
     }
 
     private var stepDots: some View {
@@ -242,7 +242,13 @@ struct SpotlightOverlay: View {
         let topY = topSafe + half
         let bottomY = size.height - bottomSafe - half
 
-        switch step.placement {
+        // Step 9 (concierge): after the sample message is sent, slide the card
+        // to the bottom so the AI response is visible above it.
+        let effectivePlacement: PopoverPlacement = (tutorial.conciergeSampleSent && step.id == .concierge)
+            ? .bottomForced
+            : step.placement
+
+        switch effectivePlacement {
         case .center:
             return CGPoint(x: centerX, y: size.height / 2)
         case .top:
@@ -253,6 +259,8 @@ struct SpotlightOverlay: View {
             if let r = target, r.minY > size.height * 0.55 {
                 return CGPoint(x: centerX, y: topY)
             }
+            return CGPoint(x: centerX, y: bottomY)
+        case .bottomForced:
             return CGPoint(x: centerX, y: bottomY)
         }
     }

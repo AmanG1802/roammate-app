@@ -44,13 +44,13 @@ final class PlanTripStore: ObservableObject {
         let sample = "A 3-day New York City trip with iconic landmarks, food, and parks"
         for ch in sample {
             prompt.append(ch)
-            try? await Task.sleep(nanoseconds: 18_000_000)
+            try? await Task.sleep(nanoseconds: 46_000_000)
         }
         try? await Task.sleep(nanoseconds: 200_000_000)
         messages.append(PlanTripMessage(role: "user", text: sample))
         prompt = ""
         phase = .planning
-        try? await Task.sleep(nanoseconds: 2_600_000_000)
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
         let canned = Self.tutorialPreview
         preview = canned
         if let out = canned.userOutput, !out.isEmpty {
