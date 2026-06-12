@@ -23,11 +23,14 @@ enum IntroBackground: Equatable {
     func fill() -> some View {
         switch self {
         case .lightTint(let accent):
+            // Soft accent tint from top → bottom. Pinned to light so it never
+            // shifts when the device is in dark mode.
             LinearGradient(
                 colors: [Color.roammateSurface, accent.opacity(0.10)],
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .environment(\.colorScheme, .light)
         case .dark:
             Color.roammateInk
         case .indigo:

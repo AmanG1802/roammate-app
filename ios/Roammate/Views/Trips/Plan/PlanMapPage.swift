@@ -140,6 +140,7 @@ struct PlanMapPage: View {
                 }
             }
             .mapStyle(mapStyle)
+            .environment(\.colorScheme, .light)
             .ignoresSafeArea(edges: .top)
             .onTapGesture {
                 selectedEventId = nil
