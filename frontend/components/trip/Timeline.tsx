@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTripStore, Event, Idea, legsKey, RouteLeg, reEnrichItem } from '@/lib/store';
-import { getToken } from '@/lib/auth';
 import { format } from 'date-fns';
 import { formatTimeOfDay, type TimeOfDay } from '@/lib/time';
 import { Clock, MapPin, AlertCircle, Pencil, X, GripVertical, Undo2, Check, Info, Star, UserCircle } from 'lucide-react';
@@ -284,10 +283,8 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
 
   useEffect(() => {
     if (!tripId) return;
-    const token = getToken();
-    if (!token) return;
     setIsLoadingEvents(true);
-    loadEvents(tripId, token).finally(() => setIsLoadingEvents(false));
+    loadEvents(tripId, '').finally(() => setIsLoadingEvents(false));
   }, [tripId, loadEvents]);
 
   // Scroll the matching card into view when a marker is clicked on the map
@@ -324,10 +321,9 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     const ideaId = e.dataTransfer.getData('ideaId');
     if (!ideaId) return;
     if (noDaysExist) return;
-    const token = getToken();
     const idea = ideas.find((i: Idea) => i.id === ideaId);
     const startTime = idea?.start_time ?? null;
-    moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
+    moveIdeaToTimeline(ideaId, tripId, '', startTime, filterDayStr);
   };
 
   const handleEventDragStart = (e: React.DragEvent, eventId: string) => {
@@ -344,14 +340,12 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
     e.preventDefault();
     e.stopPropagation();
 
-    const token = getToken();
-
     const ideaId = e.dataTransfer.getData('ideaId');
     if (ideaId) {
       if (noDaysExist) { setDraggingId(null); setDragOverId(null); return; }
       const idea = ideas.find((i: Idea) => i.id === ideaId);
       const startTime = idea?.start_time ?? null;
-      moveIdeaToTimeline(ideaId, tripId, token, startTime, filterDayStr);
+      moveIdeaToTimeline(ideaId, tripId, '', startTime, filterDayStr);
       setDraggingId(null);
       setDragOverId(null);
       return;
@@ -375,7 +369,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
 
     const updated = ordered.map((ev, i) => ({ ...ev, sort_order: i }));
     setEventsRaw(updated);
-    updated.forEach((ev) => reorderEvent(ev.id, ev.sort_order, token));
+    updated.forEach((ev) => reorderEvent(ev.id, ev.sort_order, ''));
 
     setDraggingId(null);
     setDragOverId(null);
@@ -549,8 +543,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                               title="Restore this event"
                               data-testid={`unskip-${event.id}`}
                               onClick={() => {
-                                const token = getToken();
-                                toggleEventSkip(event.id, token);
+                                toggleEventSkip(event.id, '');
                               }}
                               className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 uppercase tracking-tighter transition-colors"
                             >
@@ -562,8 +555,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                               title="Send back to Idea Bin"
                               data-testid={`move-to-bin-${event.id}`}
                               onClick={() => {
-                                const token = getToken();
-                                moveEventToIdea(event.id, tripId, token);
+                                moveEventToIdea(event.id, tripId, '');
                               }}
                               className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-tighter transition-colors opacity-0 group-hover:opacity-100"
                             >
@@ -579,8 +571,7 @@ export default function Timeline({ tripId, filterDay, readOnly = false, canVote 
                         <TimeEditor
                           event={event}
                           onConfirm={(start, end) => {
-                            const token = getToken();
-                            updateEventTime(event.id, start, end, token);
+                            updateEventTime(event.id, start, end, '');
                             setEditingId(null);
                           }}
                           onCancel={() => setEditingId(null)}

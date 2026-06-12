@@ -10,14 +10,13 @@ import {
 import { useTripStore, Event } from '@/lib/store';
 import type { RouteLeg } from '@/lib/store';
 import { categoryPinColor, categoryAccent } from '@/lib/categoryColors';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { formatTimeOfDay } from '@/lib/time';
 import MapOverlayLayer, { useMapBreakpoint } from './MapOverlayLayer';
 
 const MOCK_MODE =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_MOCK ?? 'false').toLowerCase() === 'true';
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 const SHOW_PHOTOS =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_PHOTOS ?? 'true').toLowerCase() === 'true';
 const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID ?? 'ROAMMATE_MAP_ID';
@@ -269,21 +268,14 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
   // ── Auto-fetch persisted route on mount / day switch ─────────────────
   useEffect(() => {
     if (!tripId || !currentDayKey) return;
-    const token = getToken();
-    if (!token) return;
 
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await fetch(
-          `${API_BASE}/trips/${tripId}/route?day_date=${currentDayKey}`,
-          { headers: { Authorization: `Bearer ${token}` } },
+        const data = await api<RouteResponse | null>(
+          `/api/trips/${tripId}/route?day_date=${currentDayKey}`,
         );
-        if (cancelled) return;
-        if (!res.ok || res.status === 204) return;
-
-        const data: RouteResponse | null = await res.json();
         if (cancelled || !data || !data.encoded_polyline) return;
 
         setLastRouteData(data);
@@ -717,48 +709,12 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
-      setToast({ kind: 'error', message: 'Sign in required.' });
-      return;
-    }
-
     setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE}/trips/${tripId}/route`, {
+      const data = await api<RouteResponse>(`/api/trips/${tripId}/route`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ day_date: toLocalISODate(filterDay) }),
+        json: { day_date: toLocalISODate(filterDay) },
       });
-
-      if (res.status === 422) {
-        const err = await res.json().catch(() => null);
-        const detail = err?.detail;
-        const code =
-          (typeof detail === 'object' && detail?.detail) ||
-          (typeof detail === 'string' && detail);
-        if (code === 'missing_start_times') {
-          setToast({
-            kind: 'error',
-            message: 'Add a start time to every item before generating the route.',
-          });
-        } else if (code === 'time_conflicts') {
-          setToast({
-            kind: 'error',
-            message: 'Resolve time conflicts in the timeline before generating the route.',
-          });
-        } else {
-          setToast({ kind: 'error', message: 'Could not compute route.' });
-        }
-        return;
-      }
-
-      if (!res.ok) {
-        setToast({ kind: 'error', message: 'Could not compute route.' });
-        return;
-      }
-
-      const data: RouteResponse = await res.json();
 
       if (tripId && currentDayKey) {
         useTripStore.getState().setRouteLegs(tripId, currentDayKey, data.legs);
@@ -814,7 +770,27 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
           `Route updated: ${(data.total_distance_m / 1000).toFixed(1)} km, ` +
           `${Math.round(data.total_duration_s / 60)} min.${suffix}`,
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 422) {
+        const detail = (err.data as any)?.detail;
+        const code =
+          (typeof detail === 'object' && detail?.detail) ||
+          (typeof detail === 'string' && detail);
+        if (code === 'missing_start_times') {
+          setToast({
+            kind: 'error',
+            message: 'Add a start time to every item before generating the route.',
+          });
+        } else if (code === 'time_conflicts') {
+          setToast({
+            kind: 'error',
+            message: 'Resolve time conflicts in the timeline before generating the route.',
+          });
+        } else {
+          setToast({ kind: 'error', message: 'Could not compute route.' });
+        }
+        return;
+      }
       setToast({ kind: 'error', message: 'Network error — try again.' });
     } finally {
       setRefreshing(false);

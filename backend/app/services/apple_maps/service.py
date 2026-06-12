@@ -49,6 +49,9 @@ class AppleMapsService(BaseMapService):  # pragma: no cover
             team_id=team_id, key_id=key_id, private_key_path=private_key_path
         )
 
+    def _has_valid_auth(self) -> bool:
+        return True  # auth is JWT via _token_provider, not an API key
+
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token_provider.token()}"}
 

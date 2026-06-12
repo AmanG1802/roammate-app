@@ -8,20 +8,11 @@ import {
   ArrowRight, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { useTripStore } from '@/lib/store';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { formatTimeOfDay, timeOfDayFromDate } from '@/lib/time';
 import clsx from 'clsx';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 import VoiceInputButton from '@/components/common/VoiceInputButton';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-function authHeaders(): HeadersInit {
-  const token = getToken();
-  return token
-    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-    : { 'Content-Type': 'application/json' };
-}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -280,8 +271,7 @@ export default function ConciergeChatDrawer({
 
   const refreshEvents = async () => {
     if (activeTripId) {
-      const token = getToken() ?? '';
-      await loadEvents(activeTripId, token);
+      await loadEvents(activeTripId, '');
     }
   };
 
@@ -297,14 +287,10 @@ export default function ConciergeChatDrawer({
     addMessage({ id: userMsgId, role: 'user', content: msg, type: 'text' });
 
     try {
-      const res = await fetch(`${API}/concierge/${activeTripId}/chat`, {
+      const data = await api<Record<string, any>>(`/api/concierge/${activeTripId}/chat`, {
         method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ message: msg }),
+        json: { message: msg },
       });
-
-      if (!res.ok) throw new Error('Chat failed');
-      const data = await res.json();
 
       if (data.intent === 'find_nearby') {
         addMessage({
@@ -346,14 +332,11 @@ export default function ConciergeChatDrawer({
     updateMessage(msgId, { status: 'confirmed' });
 
     try {
-      const res = await fetch(`${API}/concierge/${activeTripId}/execute`, {
+      await api(`/api/concierge/${activeTripId}/execute`, {
         method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ intent, params }),
+        json: { intent, params },
       });
-      if (res.ok) {
-        await refreshEvents();
-      }
+      await refreshEvents();
     } catch {
       updateMessage(msgId, { status: 'pending' });
     }
@@ -458,14 +441,11 @@ export default function ConciergeChatDrawer({
     try {
       const payload: Record<string, unknown> = { query, lat, lng, limit: 3 };
       if (category) payload.category = category;
-      const res = await fetch(`${API}/concierge/${activeTripId}/find-nearby`, {
+      const data = await api<{ places: PlaceCard[] }>(`/api/concierge/${activeTripId}/find-nearby`, {
         method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(payload),
+        json: payload,
         signal: controller.signal,
       });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
 
       updateMessage(replaceId, {
         content: `Found ${data.places.length} option${data.places.length !== 1 ? 's' : ''} nearby:`,
@@ -525,12 +505,7 @@ export default function ConciergeChatDrawer({
     addMessage({ id: loadingId, role: 'assistant', content: 'Loading your day...', type: 'text' });
 
     try {
-      const res = await fetch(`${API}/concierge/${activeTripId}/today-summary`, {
-        headers: authHeaders(),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-
+      const data = await api<Record<string, any>>(`/api/concierge/${activeTripId}/today-summary`);
       updateMessage(loadingId, {
         content: '',
         type: 'summary',
@@ -547,12 +522,7 @@ export default function ConciergeChatDrawer({
     addMessage({ id: loadingId, role: 'assistant', content: 'Checking...', type: 'text' });
 
     try {
-      const res = await fetch(`${API}/concierge/${activeTripId}/whats-next`, {
-        headers: authHeaders(),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-
+      const data = await api<Record<string, any>>(`/api/concierge/${activeTripId}/whats-next`);
       updateMessage(loadingId, {
         content: '',
         type: 'whats_next',

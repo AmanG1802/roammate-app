@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ApiError, auth, type TokenPair } from '@/lib/api';
-import { setToken } from '@/lib/auth';
 import { AuthCard, StatusBanner } from '@/components/auth/AuthCard';
 import { EmailField, PasswordField } from '@/components/auth/Fields';
 import { Divider, PrimaryButton } from '@/components/auth/PrimaryButton';
@@ -21,7 +20,6 @@ function LoginInner() {
   const [status, setStatus] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
 
   const onLand = (pair: TokenPair) => {
-    setToken(pair.access_token);
     if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
     router.push(next);
   };

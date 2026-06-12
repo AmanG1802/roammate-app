@@ -26,7 +26,7 @@ const GoogleMap = dynamic(() => import('@/components/map/GoogleMap'), {
 // Collaborators header removed — invite flow lives in People tab now
 import ConciergeActionBar from '@/components/trip/ConciergeActionBar';
 import { useTripStore, TripDay } from '@/lib/store';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/components/ui/Toast';
 import { addDays, format, isToday, parseISO } from 'date-fns';
 
@@ -82,19 +82,11 @@ function TripPlannerPageContent() {
   const [membersError, setMembersError] = useState(false);
   const fetchMembers = useCallback(async () => {
     if (!tripId) return;
-    const token = getToken();
-    if (!token) return;
     setMembersLoading(true);
     setMembersError(false);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setMembers(await res.json());
-      } else {
-        setMembersError(true);
-      }
+      const data = await api<any[]>(`/api/trips/${tripId}/members`);
+      setMembers(data);
     } catch {
       setMembersError(true);
     } finally {
@@ -122,26 +114,18 @@ function TripPlannerPageContent() {
     if (!inviteEmail.trim() || !inviteRole || !tripId) return;
     setInviteStatus('loading');
     setInviteError('');
-    const token = getToken();
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/invite`, {
+      await api(`/api/trips/${tripId}/invite`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+        json: { email: inviteEmail, role: inviteRole },
       });
-      if (res.ok) {
-        setInviteEmail('');
-        setInviteRole('');
-        setInviteStatus('success');
-        fetchMembers();
-        setTimeout(() => setInviteStatus('idle'), 2000);
-      } else {
-        const err = await res.json().catch(() => null);
-        setInviteError(err?.detail ?? 'Could not invite user');
-        setInviteStatus('error');
-      }
-    } catch {
-      setInviteError('Network error — please try again');
+      setInviteEmail('');
+      setInviteRole('');
+      setInviteStatus('success');
+      fetchMembers();
+      setTimeout(() => setInviteStatus('idle'), 2000);
+    } catch (err) {
+      setInviteError(err instanceof ApiError ? (err.data as any)?.detail ?? 'Could not invite user' : 'Network error — please try again');
       setInviteStatus('error');
     }
   }, [inviteEmail, inviteRole, tripId, fetchMembers]);
@@ -149,21 +133,15 @@ function TripPlannerPageContent() {
   const handleRoleChange = useCallback(async (memberId: number, newRole: string) => {
     if (!tripId) return;
     setRoleUpdateLoading(true);
-    const token = getToken();
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members/${memberId}/role`, {
+      await api(`/api/trips/${tripId}/members/${memberId}/role`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ role: newRole }),
+        json: { role: newRole },
       });
-      if (res.ok) {
-        fetchMembers();
-        toast.show('Role updated', { kind: 'success' });
-      } else {
-        toast.show("Couldn't update role — please try again", { kind: 'error' });
-      }
+      fetchMembers();
+      toast.show('Role updated', { kind: 'success' });
     } catch {
-      toast.show('Network error — role not updated', { kind: 'error' });
+      toast.show("Couldn't update role — please try again", { kind: 'error' });
     } finally {
       setRoleUpdateLoading(false);
       setEditingRoleFor(null);
@@ -174,20 +152,12 @@ function TripPlannerPageContent() {
   const handleRemoveMember = useCallback(async (memberId: number) => {
     if (!tripId) return;
     setRemoveLoading(true);
-    const token = getToken();
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/members/${memberId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok || res.status === 204) {
-        fetchMembers();
-        toast.show('Member removed', { kind: 'success' });
-      } else {
-        toast.show("Couldn't remove member — please try again", { kind: 'error' });
-      }
+      await api(`/api/trips/${tripId}/members/${memberId}`, { method: 'DELETE' });
+      fetchMembers();
+      toast.show('Member removed', { kind: 'success' });
     } catch {
-      toast.show('Network error — member not removed', { kind: 'error' });
+      toast.show("Couldn't remove member — please try again", { kind: 'error' });
     } finally {
       setRemoveLoading(false);
       setRemoveConfirm(null);
@@ -196,15 +166,9 @@ function TripPlannerPageContent() {
 
   const refreshTripData = useCallback(async () => {
     if (!tripId) return;
-    const token = getToken();
-    if (!token) return;
 
     await Promise.all([
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      })
-        .then((res) => (res.ok ? res.json() : null))
+      api<any>(`/api/trips/${tripId}`, { cache: 'no-store' })
         .then((data) => {
           if (data) {
             setTrip(data);
@@ -212,8 +176,8 @@ function TripPlannerPageContent() {
           }
         })
         .catch(() => {}),
-      loadTripDays(tripId, token),
-      loadEvents(tripId, token),
+      loadTripDays(tripId, ''),
+      loadEvents(tripId, ''),
       fetchMembers(),
     ]);
   }, [tripId, loadTripDays, loadEvents, fetchMembers, setActiveTripTimezone]);
@@ -268,8 +232,6 @@ function TripPlannerPageContent() {
 
   const handleAddDay = useCallback(async () => {
     if (!tripId) return;
-    const token = getToken();
-    if (!token) return;
 
     let nextDate: Date;
     if (tripDays.length > 0) {
@@ -282,7 +244,7 @@ function TripPlannerPageContent() {
     }
 
     const dateStr = format(nextDate, 'yyyy-MM-dd');
-    const newDay = await addTripDay(tripId, dateStr, token);
+    const newDay = await addTripDay(tripId, dateStr, '');
     if (newDay) {
       const newDays = [...tripDays, newDay].sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -300,12 +262,10 @@ function TripPlannerPageContent() {
 
     const dayHasEvents = events.some((e) => e.day_date === dayToDelete.date);
     if (!dayHasEvents) {
-      const token = getToken();
-      if (!token) return;
       mutatingRef.current = true;
       try {
-        await deleteTripDay(tripId, dayToDelete.id, token, 'delete');
-        await loadEvents(tripId, token);
+        await deleteTripDay(tripId, dayToDelete.id, '', 'delete');
+        await loadEvents(tripId, '');
         setPlanDayIdx((prev) => {
           const newLen = tripDays.length - 1;
           if (newLen <= 0) return 0;
@@ -322,46 +282,38 @@ function TripPlannerPageContent() {
 
   const executeDeleteDay = useCallback(async (itemsAction: 'bin' | 'delete') => {
     if (!tripId || !deleteConfirm) return;
-    const token = getToken();
-    if (!token) return;
 
     mutatingRef.current = true;
     try {
-      await deleteTripDay(tripId, deleteConfirm.dayId, token, itemsAction);
+      await deleteTripDay(tripId, deleteConfirm.dayId, '', itemsAction);
 
       // If items were sent to bin, reload ideas so they appear immediately
       if (itemsAction === 'bin') {
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/ideas`, {
-            headers: { Authorization: `Bearer ${token}` },
-            cache: 'no-store',
-          });
-          if (res.ok) {
-            const raw = await res.json();
-            const { setIdeas } = useTripStore.getState();
-            setIdeas(raw.map((r: any) => ({
-              id: String(r.id),
-              title: r.title,
-              lat: r.lat ?? 0,
-              lng: r.lng ?? 0,
-              place_id: r.place_id ?? null,
-              start_time: r.start_time ?? null,
-              end_time: r.end_time ?? null,
-              added_by: r.added_by ?? null,
-              up: r.up ?? 0,
-              down: r.down ?? 0,
-              my_vote: r.my_vote ?? 0,
-              category: r.category ?? null,
-              photo_url: r.photo_url ?? null,
-              rating: r.rating ?? null,
-              address: r.address ?? null,
-              description: r.description ?? null,
-            })));
-          }
+          const raw = await api<any[]>(`/api/trips/${tripId}/ideas`, { cache: 'no-store' });
+          const { setIdeas } = useTripStore.getState();
+          setIdeas(raw.map((r: any) => ({
+            id: String(r.id),
+            title: r.title,
+            lat: r.lat ?? 0,
+            lng: r.lng ?? 0,
+            place_id: r.place_id ?? null,
+            start_time: r.start_time ?? null,
+            end_time: r.end_time ?? null,
+            added_by: r.added_by ?? null,
+            up: r.up ?? 0,
+            down: r.down ?? 0,
+            my_vote: r.my_vote ?? 0,
+            category: r.category ?? null,
+            photo_url: r.photo_url ?? null,
+            rating: r.rating ?? null,
+            address: r.address ?? null,
+            description: r.description ?? null,
+          })));
         } catch { /* ignore */ }
       }
 
-      await loadEvents(tripId, token);
+      await loadEvents(tripId, '');
     } finally {
       mutatingRef.current = false;
     }

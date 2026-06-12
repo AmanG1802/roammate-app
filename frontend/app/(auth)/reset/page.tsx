@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/api';
-import { setToken } from '@/lib/auth';
 import { AuthCard, StatusBanner } from '@/components/auth/AuthCard';
 import { PasswordField } from '@/components/auth/Fields';
 import { PrimaryButton } from '@/components/auth/PrimaryButton';
@@ -30,7 +29,6 @@ function ResetInner() {
     setStatus(null);
     try {
       const pair = await auth.reset(token, pwd);
-      setToken(pair.access_token);
       if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
       router.push('/dashboard');
     } catch (err) {

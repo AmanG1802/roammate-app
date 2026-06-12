@@ -5,7 +5,7 @@ import { Lightbulb, Trash2, Loader2, MapPin, Info, Star, Clock, X, PackagePlus }
 import { categoryAccent } from '@/lib/categoryColors';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 import { reEnrichItem } from '@/lib/store';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 
 export type BrainstormItem = {
   id: number;
@@ -18,11 +18,6 @@ export type BrainstormItem = {
   time_category?: string | null;
   address?: string | null;
 };
-
-function authHeaders(): HeadersInit {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 const SHOW_PHOTOS =
   (process.env.NEXT_PUBLIC_GOOGLE_MAPS_FETCH_PHOTOS ?? 'true').toLowerCase() === 'true';
@@ -48,12 +43,8 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
 
   const refresh = useCallback(() => {
     setLoading(true);
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/items`, {
-      headers: authHeaders(),
-      cache: 'no-store',
-    })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: BrainstormItem[]) => setItems(data))
+    api<BrainstormItem[]>(`/api/trips/${tripId}/brainstorm/items`, { cache: 'no-store' })
+      .then((data) => setItems(data))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [tripId]);
@@ -108,20 +99,15 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
     setWorking(true);
     setPromoteError(null);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/promote`, {
+      await api(`/api/trips/${tripId}/brainstorm/promote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ item_ids: idsOrAll }),
+        json: { item_ids: idsOrAll },
       });
-      if (res.ok) {
-        window.dispatchEvent(new CustomEvent('idea-bin:refresh'));
-        exitSelection();
-        refresh();
-      } else {
-        setPromoteError('Could not promote items — please try again.');
-      }
+      window.dispatchEvent(new CustomEvent('idea-bin:refresh'));
+      exitSelection();
+      refresh();
     } catch {
-      setPromoteError('Network error — check your connection and try again.');
+      setPromoteError('Could not promote items — please try again.');
     } finally {
       setWorking(false);
     }
@@ -129,10 +115,9 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
 
   const deleteItem = async (id: number) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/items/${id}`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-    });
+    try {
+      await api(`/api/trips/${tripId}/brainstorm/items/${id}`, { method: 'DELETE' });
+    } catch { /* optimistic deletion already done */ }
   };
 
   const clearAll = async () => {
@@ -141,10 +126,9 @@ const BrainstormBin = forwardRef<BrainstormBinHandle, { tripId: string }>(functi
     setItems([]);
     setOpenId(null);
     exitSelection();
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${tripId}/brainstorm/items`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-    });
+    try {
+      await api(`/api/trips/${tripId}/brainstorm/items`, { method: 'DELETE' });
+    } catch { /* optimistic clear already done */ }
   };
 
   const toggleDetails = (id: number) => {

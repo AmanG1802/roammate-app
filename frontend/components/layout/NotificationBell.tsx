@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardR
 import { useRouter } from 'next/navigation';
 import { Bell, Check, Loader2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 
 type NotificationItem = {
   id: number;
@@ -19,13 +19,7 @@ type NotificationItem = {
 
 export type NotificationBellHandle = { refresh: () => void };
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 const POLL_MS = 30_000;
-
-function auth(): Record<string, string> {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -136,19 +130,16 @@ const NotificationBell = forwardRef<NotificationBellHandle>(
 
   const fetchUnread = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/notifications/unread-count`, { headers: auth() });
-      if (res.ok) {
-        const data = await res.json();
-        setUnread(data.unread ?? 0);
-      }
+      const data = await api<{ unread: number }>('/api/notifications/unread-count');
+      setUnread(data.unread ?? 0);
     } catch { /* ignore */ }
   }, []);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/notifications/?limit=30`, { headers: auth() });
-      if (res.ok) setItems(await res.json());
+      const data = await api<NotificationItem[]>('/api/notifications/?limit=30');
+      setItems(data);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, []);
@@ -190,7 +181,7 @@ const NotificationBell = forwardRef<NotificationBellHandle>(
     setItems((prev) => prev.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: new Date().toISOString() } : n)));
     setUnread((u) => Math.max(0, u - 1));
     try {
-      await fetch(`${API}/notifications/${id}/read`, { method: 'POST', headers: auth() });
+      await api(`/api/notifications/${id}/read`, { method: 'POST' });
     } catch { /* optimistic — already updated */ }
   }, []);
 
@@ -198,7 +189,7 @@ const NotificationBell = forwardRef<NotificationBellHandle>(
     setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })));
     setUnread(0);
     try {
-      await fetch(`${API}/notifications/mark-all-read`, { method: 'POST', headers: auth() });
+      await api('/api/notifications/mark-all-read', { method: 'POST' });
     } catch { /* optimistic */ }
   }, []);
 

@@ -46,7 +46,7 @@ vi.mock('@/hooks/useAuth', () => ({
 // ── Import component AFTER all mocks — catches SyntaxErrors at collection time ─
 // If TripHubPage has `await` in a non-async callback, this import would throw a
 // SyntaxError and fail the entire test file at collection, making the bug obvious.
-import TripHubPage from '../app/trips/[id]/page';
+import TripHubPage from '../app/(authenticated)/trips/[id]/page';
 
 // ── Fixtures ────────────────────────────────���─────────────────────────────────
 const TRIP_FIXTURE = {

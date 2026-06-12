@@ -81,13 +81,18 @@ struct TimelineDrawerContent: View {
             } else if let day = currentDay {
                 daySectionHeader(day: day, count: currentEvents.count)
 
+                // ScrollView in both branches keeps the proposed height context
+                // consistent — prevents SwiftUI from pushing EmptyState down
+                // when the else branch would have had a ScrollView.
+                ScrollView {
                 if currentEvents.isEmpty {
                     EmptyState(
                         icon: "calendar.badge.plus",
                         title: "No events yet",
                         subtitle: "Add ideas from the Idea Bin to build your timeline."
                     )
-                    .padding(.top, RoammateSpacing.xl)
+                    .padding(.top, RoammateSpacing.lg)
+                    .frame(maxWidth: .infinity)
                 } else {
                     let events = displayEvents
                     LazyVStack(spacing: 0) {
@@ -124,6 +129,7 @@ struct TimelineDrawerContent: View {
                     }
                     .animation(.spring(response: 0.35, dampingFraction: 0.8), value: events.map(\.id))
                 }
+                } // end ScrollView
             }
         }
         .onChange(of: selectedDayIndex) { _, _ in

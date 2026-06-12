@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/api';
-import { setToken } from '@/lib/auth';
 import { AuthCard, StatusBanner } from '@/components/auth/AuthCard';
 
 function VerifyInner() {
@@ -22,7 +21,6 @@ function VerifyInner() {
       try {
         const pair = await auth.verify(token);
         if (cancelled) return;
-        setToken(pair.access_token);
         if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
         setStatus({ type: 'success', message: 'Email verified! Redirecting…' });
         setTimeout(() => router.push('/dashboard'), 600);

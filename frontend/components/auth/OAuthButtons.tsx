@@ -4,7 +4,6 @@ import Script from 'next/script';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ApiError, auth, type TokenPair } from '@/lib/api';
-import { setToken } from '@/lib/auth';
 
 declare global {
   interface Window {
@@ -70,7 +69,6 @@ export function OAuthButtons({
           onErrorRef.current('Sign-in failed. Please try again.');
           return;
         }
-        setToken(pair.access_token);
         if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
         onSuccessRef.current(pair);
       } catch (err: any) {
@@ -124,7 +122,6 @@ export function OAuthButtons({
           onError('Sign-in failed. Please try again.');
           return;
         }
-        setToken(pair.access_token);
         if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
         onSuccess(pair);
       } catch (err: any) {

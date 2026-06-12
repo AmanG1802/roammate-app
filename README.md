@@ -10,7 +10,7 @@ Roammate is a collaborative trip-planning application. Users create trips, invit
 | Backend | FastAPI (Python 3.11), SQLAlchemy (async), Pydantic |
 | Database | PostgreSQL 15 + PostGIS |
 | Cache | Redis |
-| AI | OpenAI API via LangChain |
+| AI | OpenAI / Anthropic / Google Gemini (provider-switchable via `LLM_PROVIDER` env var) |
 | Maps | Google Maps JavaScript API |
 | Containerisation | Docker Compose |
 
@@ -201,14 +201,27 @@ Both services have **hot-reload** enabled — edit files on your host and change
 - **Backend** (`backend/`): Uvicorn watches for Python file changes
 - **Frontend** (`frontend/`): Next.js fast-refreshes on save
 
-### Adding Backend Dependencies
+### Adding or Upgrading Backend Dependencies
+
+`backend/requirements.txt` is the human-editable source of truth (direct deps with version ranges).
+`backend/requirements.lock` is the exact pip-freeze snapshot used by Docker — commit both together.
 
 ```bash
-# 1. Edit backend/requirements.txt
-# 2. Rebuild
+# 1. Edit backend/requirements.txt (add package or widen a version range)
+# 2. Rebuild — pip resolves against requirements.lock; new packages resolve against requirements.txt
 docker compose build backend
 docker compose up -d backend
+
+# 3. Regenerate the lock file from the running container
+docker exec roammate-app-backend-1 pip freeze | sort > backend/requirements.lock
+
+# 4. Commit both files so local and production stay in sync
+git add backend/requirements.txt backend/requirements.lock
 ```
+
+> **Why two files?** The Dockerfile installs from `requirements.lock` (exact pins), so every build —
+> local or Railway — gets identical package versions. Without the lock, `pip install` silently pulls
+> PyPI-latest and different deploys can end up on different versions.
 
 ### Adding Frontend Dependencies
 
@@ -239,7 +252,8 @@ roammate-app/
 │   │   ├── schemas/      # Pydantic schemas
 │   │   ├── services/     # Business logic
 │   │   └── main.py       # App entrypoint
-│   └── requirements.txt  # Python dependencies
+│   ├── requirements.txt  # Direct deps with version ranges (edit this)
+│   └── requirements.lock # Exact pip-freeze snapshot (commit alongside requirements.txt)
 ├── frontend/             # Next.js application
 │   ├── app/              # Pages (App Router)
 │   ├── components/       # React components

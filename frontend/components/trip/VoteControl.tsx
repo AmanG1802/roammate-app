@@ -2,19 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 
 type Kind = 'idea' | 'event';
 
 type Tally = { up: number; down: number; my_vote: number };
 type VoterList = { up_voters: { name: string; avatar_url?: string | null }[]; down_voters: { name: string; avatar_url?: string | null }[] };
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-function authHeaders(): Record<string, string> {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-}
 
 function AnimatedCount({ value, className }: { value: number; className?: string }) {
   const [display, setDisplay] = useState(value);
@@ -105,8 +98,8 @@ function VoteControl({
 
   const fetchTally = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/${path}/votes`, { headers: authHeaders() });
-      if (res.ok) setTally(await res.json());
+      const data = await api<Tally>(`/api/${path}/votes`);
+      setTally(data);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, [path]);
@@ -115,8 +108,8 @@ function VoteControl({
     if (votersFetched.current) return;
     votersFetched.current = true;
     try {
-      const res = await fetch(`${API}/${path}/voters`, { headers: authHeaders() });
-      if (res.ok) setVoters(await res.json());
+      const data = await api<VoterList>(`/api/${path}/voters`);
+      setVoters(data);
     } catch { /* ignore */ }
   }, [path]);
 
@@ -153,16 +146,11 @@ function VoteControl({
 
     setPending(true);
     try {
-      const res = await fetch(`${API}/${path}/vote`, {
+      const data = await api<Tally>(`/api/${path}/vote`, {
         method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ value: nextValue }),
+        json: { value: nextValue },
       });
-      if (res.ok) {
-        setTally(await res.json());
-      } else {
-        setTally(prev);
-      }
+      setTally(data);
     } catch {
       setTally(prev);
     } finally {

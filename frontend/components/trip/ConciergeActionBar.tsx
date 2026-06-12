@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTripStore, Event } from '@/lib/store';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { toastBus } from '@/lib/toast-bus';
 import { combineInTz } from '@/lib/time';
 import { Clock, SkipForward, Coffee, MessageSquare, Loader2, ChevronDown, Check, Sparkles } from 'lucide-react';
@@ -43,33 +43,20 @@ export default function ConciergeActionBar() {
     if (!activeTripId || events.length === 0) return;
     setIsProcessing(true);
     try {
-      const token = getToken();
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/events/ripple/${activeTripId}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            delta_minutes: minutes,
-            start_from_time: new Date().toISOString(),
-          }),
-        }
-      );
-      if (res.ok) {
-        const updated = await res.json();
-        // Backend returns TIME-only strings ("HH:MM:SS") — pass through.
-        setEvents(updated as Event[]);
-        const msg = updated.length > 0
-          ? `Shifted ${updated.length} event${updated.length > 1 ? 's' : ''} by +${minutes} min`
-          : 'No events needed adjustment';
-        setRippleToast(msg);
-        if (rippleTimerRef.current) clearTimeout(rippleTimerRef.current);
-        rippleTimerRef.current = setTimeout(() => setRippleToast(null), 3000);
-      } else {
-        toastBus("Couldn't shift schedule — please try again", { kind: 'error' });
-      }
+      const updated = await api<Event[]>(`/api/events/ripple/${activeTripId}`, {
+        method: 'POST',
+        json: { delta_minutes: minutes, start_from_time: new Date().toISOString() },
+      });
+      // Backend returns TIME-only strings ("HH:MM:SS") — pass through.
+      setEvents(updated);
+      const msg = updated.length > 0
+        ? `Shifted ${updated.length} event${updated.length > 1 ? 's' : ''} by +${minutes} min`
+        : 'No events needed adjustment';
+      setRippleToast(msg);
+      if (rippleTimerRef.current) clearTimeout(rippleTimerRef.current);
+      rippleTimerRef.current = setTimeout(() => setRippleToast(null), 3000);
     } catch {
-      toastBus('Network error — schedule not updated', { kind: 'error' });
+      toastBus("Couldn't shift schedule — please try again", { kind: 'error' });
     } finally {
       setIsProcessing(false);
     }

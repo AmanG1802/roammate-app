@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, Loader2, Rocket, X, Compass, AlertTriangle } from 'lucide-react';
-import { getToken } from '@/lib/auth';
+import { api, ApiError } from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isNeedsPlus, useEntitlement } from '@/hooks/useEntitlement';
 import { useTutorial } from '@/hooks/useTutorial';
@@ -67,11 +67,6 @@ const CANNED_NYC_PREVIEW: Preview = {
   ],
   enrichment: { status: 'full', total: 5, enriched: 5, skipped: 0 },
 };
-
-function authHeaders(): HeadersInit {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?: () => void }) {
   const router = useRouter();
@@ -154,14 +149,19 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
     setError(null);
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/llm/plan-trip`, {
+      const data = await api<Preview>('/api/llm/plan-trip', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ prompt: p, timezone }),
+        json: { prompt: p, timezone },
       });
-      if (res.status === 402) {
-        const body = await res.json().catch(() => null);
-        const needs = isNeedsPlus(body);
+      planMessagesRef.current.push({ role: 'user', content: p });
+      if (data.user_output) {
+        planMessagesRef.current.push({ role: 'assistant', content: data.user_output });
+      }
+      setPreview(data);
+      void refreshEntitlement();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        const needs = isNeedsPlus(err.data);
         const subscribed = await requirePlus(needs?.feature ?? 'brainstorm_quota');
         if (subscribed) {
           await refreshEntitlement();
@@ -169,19 +169,10 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
           plan();
           return;
         }
-        setError('You have used up this month’s free planner messages.');
+        setError("You have used up this month's free planner messages.");
         return;
       }
-      if (!res.ok) throw new Error('AI planner hit a snag — your prompt is saved, just hit Plan again.');
-      const data: Preview = await res.json();
-      planMessagesRef.current.push({ role: 'user', content: p });
-      if (data.user_output) {
-        planMessagesRef.current.push({ role: 'assistant', content: data.user_output });
-      }
-      setPreview(data);
-      void refreshEntitlement();
-    } catch (e: any) {
-      setError(e?.message ?? 'Something went wrong — your prompt is saved, just hit Plan again.');
+      setError((err as any)?.message ?? 'Something went wrong — your prompt is saved, just hit Plan again.');
     } finally {
       setPlanning(false);
     }
@@ -217,32 +208,24 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
       if (preview.destination_lat != null) body.destination_lat = preview.destination_lat;
       if (preview.destination_lng != null) body.destination_lng = preview.destination_lng;
 
-      const tripRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/`, {
+      const trip = await api<{ id: string }>('/api/trips/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(body),
+        json: body,
       });
-      if (!tripRes.ok) throw new Error('Could not create trip.');
-      const trip = await tripRes.json();
 
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/trips/${trip.id}/brainstorm/bulk`, {
+      await api(`/api/trips/${trip.id}/brainstorm/bulk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ items: preview.items }),
+        json: { items: preview.items },
       });
 
       // Backfill the planning conversation as the first Brainstorm chat.
       // Failure is non-fatal — trip + items are already saved.
       if (planMessagesRef.current.length > 0) {
         try {
-          await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/trips/${trip.id}/brainstorm/messages/seed`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...authHeaders() },
-              body: JSON.stringify({ messages: planMessagesRef.current }),
-            },
-          );
+          await api(`/api/trips/${trip.id}/brainstorm/messages/seed`, {
+            method: 'POST',
+            json: { messages: planMessagesRef.current },
+          });
         } catch {
           // ignore — seed is best-effort
         }

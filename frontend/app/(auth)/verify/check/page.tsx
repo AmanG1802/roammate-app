@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ApiError, auth } from '@/lib/api';
-import { setToken } from '@/lib/auth';
 import { AuthCard, StatusBanner } from '@/components/auth/AuthCard';
 import { PrimaryButton } from '@/components/auth/PrimaryButton';
 
@@ -44,7 +43,6 @@ function CheckInner() {
       }
       const pair = await auth.login({ email, password: pwd, skip_verification: true });
       sessionStorage.removeItem('_rv_pwd');
-      setToken(pair.access_token);
       if (typeof window !== 'undefined') localStorage.setItem('user', JSON.stringify(pair.user));
       router.push(next);
     } catch (err) {

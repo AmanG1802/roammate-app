@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useImperativeHandle, useRef, forwardRef } from 'react';
 import Link from 'next/link';
 import { Calendar, Clock, MapPin, ChevronRight, ChevronLeft, Sparkles, Plane, History, Loader2 } from 'lucide-react';
-import { getToken } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { formatTimeOfDay } from '@/lib/time';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -44,13 +44,6 @@ type WidgetData = {
 
 export type TodayWidgetHandle = { refresh: () => void };
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-function authHeaders(): Record<string, string> {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
 const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
   function TodayWidget({ onNewTrip }, ref) {
     const [data, setData] = useState<WidgetData | null>(null);
@@ -64,15 +57,9 @@ const TodayWidget = forwardRef<TodayWidgetHandle, { onNewTrip: () => void }>(
       const controller = new AbortController();
       controllerRef.current = controller;
       try {
-        const res = await fetch(`${API}/dashboard/today`, {
-          headers: authHeaders(),
-          signal: controller.signal,
-        });
-        if (res.ok) {
-          const d: WidgetData = await res.json();
-          setData(d);
-          setPageIdx(d.default_index);
-        }
+        const d = await api<WidgetData>('/api/dashboard/today', { signal: controller.signal });
+        setData(d);
+        setPageIdx(d.default_index);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
       } finally {

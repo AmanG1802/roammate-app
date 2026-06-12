@@ -1,7 +1,6 @@
 """Google Gemini provider wrapper."""
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pydantic import BaseModel
@@ -13,19 +12,36 @@ def _clean_schema_for_gemini(schema: dict) -> dict:
     """Make a Pydantic JSON schema compatible with Gemini's structured output.
 
     Gemini rejects ``additionalProperties`` and ``$ref`` / ``$defs``.  This
-    helper inlines all ``$defs`` references and then strips
-    ``additionalProperties`` recursively.
+    helper recursively inlines all ``$defs`` references (including cases where
+    ``$ref`` is combined with sibling keys like ``default`` / ``description``
+    as Pydantic v2 generates for fields with defaults on Enum types) and then
+    strips ``additionalProperties``.
     """
-    defs = schema.pop("$defs", schema.pop("definitions", None))
-    if defs:
-        raw = json.dumps(schema)
-        for name, definition in defs.items():
-            ref = json.dumps({"$ref": f"#/$defs/{name}"})
-            raw = raw.replace(ref, json.dumps(definition))
-            ref_alt = json.dumps({"$ref": f"#/definitions/{name}"})
-            raw = raw.replace(ref_alt, json.dumps(definition))
-        schema = json.loads(raw)
+    import copy
+    schema = copy.deepcopy(schema)
+    defs: dict = schema.pop("$defs", None) or schema.pop("definitions", None) or {}
 
+    def _resolve(node: dict) -> dict:
+        if "$ref" in node:
+            ref_name = node["$ref"].split("/")[-1]
+            if ref_name in defs:
+                resolved = copy.deepcopy(defs[ref_name])
+                # Merge sibling keys (e.g. default, description) onto the inlined def.
+                for k, v in node.items():
+                    if k != "$ref":
+                        resolved[k] = v
+                return _resolve(resolved)
+        result: dict = {}
+        for key, value in node.items():
+            if isinstance(value, dict):
+                result[key] = _resolve(value)
+            elif isinstance(value, list):
+                result[key] = [_resolve(item) if isinstance(item, dict) else item for item in value]
+            else:
+                result[key] = value
+        return result
+
+    schema = _resolve(schema)
     _strip_additional_properties(schema)
     return schema
 
