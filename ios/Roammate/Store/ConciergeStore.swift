@@ -16,6 +16,10 @@ final class ConciergeStore: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isThinking = false
     @Published var error: String?
+    /// 3.1: the thread is shared by the whole trip. `canWrite` (Plus + admin)
+    /// gates the composer; non-writers get a read-only/upsell state.
+    @Published var canWrite = true
+    private var threadLoaded = false
 
     /// Which full-screen destination is layered over the chat (drives the
     /// `.fullScreenCover`). `nil` = chat is showing.
@@ -39,6 +43,31 @@ final class ConciergeStore: ObservableObject {
                 text: "Hey — I'm your on-trip Concierge. Ask me anything, or tap a quick action below to handle running late, skip a stop, or find something nearby."
             )
         ]
+    }
+
+    // MARK: - Shared trip-wide thread (3.1)
+
+    /// Hydrate the shared conversation when the surface appears so every member
+    /// sees the same thread (with author labels), and learn whether this member
+    /// may post. Runs once per presentation.
+    func loadThread() async {
+        guard !threadLoaded else { return }
+        threadLoaded = true
+        guard let res = try? await ConciergeService.messages(tripId: tripId) else { return }
+        canWrite = res.canWrite
+        guard !res.messages.isEmpty else { return }
+        messages = res.messages.map { m in
+            let isCard = m.messageType == "action_card"
+            let role: ChatMessage.Role = ChatMessage.Role(rawValue: m.role) ?? .assistant
+            return ChatMessage(
+                role: role,
+                text: m.content,
+                // Resolved history cards render confirmed, not as live prompts.
+                card: .text,
+                status: isCard ? .confirmed : nil,
+                authorName: m.authorName
+            )
+        }
     }
 
     // MARK: - Free-text chat
@@ -71,7 +100,8 @@ final class ConciergeStore: ObservableObject {
                     card: .actionCard,
                     status: .pending,
                     intent: res.intent,
-                    params: res.params
+                    params: res.params,
+                    preview: res.preview
                 ))
             } else {
                 let card: ConciergeCard = res.messageType == "error" ? .error(retryQuery: trimmed) : .text
@@ -110,6 +140,11 @@ final class ConciergeStore: ObservableObject {
             if exec.success {
                 messages.append(ChatMessage(role: .assistant, text: exec.message))
                 await onEventsChanged?()
+                // 3.8: only the most recent executed action is undoable.
+                for i in messages.indices { messages[i].canUndo = false }
+                if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+                    messages[idx].canUndo = true
+                }
             } else {
                 messages.append(ChatMessage(
                     role: .assistant,
@@ -128,6 +163,26 @@ final class ConciergeStore: ObservableObject {
 
     func cancel(_ message: ChatMessage) {
         setStatus(message.id, .cancelled)
+    }
+
+    // MARK: - Undo last action (3.8)
+
+    func undo(_ message: ChatMessage) async {
+        isThinking = true
+        defer { isThinking = false }
+        do {
+            let res = try await ConciergeService.undo(tripId: tripId)
+            if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+                messages[idx].canUndo = false
+                messages[idx].status = .cancelled
+            }
+            messages.append(ChatMessage(role: .system, text: "↩️ \(res.message)"))
+            if res.success { await onEventsChanged?() }
+        } catch let e as APIError {
+            handle(e, retryQuery: nil)
+        } catch {
+            messages.append(ChatMessage(role: .assistant, text: "Couldn't undo that. Try again.", card: .error(retryQuery: nil)))
+        }
     }
 
     // MARK: - Find nearby

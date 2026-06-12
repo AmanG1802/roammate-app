@@ -45,6 +45,8 @@ def _build_detail_fields() -> str:
         parts.append("rating,price_level")
     if settings.GOOGLE_MAPS_FETCH_PHOTOS:
         parts.append("photos")
+    if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+        parts.append("opening_hours")
     return ",".join(parts)
 
 
@@ -283,6 +285,11 @@ class MapServiceV1(BaseMapService):
                 if ref:
                     item["photo_url"] = self.photo_url(ref)
 
+        if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+            hours = details.get("opening_hours")
+            if hours:
+                item["opening_hours"] = hours
+
         gtypes = details.get("types") or []
         if gtypes and not item.get("types"):
             item["types"] = gtypes[:5]
@@ -374,6 +381,12 @@ class MapServiceV1(BaseMapService):
                     ref = photos[0].get("photo_reference")
                     if ref:
                         place["photo_url"] = self.photo_url(ref)
+            if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+                # Legacy search returns only open_now (no periods); kept for
+                # symmetry — is_open_during abstains without periods.
+                hours = r.get("opening_hours")
+                if hours and hours.get("periods"):
+                    place["opening_hours"] = hours
             places.append(place)
 
         self._track(

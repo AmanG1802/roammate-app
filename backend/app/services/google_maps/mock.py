@@ -27,6 +27,18 @@ from app.services.google_maps.base import (
 
 _MOCK_NETWORK_DELAY_S = 0.05
 
+# Deterministic mock hours: open every day 09:00–18:00 (new Places API shape).
+_MOCK_OPENING_HOURS = {
+    "openNow": True,
+    "periods": [
+        {
+            "open": {"day": d, "hour": 9, "minute": 0},
+            "close": {"day": d, "hour": 18, "minute": 0},
+        }
+        for d in range(7)
+    ],
+}
+
 
 def _slug(text: str) -> str:
     return text.strip().lower().replace(" ", "_")[:48] or "unknown"
@@ -112,6 +124,7 @@ class MockMapService(BaseMapService):
                     "heightPx": 768,
                 }
             ],
+            "regularOpeningHours": _MOCK_OPENING_HOURS,
             "types": ["point_of_interest", "establishment"],
         }
 
@@ -151,6 +164,11 @@ class MockMapService(BaseMapService):
             photos = details.get("photos") or []
             if photos and photos[0].get("name"):
                 item["photo_url"] = self.photo_url(photos[0]["name"])
+
+        if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+            hours = details.get("regularOpeningHours")
+            if hours:
+                item["opening_hours"] = hours
 
         gtypes = details.get("types") or []
         if gtypes and not item.get("types"):
@@ -211,6 +229,7 @@ class MockMapService(BaseMapService):
                 "price_level": mp.get("price_level"),
                 "photo_url": f"https://picsum.photos/seed/{seed}/400/300",
                 "types": mp.get("types", []),
+                "opening_hours": _MOCK_OPENING_HOURS if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS else None,
             })
         return places
 

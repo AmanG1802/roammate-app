@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_API_VERSION: str = "v1"   # "v1" (legacy) | "v2" (new)
     GOOGLE_MAPS_FETCH_PHOTOS: bool = True
     GOOGLE_MAPS_FETCH_RATING: bool = True
+    # When True, Place Details enrichment also requests regularOpeningHours and
+    # stores it on place-bearing rows (Brainstorm / Idea Bin / Timeline). Drives
+    # the Concierge + Ripple opening/closing-hours feasibility warnings. Off ⇒ no
+    # hours enrichment and no hours logic anywhere.
+    GOOGLE_MAPS_FETCH_OPENING_HOURS: bool = True
     GOOGLE_MAPS_USE_NEARBY_API: bool = False  # True = Nearby Search API, False = Text Search with locationBias
 
     # Apple Maps Server API (used for iOS enrichment when enabled)

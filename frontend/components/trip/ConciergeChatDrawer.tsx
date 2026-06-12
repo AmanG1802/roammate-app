@@ -36,6 +36,27 @@ interface PlaceCard {
 
 type MessageType = 'text' | 'action_card' | 'place_card' | 'error' | 'summary' | 'whats_next';
 
+// Dry-run preview (3.5/3.6/3.7) — mirrors backend ConciergePreview.
+interface PreviewChange {
+  event_id: number;
+  title: string;
+  day_date?: string | null;
+  old_start?: string | null;
+  new_start?: string | null;
+  old_end?: string | null;
+  new_end?: string | null;
+}
+interface PreviewWarning {
+  kind: string; // overlap | travel | cross_midnight | opening_hours | cross_day | ineligible
+  message: string;
+  event_id?: number | null;
+}
+interface ConciergePreview {
+  summary: string;
+  changes: PreviewChange[];
+  warnings: PreviewWarning[];
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -47,6 +68,9 @@ interface ChatMessage {
   places?: PlaceCard[];
   summaryData?: any;
   status?: 'pending' | 'confirmed' | 'cancelled';
+  preview?: ConciergePreview | null;
+  authorName?: string | null;
+  canUndo?: boolean;
 }
 
 // ── Formatted Text Renderer ─────────────────────────────────────────────────
@@ -188,6 +212,10 @@ export default function ConciergeChatDrawer({
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<PlaceCard | null>(null);
+  // 3.1: the thread is shared by the whole trip; canWrite gates the composer
+  // (Plus + trip editor). Non-writers see a read-only/upsell state.
+  const [canWrite, setCanWrite] = useState(true);
+  const [threadLoaded, setThreadLoaded] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { activeTripId, activeTripTimezone, loadEvents } = useTripStore();
@@ -217,6 +245,51 @@ export default function ConciergeChatDrawer({
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 300);
     }
+  }, [isOpen]);
+
+  // 3.1: hydrate the shared, trip-wide thread when the drawer opens so every
+  // member sees the same conversation (with author labels) and we know whether
+  // this member may post.
+  useEffect(() => {
+    if (!isOpen || !activeTripId || threadLoaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api<{ messages: any[]; can_write: boolean }>(
+          `/api/concierge/${activeTripId}/messages`,
+        );
+        if (cancelled) return;
+        setCanWrite(data.can_write);
+        const hydrated: ChatMessage[] = (data.messages || []).map((m, i) => {
+          const meta = m.metadata || {};
+          const isCard = m.message_type === 'action_card';
+          return {
+            id: `hist-${m.id ?? i}`,
+            role: m.role,
+            content: m.content,
+            type: (m.message_type || 'text') as MessageType,
+            intent: meta.intent,
+            params: meta.params,
+            // History action cards are already resolved — show them confirmed,
+            // not as live pending prompts (avoids re-confirming old actions).
+            requires_confirmation: false,
+            status: isCard ? 'confirmed' : undefined,
+            authorName: m.author_name,
+          };
+        });
+        setMessages(hydrated);
+      } catch {
+        // A fresh trip or transient error — fall back to the empty state.
+      } finally {
+        if (!cancelled) setThreadLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, activeTripId, threadLoaded]);
+
+  // Reset the load latch when the drawer closes so it refetches next open.
+  useEffect(() => {
+    if (!isOpen) setThreadLoaded(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -311,6 +384,7 @@ export default function ConciergeChatDrawer({
           params: data.params,
           requires_confirmation: data.requires_confirmation,
           status: data.requires_confirmation ? 'pending' : undefined,
+          preview: data.preview ?? null,
         });
       }
     } catch {
@@ -337,8 +411,36 @@ export default function ConciergeChatDrawer({
         json: { intent, params },
       });
       await refreshEvents();
+      // 3.8: an executed mutation can be reverted — surface an Undo affordance
+      // on the just-confirmed card (only the most recent action is undoable).
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId
+            ? { ...m, canUndo: true }
+            : m.canUndo
+            ? { ...m, canUndo: false }
+            : m,
+        ),
+      );
     } catch {
       updateMessage(msgId, { status: 'pending' });
+    }
+  };
+
+  const handleUndo = async (msgId: string) => {
+    if (!activeTripId) return;
+    try {
+      await api(`/api/concierge/${activeTripId}/undo`, { method: 'POST' });
+      await refreshEvents();
+      updateMessage(msgId, { canUndo: false, status: 'cancelled' });
+      addMessage({
+        id: `undo-${Date.now()}`,
+        role: 'system',
+        content: '↩️ Reverted the last action.',
+        type: 'text',
+      });
+    } catch {
+      // Leave the card as-is on failure.
     }
   };
 
@@ -594,6 +696,7 @@ export default function ConciergeChatDrawer({
                   msg={msg}
                   onConfirm={handleConfirm}
                   onCancel={handleCancel}
+                  onUndo={handleUndo}
                   onPlaceSelect={handlePlaceSelect}
                   onRetry={() => inputRef.current?.focus()}
                   selectedPlace={selectedPlace}
@@ -616,7 +719,17 @@ export default function ConciergeChatDrawer({
               <ChipButton label="Find Coffee" icon={<Coffee className="w-3.5 h-3.5" />} onClick={handleFindCoffee} />
             </div>
 
-            {/* Input */}
+            {/* Input — read-only for non-writers (3.1) */}
+            {!canWrite ? (
+              <div className="px-4 pb-4 pt-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+                  <p className="text-sm text-slate-500">
+                    You can follow the trip&rsquo;s Concierge here. Posting and confirming
+                    actions is available to trip admins on Roammate Plus.
+                  </p>
+                </div>
+              </div>
+            ) : (
             <div className="px-4 pb-4 pt-2">
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                 <input
@@ -645,6 +758,7 @@ export default function ConciergeChatDrawer({
                 </button>
               </div>
             </div>
+            )}
           </motion.div>
         </>
       )}
@@ -674,12 +788,74 @@ function ChipButton({
   );
 }
 
+// ── Preview Block (dry-run impact: before→after diff + warnings) ─────────────
+
+function warningIcon(kind: string) {
+  switch (kind) {
+    case 'opening_hours': return '🕗';
+    case 'cross_midnight': return '🌙';
+    case 'travel': return '🚗';
+    case 'overlap': return '⏱️';
+    default: return '⚠️';
+  }
+}
+
+function PreviewBlock({ preview }: { preview: ConciergePreview }) {
+  const { changes, warnings, summary } = preview;
+  if (!changes.length && !warnings.length) return null;
+
+  return (
+    <div className="px-4 pb-3 pt-1 border-t border-slate-100 space-y-2">
+      {summary && (
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{summary}</p>
+      )}
+      {changes.length > 0 && (
+        <div className="space-y-1">
+          {changes.map((c) => {
+            const added = !c.old_start && c.new_start;
+            return (
+              <div key={c.event_id} className="flex items-center gap-2 text-sm">
+                <span className="flex-1 truncate text-slate-700">{c.title}</span>
+                <span className="flex items-center gap-1.5 font-medium tabular-nums">
+                  {c.old_start && (
+                    <span className="text-slate-400 line-through">{c.old_start}</span>
+                  )}
+                  {c.old_start && c.new_start && (
+                    <ArrowRight className="w-3 h-3 text-slate-300" />
+                  )}
+                  {c.new_start && (
+                    <span className={added ? 'text-emerald-600' : 'text-indigo-600'}>{c.new_start}</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <div className="space-y-1 pt-0.5">
+          {warnings.map((w, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5"
+            >
+              <span aria-hidden>{warningIcon(w.kind)}</span>
+              <span className="flex-1 leading-snug">{w.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Message Bubble ──────────────────────────────────────────────────────────
 
 function MessageBubble({
   msg,
   onConfirm,
   onCancel,
+  onUndo,
   onPlaceSelect,
   onRetry,
   selectedPlace,
@@ -687,17 +863,30 @@ function MessageBubble({
   msg: ChatMessage;
   onConfirm: (id: string, intent: string, params: Record<string, any>) => void;
   onCancel: (id: string) => void;
+  onUndo: (id: string) => void;
   onPlaceSelect: (p: PlaceCard) => void;
   onRetry: () => void;
   selectedPlace: PlaceCard | null;
 }) {
-  // User message
+  // User message (shared thread shows the author's name above the bubble, 3.1)
   if (msg.role === 'user') {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end">
+        {msg.authorName && (
+          <span className="text-[11px] font-medium text-slate-400 mb-0.5 mr-1">{msg.authorName}</span>
+        )}
         <div className="max-w-[80%] bg-indigo-600 text-white rounded-2xl rounded-br-md px-4 py-2.5">
           <p className="text-sm leading-relaxed">{msg.content}</p>
         </div>
+      </div>
+    );
+  }
+
+  // System message (e.g. confirmation receipts, undo notices)
+  if (msg.role === 'system') {
+    return (
+      <div className="flex justify-center">
+        <span className="text-xs text-slate-400 bg-slate-50 rounded-full px-3 py-1">{msg.content}</span>
       </div>
     );
   }
@@ -722,6 +911,8 @@ function MessageBubble({
               <FormattedText text={msg.content} />
             </div>
           </div>
+          {/* 3.5/3.6/3.7: real projected impact — before→after diff + warnings */}
+          {msg.preview && <PreviewBlock preview={msg.preview} />}
           {msg.status === 'pending' && (
             <div className="px-4 py-2.5 border-t border-slate-100 flex items-center gap-2">
               <button
@@ -739,10 +930,18 @@ function MessageBubble({
             </div>
           )}
           {msg.status === 'confirmed' && (
-            <div className="px-4 py-2 border-t border-emerald-100 bg-emerald-50/50">
+            <div className="px-4 py-2 border-t border-emerald-100 bg-emerald-50/50 flex items-center justify-between">
               <p className="text-xs font-medium text-emerald-600 flex items-center gap-1">
                 <Check className="w-3 h-3" /> Done
               </p>
+              {msg.canUndo && (
+                <button
+                  onClick={() => onUndo(msg.id)}
+                  className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" /> Undo
+                </button>
+              )}
             </div>
           )}
           {msg.status === 'cancelled' && (

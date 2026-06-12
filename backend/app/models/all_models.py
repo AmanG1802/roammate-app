@@ -21,12 +21,15 @@ class PlaceColumnsMixin:
     types = Column(JSON, nullable=True)
     time_category = Column(String, nullable=True)
     added_by = Column(String, nullable=True)
+    # Google Places regularOpeningHours JSON (periods with open/close weekday +
+    # time). Populated by enrichment when GOOGLE_MAPS_FETCH_OPENING_HOURS is on.
+    opening_hours = Column(JSON, nullable=True)
 
 
 PLACE_FIELDS: tuple[str, ...] = (
     "title", "description", "category", "place_id", "lat", "lng",
     "address", "photo_url", "rating", "price_level", "types",
-    "time_category", "added_by",
+    "time_category", "added_by", "opening_hours",
 )
 
 class User(Base):
@@ -223,6 +226,27 @@ class ConciergeMessage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     trip = relationship("Trip", back_populates="concierge_messages")
+    user = relationship("User")
+
+
+class ConciergeAction(Base):
+    """Audit + undo record for a confirmed Concierge mutation (3.8).
+
+    ``inverse_patch`` captures everything needed to revert the action: for
+    moves/shifts a list of prior event windows; for adds the inserted event id
+    (inverse = delete); for skips the prior ``is_skipped`` flag. ``undone_at``
+    is set when the action is reverted so a second undo is a no-op.
+    """
+    __tablename__ = "concierge_action"
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("trip.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), index=True, nullable=False)
+    intent = Column(String, nullable=False)
+    inverse_patch = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    undone_at = Column(DateTime(timezone=True), nullable=True)
+
+    trip = relationship("Trip")
     user = relationship("User")
 
 

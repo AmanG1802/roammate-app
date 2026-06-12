@@ -29,13 +29,10 @@ struct TripConciergeView: View {
     private var canUseConcierge: Bool { subscriptionStore.entitlement.canUseConcierge }
 
     var body: some View {
-        Group {
-            if isAdmin {
-                chat
-            } else {
-                lockedState
-            }
-        }
+        // 3.1: the thread is shared trip-wide and readable by every member; the
+        // backend's can_write flag (Plus + admin) decides whether the composer
+        // is shown or a read-only/upsell state.
+        chat
         .background(Color.roammateBackground.ignoresSafeArea())
         .fullScreenCover(item: $store.detail) { detail in
             ConciergeDetailView(initial: detail)
@@ -47,6 +44,7 @@ struct TripConciergeView: View {
             Task { await store.send(text) }
         }
         .onAppear { primeFallbackCoordinate() }
+        .task { await store.loadThread() }
     }
 
     // MARK: - Chat
@@ -56,13 +54,19 @@ struct TripConciergeView: View {
             if let banner = store.availabilityBanner {
                 availabilityBanner(banner)
             }
-            if !canUseConcierge {
+            if store.canWrite && !canUseConcierge {
                 plusBanner
             }
             messageList
-            chipRow
-            inputBar
-                .tutorialAnchor("concierge-input")
+            // 3.1: writers get the action chips + composer; everyone else sees a
+            // read-only follow-along state.
+            if store.canWrite {
+                chipRow
+                inputBar
+                    .tutorialAnchor("concierge-input")
+            } else {
+                readOnlyComposer
+            }
         }
     }
 
@@ -237,24 +241,33 @@ struct TripConciergeView: View {
         .buttonStyle(.plain)
     }
 
-    private var lockedState: some View {
-        VStack(spacing: RoammateSpacing.md) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(Color.roammateIndigo)
-                .frame(width: 72, height: 72)
-                .background(Color.roammateIndigoTint, in: Circle())
-            Text("Concierge is run by trip admins")
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.roammateInk)
-                .multilineTextAlignment(.center)
-            Text("During the trip, an admin can ask the AI Concierge to reroute, skip stops, or find places nearby.")
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(Color.roammateMuted)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, RoammateSpacing.xl)
+    /// Read-only follow-along footer for members who can't post (non-admin or
+    /// non-Plus). They still see the whole shared thread above (3.1).
+    private var readOnlyComposer: some View {
+        Button {
+            HapticManager.light()
+            if !canUseConcierge { postNeedsPlus() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isAdmin ? "sparkles" : "eye")
+                    .font(.system(size: 13, weight: .bold))
+                Text(isAdmin
+                     ? "Concierge actions need Roammate Plus"
+                     : "Trip admins run the Concierge — you can follow along here")
+                    .font(.system(.caption, design: .rounded, weight: .heavy))
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                if isAdmin && !canUseConcierge {
+                    Text("Upgrade").font(.system(.caption2, design: .rounded, weight: .black))
+                }
+            }
+            .foregroundStyle(isAdmin ? .white : Color.roammateMuted)
+            .padding(.horizontal, RoammateSpacing.md).padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(isAdmin ? AnyShapeStyle(RoammateGradient.plus) : AnyShapeStyle(Color.roammateSurface))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .buttonStyle(.plain)
+        .disabled(!isAdmin)
     }
 
     // MARK: - Actions

@@ -257,32 +257,37 @@ class TestMoveEvent:
         assert moved["start_time"] == "14:00:00"
         assert moved["end_time"] == "15:00:00"  # duration preserved
 
-    async def test_move_day(self, db_session, executor):
+    async def test_move_cross_day_rejected(self, db_session, executor):
+        # A7: cross-day moves via chat are rejected (the cascade is same-day);
+        # the user is told to drag on the timeline instead.
         user = await _seed_user(db_session)
         trip = await _seed_trip(db_session, user)
-        ev = await _seed_event(db_session, trip_id=trip.id)
+        ev = await _seed_event(db_session, trip_id=trip.id)  # day_date 2025-07-01
         result = await executor.execute(
             "move_event",
             {"event_id": ev.id, "new_day_date": "2025-08-01"},
             db_session, trip_id=trip.id, user_id=user.id,
         )
-        assert result["success"] is True
-        assert result["updated_events"][0]["day_date"] == "2025-08-01"
+        assert result["success"] is False
+        assert "drag" in result["message"].lower()
+        await db_session.refresh(ev)
+        assert ev.day_date == date(2025, 7, 1)
 
-    async def test_move_time_and_day(self, db_session, executor):
+    async def test_move_same_day_with_explicit_day(self, db_session, executor):
+        # Passing the event's own day alongside a new time is a same-day move.
         user = await _seed_user(db_session)
         trip = await _seed_trip(db_session, user)
         ev = await _seed_event(db_session, trip_id=trip.id,
                                start_time=time(10, 0), end_time=time(11, 0))
         result = await executor.execute(
             "move_event",
-            {"event_id": ev.id, "new_start_time": "16:00", "new_day_date": "2025-08-05"},
+            {"event_id": ev.id, "new_start_time": "16:00", "new_day_date": "2025-07-01"},
             db_session, trip_id=trip.id, user_id=user.id,
         )
         assert result["success"] is True
-        moved = result["updated_events"][0]
+        moved = next(e for e in result["updated_events"] if e["id"] == ev.id)
         assert moved["start_time"] == "16:00:00"
-        assert moved["day_date"] == "2025-08-05"
+        assert moved["day_date"] == "2025-07-01"
 
     async def test_move_event_no_end_time(self, db_session, executor):
         user = await _seed_user(db_session)

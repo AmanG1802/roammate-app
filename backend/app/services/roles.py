@@ -31,6 +31,16 @@ async def require_trip_admin(db: AsyncSession, trip_id: int, user_id: int) -> Tr
     return m
 
 
+async def require_trip_editor(db: AsyncSession, trip_id: int, user_id: int) -> TripMember:
+    """The single gate for itinerary-editing actions (ripple, Concierge writes).
+
+    v1 has no dedicated "editor" role, so this aliases admin: only admins may
+    mutate the timeline. Broadening edit rights later (e.g. to view_with_vote)
+    is a one-line change here — every write path already routes through this.
+    """
+    return await require_trip_admin(db, trip_id, user_id)
+
+
 async def require_vote_role(db: AsyncSession, trip_id: int, user_id: int) -> TripMember:
     m = await require_trip_member(db, trip_id, user_id)
     if m.role not in VOTE_ROLES:

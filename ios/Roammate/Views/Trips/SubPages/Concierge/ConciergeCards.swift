@@ -11,7 +11,7 @@ struct ConciergeMessageView: View {
     var body: some View {
         switch message.card {
         case .text:
-            ConciergeBubble(role: message.role, text: message.text)
+            ConciergeBubble(role: message.role, text: message.text, authorName: message.authorName)
         case .actionCard:
             ConciergeActionCardView(message: message)
         case .placeCards(let places):
@@ -39,24 +39,48 @@ func conciergeMarkdown(_ raw: String) -> AttributedString {
 struct ConciergeBubble: View {
     let role: ChatMessage.Role
     let text: String
+    var authorName: String? = nil
 
     var body: some View {
-        HStack {
-            if role == .user { Spacer(minLength: 40) }
-            Text(conciergeMarkdown(text))
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(role == .user ? .white : Color.roammateInk)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    role == .user ? Color.roammateIndigo : Color.roammateSurface,
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(role == .assistant ? Color.roammateBorder : Color.clear, lineWidth: 1)
-                )
-            if role == .assistant { Spacer(minLength: 40) }
+        // System turns (confirmation receipts, undo notices) render as a small
+        // centered note rather than a chat bubble.
+        if role == .system {
+            HStack {
+                Spacer()
+                Text(conciergeMarkdown(text))
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(Color.roammateMuted)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Color.roammateBackground, in: Capsule())
+                Spacer()
+            }
+        } else {
+            HStack {
+                if role == .user { Spacer(minLength: 40) }
+                VStack(alignment: role == .user ? .trailing : .leading, spacing: 2) {
+                    // 3.1: author label in the shared trip-wide thread.
+                    if role == .user, let authorName {
+                        Text(authorName)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.roammateMuted)
+                            .padding(.horizontal, 4)
+                    }
+                    Text(conciergeMarkdown(text))
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundStyle(role == .user ? .white : Color.roammateInk)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            role == .user ? Color.roammateIndigo : Color.roammateSurface,
+                            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(role == .assistant ? Color.roammateBorder : Color.clear, lineWidth: 1)
+                        )
+                }
+                if role == .assistant { Spacer(minLength: 40) }
+            }
         }
     }
 }
@@ -98,6 +122,12 @@ struct ConciergeActionCardView: View {
                     .foregroundStyle(status == .cancelled ? Color.roammateMuted : Color.roammateInk)
                     .strikethrough(status == .cancelled)
 
+                // 3.5/3.6/3.7: real projected impact — before→after diff + warnings.
+                if let preview = message.preview,
+                   !(preview.changes.isEmpty && preview.warnings.isEmpty) {
+                    ConciergePreviewBlock(preview: preview)
+                }
+
                 if status == .pending {
                     HStack(spacing: 8) {
                         Button {
@@ -125,9 +155,25 @@ struct ConciergeActionCardView: View {
                         .buttonStyle(.plain)
                     }
                 } else {
-                    Text(status == .confirmed ? "Confirmed" : "Cancelled")
-                        .font(.system(.caption, design: .rounded, weight: .bold))
-                        .foregroundStyle(accent)
+                    HStack(spacing: 12) {
+                        Text(status == .confirmed ? "Confirmed" : "Cancelled")
+                            .font(.system(.caption, design: .rounded, weight: .bold))
+                            .foregroundStyle(accent)
+                        // 3.8: revert the most recent executed action.
+                        if status == .confirmed && message.canUndo {
+                            Button {
+                                HapticManager.light()
+                                Task { await store.undo(message) }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.uturn.backward").font(.system(size: 10, weight: .bold))
+                                    Text("Undo").font(.system(.caption, design: .rounded, weight: .heavy))
+                                }
+                                .foregroundStyle(Color.roammateMuted)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -155,6 +201,83 @@ struct ConciergeActionCardView: View {
         case .confirmed: return Color.roammateSuccess.opacity(0.12)
         case .cancelled: return Color.roammateBackground
         }
+    }
+}
+
+// MARK: - Dry-run preview block (before→after diff + warnings)
+
+struct ConciergePreviewBlock: View {
+    let preview: ConciergePreview
+
+    private func warningIcon(_ kind: String) -> String {
+        switch kind {
+        case "opening_hours": return "clock.badge.exclamationmark"
+        case "cross_midnight": return "moon.fill"
+        case "travel": return "car.fill"
+        case "overlap": return "timer"
+        default: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !preview.summary.isEmpty {
+                Text(preview.summary.uppercased())
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color.roammateMuted)
+            }
+
+            if !preview.changes.isEmpty {
+                VStack(spacing: 4) {
+                    ForEach(preview.changes) { c in
+                        HStack(spacing: 6) {
+                            Text(c.title)
+                                .font(.system(.caption, design: .rounded, weight: .medium))
+                                .foregroundStyle(Color.roammateInk)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            if let old = c.oldStart {
+                                Text(old)
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.roammateMuted)
+                                    .strikethrough()
+                            }
+                            if c.oldStart != nil && c.newStart != nil {
+                                Image(systemName: "arrow.right").font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(Color.roammateMuted)
+                            }
+                            if let new = c.newStart {
+                                Text(new)
+                                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(c.oldStart == nil ? Color.roammateSuccess : Color.roammateIndigo)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !preview.warnings.isEmpty {
+                VStack(spacing: 4) {
+                    ForEach(preview.warnings) { w in
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: warningIcon(w.kind))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color.roammateAmber)
+                            Text(w.message)
+                                .font(.system(.caption2, design: .rounded))
+                                .foregroundStyle(Color.roammateInk)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.roammateAmberTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.roammateBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
