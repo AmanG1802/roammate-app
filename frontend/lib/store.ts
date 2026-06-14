@@ -242,7 +242,7 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   loadEvents: async (tripId, _token) => {
     try {
-      const raw = await api<Record<string, unknown>[]>(`/api/events/?trip_id=${tripId}`, { cache: 'no-store' });
+      const raw = await api<Record<string, unknown>[]>(`/api/events?trip_id=${tripId}`, { cache: 'no-store' });
       set({ events: sortEvents(raw.map(mapApiEvent)) });
     } catch {
       // Network error – keep current state
@@ -277,7 +277,7 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     try {
       const numId = parseInt(ideaId, 10);
-      const raw = await api<Record<string, unknown>>('/api/events/', {
+      const raw = await api<Record<string, unknown>>('/api/events', {
         method: 'POST',
         json: {
           trip_id: parseInt(tripId, 10),

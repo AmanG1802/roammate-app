@@ -193,7 +193,7 @@ export default function DashboardPage() {
   const fetchTrips = async (signal?: AbortSignal) => {
     setTripsError(false);
     try {
-      const data = await api<any[]>('/api/trips/', { signal });
+      const data = await api<any[]>('/api/trips', { signal });
       setTrips(data);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
@@ -250,7 +250,7 @@ export default function DashboardPage() {
     body.start_date = `${newTripStartDate}T00:00:00`;
     if (newTripTimezone) body.timezone = newTripTimezone;
     try {
-      const created = await api<any>('/api/trips/', { method: 'POST', json: body });
+      const created = await api<any>('/api/trips', { method: 'POST', json: body });
       setNewTripName('');
       setNewTripStartDate('');
       setNewTripTimezone(
@@ -268,7 +268,7 @@ export default function DashboardPage() {
         if (ok) {
           await refreshEntitlement();
           try {
-            const created = await api<any>('/api/trips/', { method: 'POST', json: body });
+            const created = await api<any>('/api/trips', { method: 'POST', json: body });
             setNewTripName('');
             setNewTripStartDate('');
             setCreateError('');

@@ -1,8 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Don't 308-redirect `/api/trips/` -> `/api/trips`. Preserving the trailing
-  // slash lets the proxy forward it intact so it matches FastAPI's `/api/trips/`
-  // route directly, avoiding a backend redirect_slashes 307 leaking to the browser.
+  // Backend routes are spec-first (openapi.yaml) and have NO trailing slash
+  // (e.g. `/api/trips`). Frontend calls must match exactly — a trailing slash
+  // makes FastAPI's redirect_slashes emit a 307 to the absolute backend origin,
+  // which leaks the backend host to the browser (and surfaced as mixed content
+  // before the backend proxy-headers fix). Keep this so Next never rewrites
+  // slashes itself; the proxy then forwards the path through untouched.
   skipTrailingSlashRedirect: true,
   async headers() {
     return [

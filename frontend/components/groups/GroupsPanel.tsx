@@ -65,7 +65,7 @@ export default function GroupsPanel({ onInvitationsChange }: { onInvitationsChan
     setLoading(true);
     try {
       const [g, inv] = await Promise.all([
-        api<Group[]>('/api/groups/').catch(() => [] as Group[]),
+        api<Group[]>('/api/groups').catch(() => [] as Group[]),
         api<GroupInvitation[]>('/api/groups/invitations/pending').catch(() => [] as GroupInvitation[]),
       ]);
       setGroups(g);
@@ -231,7 +231,7 @@ function CreateGroupModal({ open, onClose, onCreated }: { open: boolean; onClose
     if (!name.trim()) return;
     setSaving(true); setErr('');
     try {
-      const data = await api<{ id: number }>('/api/groups/', { method: 'POST', json: { name } });
+      const data = await api<{ id: number }>('/api/groups', { method: 'POST', json: { name } });
       setName('');
       onCreated(data.id);
     } catch (err) {
@@ -621,7 +621,7 @@ function AttachTripModal({ open, groupId, onClose, onAttached }: { open: boolean
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    api<any[]>('/api/trips/')
+    api<any[]>('/api/trips')
       .then((data) => setTrips(data.filter((t: any) => t.my_role === 'admin' && !t.group_id)))
       .catch(() => {})
       .finally(() => setLoading(false));
