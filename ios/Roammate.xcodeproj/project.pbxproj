@@ -87,6 +87,7 @@
 		9BAE57B6E5E26A6E1DBF4F76 /* ConciergeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07531E514A25F71CA58A028 /* ConciergeStore.swift */; };
 		9C5373636607AE24061ECCAF /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03ED040FF77E4F08D8E66B7E /* EditProfileView.swift */; };
 		9D6EBBB62E603CF6714163E9 /* TutorialCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6768CE74ACB1CF122355C7DC /* TutorialCoordinator.swift */; };
+		A1C3D7E2F04B8A91C5D6E302 /* ScrollableAtAnyDetent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C3D7E1F04B8A91C5D6E301 /* ScrollableAtAnyDetent.swift */; };
 		A62BAAEE4DCF16D4BC617A68 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B339C7520687EF0C052500F0 /* LoginView.swift */; };
 		A65D40F753105207C65C252D /* PlanTripDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 934033C513577CEC95E58C0B /* PlanTripDrawer.swift */; };
 		A6A58868A6E340C68BE1532E /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D41F98E8DF0A9ED38E6A07E /* FlowLayout.swift */; };
@@ -97,13 +98,11 @@
 		B1BFEEB6EAD535583C018832 /* InviteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AF3168C1CA54DBCE5457AED /* InviteSheet.swift */; };
 		B1E0190655462E7983CE4596 /* Brainstorm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F13363AC46609B3D03EF79 /* Brainstorm.swift */; };
 		B2D7D3B8C76B48B4E6A2AE65 /* BrainstormBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 195E24FB26E580CB7091331A /* BrainstormBinView.swift */; };
+		B2E5F3A2D08C9E72F4A61C04 /* SheetPositionTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E5F3A1D08C9E72F4A61C03 /* SheetPositionTracker.swift */; };
 		B3504A7CC8114A4AAAE7B821 /* PersonasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5054E3FC28355D9CB0328AF5 /* PersonasView.swift */; };
 		B3730EF1BF05ACE7C2BF10CB /* ProfileTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E87F29EB3107026338E23EED /* ProfileTabView.swift */; };
 		B42F5BB6C077F92D868914F4 /* TripDayService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4685FBE5C9E38D26F2635BB /* TripDayService.swift */; };
 		B4FC5D52610FF4099724BB9C /* TripDetailStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6054DBA2F849544FE02E427 /* TripDetailStore.swift */; };
-		A1C3D7E2F04B8A91C5D6E302 /* ScrollableAtAnyDetent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C3D7E1F04B8A91C5D6E301 /* ScrollableAtAnyDetent.swift */; };
-		B2E5F3A2D08C9E72F4A61C04 /* SheetPositionTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E5F3A1D08C9E72F4A61C03 /* SheetPositionTracker.swift */; };
-		C4F7A8B2E19D3045F6C82D02 /* DrawerTabStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F7A8B2E19D3045F6C82D01 /* DrawerTabStrip.swift */; };
 		BC35705CDAD95DC82151148B /* IntroCardsFlag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFDCD9F5CFF02909779749B /* IntroCardsFlag.swift */; };
 		BD3BE898C98DD2A3C74D8AB9 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183B43A45F4A82BBCE4B03FD /* User.swift */; };
 		BF01BF323F81004BD16EAD27 /* SubPageMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA84C236CCA74FF8DAE0F3 /* SubPageMenu.swift */; };
@@ -111,6 +110,7 @@
 		C27272053B41C58FED1BF7C0 /* MapService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C168C7AC1230B61D672421 /* MapService.swift */; };
 		C3FEED62561A366C584AA179 /* BrainstormChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF6AA05206E01EF570BDDAE /* BrainstormChatView.swift */; };
 		C3FFF9293B1B351BE0FC3119 /* PlanTrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94AFBB985D12E03C00AAB099 /* PlanTrip.swift */; };
+		C4F7A8B2E19D3045F6C82D02 /* DrawerTabStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F7A8B2E19D3045F6C82D01 /* DrawerTabStrip.swift */; };
 		C8266EB4868A6EFE83701C48 /* MicButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F3DE29F17FB927E3E6EB06 /* MicButton.swift */; };
 		CB8BB591AB35CBA25AF3DA8F /* ChatMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = D86D5AFBF2385AE4E9D0A40C /* ChatMessageBubble.swift */; };
 		D1C30475FF3A75A0B3EE181D /* TutorialSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C08077AA1C6C796F2512C95 /* TutorialSteps.swift */; };
@@ -136,6 +136,7 @@
 		F39F094E068DF78E43425506 /* EventService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F442625DEF0FC29D2FECA94 /* EventService.swift */; };
 		F6F8E4C8FA1278A282611D79 /* Entitlement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58EF3B7299121D5C46DFEBA8 /* Entitlement.swift */; };
 		F82B60EC05303AB93B5538D6 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A59834E9D5209CAD7EC18C8B /* SpeechRecognizer.swift */; };
+		F84131212FDEF54200EB529E /* assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F84131202FDEF54200EB529E /* assets.xcassets */; };
 		F990D3D78146ECB62C50539D /* BrainstormMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5375BE5A94103912CAFD5E /* BrainstormMessageBubble.swift */; };
 		FB1FE5D9C448E4D4421D85B5 /* ConciergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C620B9A604B06410717A1416 /* ConciergeService.swift */; };
 		FC124DE0EB63D1B735A05CF9 /* VoteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25FED9E14FA9161D171A000B /* VoteService.swift */; };
@@ -163,9 +164,6 @@
 		22195A676A90F5B3D8353111 /* OnboardingPersonasSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPersonasSheet.swift; sourceTree = "<group>"; };
 		24137F564EF2CC7AF5B2DE2E /* TripService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripService.swift; sourceTree = "<group>"; };
 		25FED9E14FA9161D171A000B /* VoteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoteService.swift; sourceTree = "<group>"; };
-		A1C3D7E1F04B8A91C5D6E301 /* ScrollableAtAnyDetent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollableAtAnyDetent.swift; sourceTree = "<group>"; };
-		B2E5F3A1D08C9E72F4A61C03 /* SheetPositionTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheetPositionTracker.swift; sourceTree = "<group>"; };
-		C4F7A8B2E19D3045F6C82D01 /* DrawerTabStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawerTabStrip.swift; sourceTree = "<group>"; };
 		29AADF7DF0E19E35D6547638 /* PlanMapPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanMapPage.swift; sourceTree = "<group>"; };
 		2B6C988158033E1C7C54E0D0 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		2BC55B1DE5C6D9C649989422 /* PeoplePaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeoplePaneView.swift; sourceTree = "<group>"; };
@@ -228,6 +226,7 @@
 		9E2867BA63BA4DFC0A2B233D /* IdeaBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaBinView.swift; sourceTree = "<group>"; };
 		9F005729D106D7EA07970C6C /* MapCalloutSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCalloutSheet.swift; sourceTree = "<group>"; };
 		A07531E514A25F71CA58A028 /* ConciergeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConciergeStore.swift; sourceTree = "<group>"; };
+		A1C3D7E1F04B8A91C5D6E301 /* ScrollableAtAnyDetent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollableAtAnyDetent.swift; sourceTree = "<group>"; };
 		A32A93E800793D0850E472E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A52F9F31E9C84E4E24B6C681 /* PlusCrestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusCrestView.swift; sourceTree = "<group>"; };
 		A59834E9D5209CAD7EC18C8B /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
@@ -241,12 +240,14 @@
 		AE9462263D96D4532F1A3E83 /* VerifyEmailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyEmailView.swift; sourceTree = "<group>"; };
 		B0BBBA3F7F162A164F380F12 /* TimelineDrawerContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineDrawerContent.swift; sourceTree = "<group>"; };
 		B21C72066FAD8D21A7F8A60B /* IdeaBinItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaBinItem.swift; sourceTree = "<group>"; };
+		B2E5F3A1D08C9E72F4A61C03 /* SheetPositionTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheetPositionTracker.swift; sourceTree = "<group>"; };
 		B339C7520687EF0C052500F0 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		B6054DBA2F849544FE02E427 /* TripDetailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDetailStore.swift; sourceTree = "<group>"; };
 		B6D4CA9437B99875EC59B165 /* ImageUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtils.swift; sourceTree = "<group>"; };
 		BE8E734A6E170DB8529BE6D0 /* RegisterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
 		BEAB7638C3426BBE1E47609A /* ForgotPasswordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgotPasswordView.swift; sourceTree = "<group>"; };
 		C066745D6FE16BF456F180E3 /* TimelineRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineRow.swift; sourceTree = "<group>"; };
+		C4F7A8B2E19D3045F6C82D01 /* DrawerTabStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawerTabStrip.swift; sourceTree = "<group>"; };
 		C620B9A604B06410717A1416 /* ConciergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConciergeService.swift; sourceTree = "<group>"; };
 		C70831DDC928AE753075DFF7 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
 		CA42A1B84C22563DD2613E5C /* Invitation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Invitation.swift; sourceTree = "<group>"; };
@@ -276,6 +277,7 @@
 		F1F3DE29F17FB927E3E6EB06 /* MicButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicButton.swift; sourceTree = "<group>"; };
 		F5A856919294E1FEFDCE43EC /* TravellersStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravellersStrip.swift; sourceTree = "<group>"; };
 		F7AC4340356504B8436E574D /* ConfettiBurst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfettiBurst.swift; sourceTree = "<group>"; };
+		F84131202FDEF54200EB529E /* assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = assets.xcassets; path = Roammate/assets.xcassets; sourceTree = "<group>"; };
 		F86A9BC849FB8B64238578EC /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		F99DBF17B456BF1E103F1FF6 /* FloatingTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingTabBar.swift; sourceTree = "<group>"; };
 		FB8DFE8F3C13906CD2E51E30 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -375,6 +377,7 @@
 		3575DA384D7F49D14195A8B6 = {
 			isa = PBXGroup;
 			children = (
+				F84131202FDEF54200EB529E /* assets.xcassets */,
 				2B372ABC3229C241B7028150 /* Roammate */,
 				3B63307A60E1EDF1EFA8FAC2 /* Products */,
 			);
@@ -706,6 +709,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F84131212FDEF54200EB529E /* assets.xcassets in Resources */,
 				17BDD80E5A9AF5F43105D6C8 /* RoammatePlus.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -937,11 +941,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Roammate/App/Roammate.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 44JPJWU9AR;
 				INFOPLIST_FILE = Roammate/App/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -949,8 +955,12 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.roammate.ios;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -1021,11 +1031,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Roammate/App/Roammate.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 44JPJWU9AR;
 				INFOPLIST_FILE = Roammate/App/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1033,8 +1045,12 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.roammate.ios;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
