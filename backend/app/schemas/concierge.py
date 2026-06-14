@@ -88,6 +88,31 @@ class FindNearbyParams(BaseModel):
 class ConciergeChatRequest(BaseModel):
     message: str
 
+# ── Dry-run preview (3.5 / 3.6) ──────────────────────────────────────────────
+
+class PreviewChange(BaseModel):
+    """One event's projected before/after for the action-card timeline diff."""
+    event_id: int
+    title: str
+    day_date: Optional[str] = None
+    old_start: Optional[str] = None
+    new_start: Optional[str] = None
+    old_end: Optional[str] = None
+    new_end: Optional[str] = None
+
+class PreviewWarning(BaseModel):
+    kind: str  # "overlap" | "travel" | "cross_midnight" | "opening_hours"
+    message: str
+    event_id: Optional[int] = None
+
+class ConciergePreview(BaseModel):
+    """Real projected impact of a pending write, computed via a dry-run ripple
+    inside a rolled-back SAVEPOINT at dispatch time."""
+    summary: str
+    changes: list[PreviewChange] = Field(default_factory=list)
+    warnings: list[PreviewWarning] = Field(default_factory=list)
+
+
 class ConciergeChatResponse(BaseModel):
     intent: ConciergeIntent
     user_message: str
@@ -95,6 +120,25 @@ class ConciergeChatResponse(BaseModel):
     requires_confirmation: bool = True
     message_type: str = "text"  # "text" | "action_card" | "place_card" | "error"
     enrichment: Optional[EnrichmentStatus] = None
+    preview: Optional[ConciergePreview] = None
+
+
+# ── Shared trip-wide thread (3.1) ────────────────────────────────────────────
+
+class ConciergeMessageOut(BaseModel):
+    id: int
+    role: str               # "user" | "assistant" | "system"
+    content: str
+    message_type: str = "text"
+    author_id: Optional[int] = None
+    author_name: Optional[str] = None
+    created_at: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+
+class ConciergeThreadResponse(BaseModel):
+    messages: list[ConciergeMessageOut] = Field(default_factory=list)
+    # Whether the caller may post / confirm actions (Plus AND trip editor).
+    can_write: bool = False
 
 
 class PlaceCard(PlaceFields):
@@ -130,6 +174,15 @@ class ExecuteResponse(BaseModel):
     message: str
     updated_events: Optional[list[dict[str, Any]]] = None
     new_event: Optional[dict[str, Any]] = None
+
+
+class UndoResponse(BaseModel):
+    success: bool
+    message: str
+    # Events restored to their prior state (for the client to re-render).
+    updated_events: Optional[list[dict[str, Any]]] = None
+    # The id of the action that was undone, if any.
+    undone_action_id: Optional[int] = None
 
 
 class WhatsNextResponse(BaseModel):

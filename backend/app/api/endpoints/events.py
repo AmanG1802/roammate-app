@@ -12,7 +12,7 @@ from app.schemas.event import Event, EventCreate, EventUpdate, RippleRequest
 from app.schemas.trip import IdeaBinItem
 from app.services.smart_ripple import smart_ripple_engine, CrossMidnightShiftError
 from app.services import notification_service
-from app.services.roles import require_trip_admin
+from app.services.roles import require_trip_admin, require_trip_editor
 from app.schemas.notification import NotificationType
 from app.api.deps import get_current_user
 from app.services.vote_tally import tally_votes
@@ -330,9 +330,9 @@ async def trigger_ripple_engine(
     """
     Trigger the Ripple Engine to shift all subsequent events.
     Used for "Running Late" or manual time adjustments.
-    Only trip admins can fire ripples.
+    Requires trip edit rights (admin in v1) — see ``require_trip_editor``.
     """
-    await require_trip_admin(db, trip_id, current_user.id)
+    await require_trip_editor(db, trip_id, current_user.id)
 
     try:
         updated_events = await smart_ripple_engine.shift_itinerary(
@@ -352,7 +352,10 @@ async def trigger_ripple_engine(
                     recipient_ids=recipients,
                     type=NotificationType.RIPPLE_FIRED,
                     payload={
-                        "delta_minutes": request.delta_minutes,
+                        # A5: under elastic compression each event moves by a
+                        # different amount — this is the *requested* delta, not
+                        # the per-event shift.
+                        "requested_delta_minutes": request.delta_minutes,
                         "shifted_count": len(updated_events),
                     },
                     actor_id=current_user.id,
@@ -361,6 +364,9 @@ async def trigger_ripple_engine(
                 await db.commit()
         return [await _event_with_votes(db, e, current_user.id) for e in updated_events]
     except CrossMidnightShiftError as exc:
+        # A3: the engine left the partial shifts in-memory and re-raised. The
+        # REST contract is all-or-nothing, so roll back before surfacing 422.
+        await db.rollback()
         raise HTTPException(
             status_code=422,
             detail={

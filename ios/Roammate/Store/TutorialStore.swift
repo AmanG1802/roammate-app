@@ -16,6 +16,7 @@ final class TutorialStore: ObservableObject {
     @Published var currentStep: Int = 0
     @Published var tutorialTripId: Int? = nil
     @Published var isLoading = true
+    @Published var conciergeSampleSent = false
 
     var isActive: Bool { status == .inProgress }
 
@@ -37,7 +38,10 @@ final class TutorialStore: ObservableObject {
         // immediately — the navigation (push/pop) then happens in lockstep with
         // the step change instead of waiting on a network round-trip, which made
         // Back-navigation race the server response.
-        if isActive, currentStep != step { currentStep = step }
+        if isActive, currentStep != step {
+            currentStep = step
+            conciergeSampleSent = false
+        }
         await runMutation { try await TutorialService.setStep(step) }
     }
 
@@ -50,7 +54,15 @@ final class TutorialStore: ObservableObject {
     }
 
     func replay() async {
-        await runMutation { try await TutorialService.replay() }
+        // Reset locally first so TutorialCoordinator shows the welcome banner
+        // immediately, before the network round-trip completes.
+        status = .notStarted
+        currentStep = 0
+        conciergeSampleSent = false
+        // Use /reset (not /replay) — /replay returns in_progress at step 1,
+        // bypassing the welcome banner. /reset returns not_started so the
+        // banner stays; a fresh trip is seeded by the next /start call.
+        await runMutation { try await TutorialService.reset() }
     }
 
     func deleteTutorialTrip() async {

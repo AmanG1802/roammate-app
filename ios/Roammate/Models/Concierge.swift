@@ -36,8 +36,15 @@ struct ChatMessage: Identifiable {
     let intent: ConciergeIntent?
     let params: [String: JSONValue]
     let timestamp: Date
+    /// Dry-run projected impact for a pending write (3.5/3.6/3.7).
+    let preview: ConciergePreview?
+    /// Author display name in the shared trip-wide thread (3.1).
+    let authorName: String?
+    /// Whether this confirmed action can be reverted (3.8). Only the most
+    /// recent executed action is undoable at a time.
+    var canUndo: Bool
 
-    enum Role: String { case user, assistant }
+    enum Role: String { case user, assistant, system }
 
     init(
         id: UUID = UUID(),
@@ -47,7 +54,10 @@ struct ChatMessage: Identifiable {
         status: ActionStatus? = nil,
         intent: ConciergeIntent? = nil,
         params: [String: JSONValue] = [:],
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        preview: ConciergePreview? = nil,
+        authorName: String? = nil,
+        canUndo: Bool = false
     ) {
         self.id = id
         self.role = role
@@ -57,7 +67,51 @@ struct ChatMessage: Identifiable {
         self.intent = intent
         self.params = params
         self.timestamp = timestamp
+        self.preview = preview
+        self.authorName = authorName
+        self.canUndo = canUndo
     }
+}
+
+// MARK: - Dry-run preview (3.5 / 3.6 / 3.7)
+
+struct PreviewChange: Codable, Identifiable, Hashable {
+    var id: Int { eventId }
+    let eventId: Int
+    let title: String
+    let dayDate: String?
+    let oldStart: String?
+    let newStart: String?
+    let oldEnd: String?
+    let newEnd: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case eventId = "event_id"
+        case dayDate = "day_date"
+        case oldStart = "old_start"
+        case newStart = "new_start"
+        case oldEnd = "old_end"
+        case newEnd = "new_end"
+    }
+}
+
+struct PreviewWarning: Codable, Identifiable, Hashable {
+    var id: String { "\(kind)-\(message)" }
+    let kind: String
+    let message: String
+    let eventId: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case kind, message
+        case eventId = "event_id"
+    }
+}
+
+struct ConciergePreview: Codable, Hashable {
+    let summary: String
+    let changes: [PreviewChange]
+    let warnings: [PreviewWarning]
 }
 
 /// Which full-screen destination the Concierge is showing over the chat.
@@ -78,12 +132,56 @@ struct ConciergeChatResponse: Codable {
     let requiresConfirmation: Bool
     let messageType: String
     let enrichment: JSONValue?
+    let preview: ConciergePreview?
 
     enum CodingKeys: String, CodingKey {
-        case intent, params, enrichment
+        case intent, params, enrichment, preview
         case userMessage = "user_message"
         case requiresConfirmation = "requires_confirmation"
         case messageType = "message_type"
+    }
+}
+
+// MARK: - Shared trip-wide thread (3.1) + undo (3.8)
+
+struct ConciergeMessageOut: Codable, Identifiable, Hashable {
+    let id: Int
+    let role: String
+    let content: String
+    let messageType: String
+    let authorId: Int?
+    let authorName: String?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, content
+        case messageType = "message_type"
+        case authorId = "author_id"
+        case authorName = "author_name"
+        case createdAt = "created_at"
+    }
+}
+
+struct ConciergeThreadResponse: Codable {
+    let messages: [ConciergeMessageOut]
+    let canWrite: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case messages
+        case canWrite = "can_write"
+    }
+}
+
+struct UndoResponse: Codable {
+    let success: Bool
+    let message: String
+    let updatedEvents: [JSONValue]?
+    let undoneActionId: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case success, message
+        case updatedEvents = "updated_events"
+        case undoneActionId = "undone_action_id"
     }
 }
 

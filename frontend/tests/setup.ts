@@ -1,5 +1,11 @@
-import '@testing-library/jest-dom';
-import { vi, beforeEach } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/react';
+import { vi, beforeEach, afterEach } from 'vitest';
+
+// Unmount React trees and clear jsdom between tests.
+afterEach(() => {
+  cleanup();
+});
 
 // ── matchMedia stub (not in jsdom) ────────────────────────────────────────────
 Object.defineProperty(window, 'matchMedia', {
@@ -16,11 +22,25 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// ── ResizeObserver / IntersectionObserver stubs (not in jsdom) ────────────────
+class MockObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  takeRecords = vi.fn(() => []);
+}
+vi.stubGlobal('ResizeObserver', MockObserver);
+vi.stubGlobal('IntersectionObserver', MockObserver);
+
+// ── scroll APIs (jsdom no-ops, but components call them) ───────────────────────
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
+
 // ── localStorage stub (jsdom's implementation is incomplete in some versions) ─
 const localStorageData: Record<string, string> = {};
 const localStorageMock: Storage = {
   getItem: (key: string) => localStorageData[key] ?? null,
-  setItem: (key: string, value: string) => { localStorageData[key] = value; },
+  setItem: (key: string, value: string) => { localStorageData[key] = String(value); },
   removeItem: (key: string) => { delete localStorageData[key]; },
   clear: () => { Object.keys(localStorageData).forEach((k) => delete localStorageData[k]); },
   get length() { return Object.keys(localStorageData).length; },
@@ -28,7 +48,7 @@ const localStorageMock: Storage = {
 };
 vi.stubGlobal('localStorage', localStorageMock);
 
-// Reset localStorage before every test so tests don't bleed into each other
+// Reset localStorage before every test so tests don't bleed into each other.
 beforeEach(() => {
   localStorageMock.clear();
 });

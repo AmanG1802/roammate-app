@@ -1,8 +1,8 @@
 import SwiftUI
 
 enum SubPage: String, CaseIterable, Identifiable, Hashable {
-    case plan = "Plan"
     case brainstorm = "Brainstorm"
+    case plan = "Plan"
     case concierge = "Concierge"
     case people = "People"
 

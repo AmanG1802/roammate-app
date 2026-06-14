@@ -48,6 +48,8 @@ def _build_details_field_mask() -> str:
         parts.append("rating,priceLevel")
     if settings.GOOGLE_MAPS_FETCH_PHOTOS:
         parts.append("photos")
+    if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+        parts.append("regularOpeningHours")
     return ",".join(parts)
 _ROUTES_FIELD_MASK = (
     "routes.duration,routes.distanceMeters,"
@@ -336,6 +338,11 @@ class MapServiceV2(BaseMapService):
             if photos and photos[0].get("name"):
                 item["photo_url"] = self.photo_url(photos[0]["name"])
 
+        if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+            hours = details.get("regularOpeningHours")
+            if hours:
+                item["opening_hours"] = hours
+
         gtypes = details.get("types") or []
         if gtypes and not item.get("types"):
             item["types"] = gtypes[:5]
@@ -375,6 +382,8 @@ class MapServiceV2(BaseMapService):
             field_parts.extend(["places.rating", "places.priceLevel"])
         if settings.GOOGLE_MAPS_FETCH_PHOTOS:
             field_parts.append("places.photos")
+        if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+            field_parts.append("places.regularOpeningHours")
         field_mask = ",".join(field_parts)
 
         headers = {
@@ -452,6 +461,10 @@ class MapServiceV2(BaseMapService):
                 photos = r.get("photos") or []
                 if photos and photos[0].get("name"):
                     place["photo_url"] = self.photo_url(photos[0]["name"])
+            if settings.GOOGLE_MAPS_FETCH_OPENING_HOURS:
+                hours = r.get("regularOpeningHours")
+                if hours:
+                    place["opening_hours"] = hours
             places.append(place)
 
         self._track(

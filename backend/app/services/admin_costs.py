@@ -7,6 +7,7 @@ Prices reflect the LOWEST tier we hit given our minimum-cost config:
     GOOGLE_MAPS_API_VERSION = "v1"  (legacy)
     GOOGLE_MAPS_FETCH_PHOTOS = False
     GOOGLE_MAPS_FETCH_RATING = False
+    GOOGLE_MAPS_FETCH_OPENING_HOURS = False
     GOOGLE_MAPS_USE_NEARBY_API = False  (Text Search with locationBias)
 
 When config flags change, the billed SKU escalates — see inline comments.

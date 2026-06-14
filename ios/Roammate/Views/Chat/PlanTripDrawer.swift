@@ -18,6 +18,7 @@ struct PlanTripDrawer: View {
     @FocusState private var promptFocused: Bool
     @State private var wittyIndex = 0
     @State private var wittyTimer: Task<Void, Never>?
+    @State private var demoStarted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,15 +31,16 @@ struct PlanTripDrawer: View {
             inputArea
         }
         .background(Color.roammateBackground.ignoresSafeArea())
-        .onAppear {
-            if demoMode {
-                // Hands-off demo: don't pop the keyboard, just run the script.
-                Task {
-                    await store.runTutorialDemo()
-                    onDemoPreviewShown?()
-                }
-            } else {
-                promptFocused = true
+        .onAppear { if !demoMode { promptFocused = true } }
+        .onChange(of: demoMode, initial: true) { _, newValue in
+            // Start the demo exactly once — the guard prevents re-entry if demoMode
+            // briefly toggles (e.g. step advances from planTrip → planPreview while
+            // the sheet is still open).
+            guard newValue, !demoStarted else { return }
+            demoStarted = true
+            Task {
+                await store.runTutorialDemo()
+                onDemoPreviewShown?()
             }
         }
         .onDisappear { wittyTimer?.cancel() }

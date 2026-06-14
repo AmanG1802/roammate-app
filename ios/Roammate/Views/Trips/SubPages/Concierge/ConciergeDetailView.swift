@@ -145,6 +145,7 @@ struct ConciergeMapView: View {
                 }
             }
             .mapStyle(.standard(elevation: .realistic))
+            .environment(\.colorScheme, .light)
             .ignoresSafeArea(edges: .bottom)
             .onTapGesture { selectedEventId = nil }
 

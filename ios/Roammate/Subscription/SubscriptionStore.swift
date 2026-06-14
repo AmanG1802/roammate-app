@@ -29,7 +29,7 @@ final class SubscriptionStore: ObservableObject {
 
     init() {
         storeKit.onVerifiedTransaction = { [weak self] jws, _ in
-            await self?.verifyWithBackend(signedJWS: jws)
+            await self?.verifyWithBackend(signedJWS: jws) ?? false
         }
     }
 
@@ -175,8 +175,12 @@ final class SubscriptionStore: ObservableObject {
         await refresh()
     }
 
-    /// POST the JWS to the backend so it can flip the user to Plus.
-    private func verifyWithBackend(signedJWS: String) async {
+    /// POST the JWS to the backend so it can flip the user to Plus. Returns
+    /// `true` only when the backend confirmed an active Plus entitlement — the
+    /// caller uses this to decide whether a purchase truly succeeded, so we
+    /// never show "Welcome to Plus" off the back of a failed/unverified call.
+    @discardableResult
+    private func verifyWithBackend(signedJWS: String) async -> Bool {
         struct VerifyBody: Encodable {
             let signed_transaction_info: String
             let coupon_id: Int?
@@ -195,8 +199,10 @@ final class SubscriptionStore: ObservableObject {
             entitlement = dto
             isConfirmed = true
             NotificationCenter.default.post(name: .subscriptionUpdated, object: nil)
+            return dto.isPlus
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? "Could not verify purchase"
+            return false
         }
     }
 }

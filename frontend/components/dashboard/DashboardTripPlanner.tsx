@@ -208,7 +208,7 @@ export default function DashboardTripPlanner({ onTripCreated }: { onTripCreated?
       if (preview.destination_lat != null) body.destination_lat = preview.destination_lat;
       if (preview.destination_lng != null) body.destination_lng = preview.destination_lng;
 
-      const trip = await api<{ id: string }>('/api/trips/', {
+      const trip = await api<{ id: string }>('/api/trips', {
         method: 'POST',
         json: body,
       });

@@ -38,4 +38,14 @@ enum ConciergeService {
     static func todaySummary(tripId: Int) async throws -> TodaySummaryResponse {
         try await APIClient.shared.request("/concierge/\(tripId)/today-summary")
     }
+
+    /// 3.1: the shared, trip-wide thread (all members read; `canWrite` gates posting).
+    static func messages(tripId: Int) async throws -> ConciergeThreadResponse {
+        try await APIClient.shared.request("/concierge/\(tripId)/messages")
+    }
+
+    /// 3.8: revert the most recent not-yet-undone action.
+    static func undo(tripId: Int) async throws -> UndoResponse {
+        try await APIClient.shared.request("/concierge/\(tripId)/undo", method: "POST")
+    }
 }

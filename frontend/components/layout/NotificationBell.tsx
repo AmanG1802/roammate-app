@@ -138,7 +138,7 @@ const NotificationBell = forwardRef<NotificationBellHandle>(
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api<NotificationItem[]>('/api/notifications/?limit=30');
+      const data = await api<NotificationItem[]>('/api/notifications?limit=30');
       setItems(data);
     } catch { /* ignore */ }
     finally { setLoading(false); }

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from app.services.smart_ripple import (
     SmartRippleEngine,
     CrossMidnightShiftError,
+    EventNotEligibleError,
 )
 from app.services.google_maps import RoutePoint
 
@@ -309,16 +310,19 @@ class TestShiftItinerary:
         assert result == []
 
     @patch("app.services.smart_ripple.get_google_maps_service")
-    async def test_event_id_not_found_returns_empty(self, mock_maps_factory, db_session):
+    async def test_event_id_not_found_raises_ineligible(self, mock_maps_factory, db_session):
+        # A4: an unknown anchor id now raises a typed, user-facing error instead
+        # of silently returning [] (which read as a misleading "nothing to do").
         trip = await _seed_trip(db_session)
         await _seed_event_db(db_session, trip.id)
 
         engine = SmartRippleEngine()
-        result = await engine.shift_itinerary(
-            db=db_session, trip_id=trip.id, delta_minutes=10,
-            start_from_event_id=9999,
-        )
-        assert result == []
+        with pytest.raises(EventNotEligibleError) as exc_info:
+            await engine.shift_itinerary(
+                db=db_session, trip_id=trip.id, delta_minutes=10,
+                start_from_event_id=9999,
+            )
+        assert exc_info.value.reason == "not_found"
 
     @patch("app.services.smart_ripple.get_google_maps_service")
     async def test_propagation_stops_when_gap_sufficient(self, mock_maps_factory, db_session):
@@ -436,3 +440,220 @@ class TestShiftItinerary:
             start_from_time=cutoff,
         )
         assert result == []
+
+
+def _route_mock(duration_s: int):
+    leg = MagicMock()
+    leg.duration_s = duration_s
+    route = MagicMock()
+    route.legs = [leg]
+    return route
+
+
+class TestCascadeRobustness:
+    """New-behaviour coverage for the Phase 1/2 ripple overhaul."""
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_dry_run_projects_without_persisting(self, mock_maps_factory, db_session):
+        # R1: dry_run returns projected shifts + warnings, commits nothing.
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="A",
+                                 start_time=time(10, 0), end_time=time(11, 0), place_id="ChIJ_A")
+        b = await _seed_event_db(db_session, trip.id, title="B",
+                                 start_time=time(11, 10), end_time=time(12, 0), place_id="ChIJ_B")
+        mock = MagicMock()
+        mock.directions = AsyncMock(return_value=_route_mock(1800))  # 30 min travel
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        result = await engine.shift_itinerary(
+            db=db_session, trip_id=trip.id, delta_minutes=30,
+            start_from_event_id=a.id, dry_run=True,
+        )
+        # RippleResult with projected entries for both A (anchor) and B (pushed).
+        ids = {p.event_id for p in result.projected}
+        assert a.id in ids and b.id in ids
+        # Discard the in-memory mutations (mirrors the caller's SAVEPOINT rollback).
+        await db_session.rollback()
+        await db_session.refresh(b)
+        assert b.start_time == time(11, 10)  # untouched on disk
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_locked_event_is_readonly_waypoint(self, mock_maps_factory, db_session):
+        # A9: a locked middle event is never moved but still warns + is measured.
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="A",
+                                 start_time=time(10, 0), end_time=time(11, 0), place_id="ChIJ_A")
+        locked = await _seed_event_db(db_session, trip.id, title="Locked",
+                                      start_time=time(11, 5), end_time=time(12, 0),
+                                      place_id="ChIJ_L", is_locked=True)
+        mock = MagicMock()
+        mock.directions = AsyncMock(return_value=_route_mock(1800))  # 30 min > 5 min gap
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        result = await engine.shift_itinerary(
+            db=db_session, trip_id=trip.id, delta_minutes=30,
+            start_from_event_id=a.id, dry_run=True,
+        )
+        # Locked event not shifted...
+        assert locked.id not in {p.event_id for p in result.projected}
+        # ...but the infeasible gap is surfaced as a warning.
+        assert any(w.kind == "travel" and w.event_id == locked.id for w in result.warnings)
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_cascade_breaks_at_day_boundary(self, mock_maps_factory, db_session):
+        # B1: a shift never cascades onto the next day.
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="Day1",
+                                 day_date=date(2025, 7, 1),
+                                 start_time=time(23, 0), end_time=time(23, 30), place_id="ChIJ_A")
+        tomorrow = await _seed_event_db(db_session, trip.id, title="Day2",
+                                        day_date=date(2025, 7, 2),
+                                        start_time=time(9, 0), end_time=time(10, 0), place_id="ChIJ_B")
+        mock = MagicMock()
+        mock.directions = AsyncMock(return_value=_route_mock(3600))
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        result = await engine.shift_itinerary(
+            db=db_session, trip_id=trip.id, delta_minutes=15,
+            start_from_event_id=a.id,
+        )
+        assert tomorrow.id not in {e.id for e in result}
+        await db_session.refresh(tomorrow)
+        assert tomorrow.start_time == time(9, 0)
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_cross_midnight_raises_with_shifted_so_far(self, mock_maps_factory, db_session):
+        # A3: the engine re-raises without committing, carrying the partial shifts.
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="Late",
+                                 start_time=time(23, 30), end_time=time(23, 45), place_id="ChIJ_A")
+        mock = MagicMock()
+        mock.directions = AsyncMock(return_value=None)
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        with pytest.raises(CrossMidnightShiftError) as exc_info:
+            await engine.shift_itinerary(
+                db=db_session, trip_id=trip.id, delta_minutes=60,
+                start_from_event_id=a.id,
+            )
+        assert exc_info.value.event_id == a.id
+        # No internal commit/rollback — the caller owns the transaction.
+        assert db_session.in_transaction()
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_maps_retry_succeeds_on_third_attempt(self, mock_maps_factory, db_session):
+        # A10: first two Directions calls fail, third succeeds → real time used.
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="A",
+                                 start_time=time(10, 0), end_time=time(11, 0), place_id="ChIJ_A")
+        b = await _seed_event_db(db_session, trip.id, title="B",
+                                 start_time=time(11, 10), end_time=time(12, 0), place_id="ChIJ_B")
+        mock = MagicMock()
+        mock.directions = AsyncMock(side_effect=[
+            RuntimeError("boom"), RuntimeError("boom"), _route_mock(1800),
+        ])
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        result = await engine.shift_itinerary(
+            db=db_session, trip_id=trip.id, delta_minutes=0,
+            start_from_event_id=a.id,
+        )
+        # 30 min travel needed, 10 min gap → B pushed 20 min to 11:30.
+        await db_session.refresh(b)
+        assert b.start_time == time(11, 30)
+        assert mock.directions.call_count == 3
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_maps_all_retries_fail_falls_back_to_zero(self, mock_maps_factory, db_session):
+        # A10: all attempts fail → 0 travel, cascade stops after the anchor.
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="A",
+                                 start_time=time(10, 0), end_time=time(10, 30), place_id="ChIJ_A")
+        b = await _seed_event_db(db_session, trip.id, title="B",
+                                 start_time=time(11, 0), end_time=time(12, 0), place_id="ChIJ_B")
+        mock = MagicMock()
+        mock.directions = AsyncMock(side_effect=RuntimeError("down"))
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        await engine.shift_itinerary(
+            db=db_session, trip_id=trip.id, delta_minutes=15,
+            start_from_event_id=a.id,
+        )
+        # A → 10:15-10:45; B keeps a 15-min gap. Travel failed (0), so no
+        # travel-driven shift and no overlap → B is left untouched.
+        await db_session.refresh(b)
+        assert b.start_time == time(11, 0)
+        assert mock.directions.call_count == 3
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_locked_anchor_raises_ineligible(self, mock_maps_factory, db_session):
+        # A4: targeting a locked event as the anchor is rejected precisely.
+        trip = await _seed_trip(db_session)
+        locked = await _seed_event_db(db_session, trip.id, is_locked=True)
+        mock = MagicMock()
+        mock.directions = AsyncMock(return_value=None)
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        with pytest.raises(EventNotEligibleError) as exc_info:
+            await engine.shift_itinerary(
+                db=db_session, trip_id=trip.id, delta_minutes=10,
+                start_from_event_id=locked.id,
+            )
+        assert exc_info.value.reason == "locked"
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_reuses_stored_day_route_legs(self, mock_maps_factory, db_session):
+        # B2: a stored DayRoute leg is reused instead of calling Directions.
+        from app.models.all_models import DayRoute
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="A",
+                                 start_time=time(10, 0), end_time=time(11, 0), place_id="ChIJ_A")
+        b = await _seed_event_db(db_session, trip.id, title="B",
+                                 start_time=time(11, 10), end_time=time(12, 0), place_id="ChIJ_B")
+        db_session.add(DayRoute(
+            trip_id=trip.id, day_date=date(2025, 7, 1).isoformat(),
+            legs=[{"from_event_id": str(a.id), "to_event_id": str(b.id),
+                   "duration_s": 1800, "distance_m": 5000}],
+            waypoint_fingerprint="fp", ordered_event_ids=[str(a.id), str(b.id)],
+        ))
+        await db_session.commit()
+        mock = MagicMock()
+        mock.directions = AsyncMock(return_value=_route_mock(60))  # would be wrong if called
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        await engine.shift_itinerary(
+            db=db_session, trip_id=trip.id, delta_minutes=0, start_from_event_id=a.id,
+        )
+        # 30-min stored leg vs 10-min gap → B pushed 20 min to 11:30, no API call.
+        await db_session.refresh(b)
+        assert b.start_time == time(11, 30)
+        assert mock.directions.call_count == 0
+
+    @patch("app.services.smart_ripple.get_google_maps_service")
+    async def test_opening_hours_warning_on_shift(self, mock_maps_factory, db_session):
+        # R4: shifting an event past its closing time surfaces a warning.
+        hours = {"periods": [{"open": {"day": d, "hour": 9, "minute": 0},
+                              "close": {"day": d, "hour": 18, "minute": 0}}
+                             for d in range(7)]}
+        trip = await _seed_trip(db_session)
+        a = await _seed_event_db(db_session, trip.id, title="Museum",
+                                 start_time=time(17, 0), end_time=time(17, 30),
+                                 place_id="ChIJ_A", opening_hours=hours)
+        mock = MagicMock()
+        mock.directions = AsyncMock(return_value=None)
+        mock_maps_factory.return_value = mock
+
+        engine = SmartRippleEngine()
+        result = await engine.shift_itinerary(
+            db=db_session, trip_id=trip.id, delta_minutes=90,  # → 18:30, past close
+            start_from_event_id=a.id, dry_run=True,
+        )
+        assert any(w.kind == "opening_hours" and w.event_id == a.id for w in result.warnings)

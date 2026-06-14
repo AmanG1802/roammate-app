@@ -345,8 +345,8 @@ struct TripLandingView: View {
 
     private var navButtons: some View {
         VStack(spacing: RoammateSpacing.sm) {
-            sectionButton(icon: "mappin.and.ellipse", title: "Plan", page: .plan, color: Color.roammateEmerald)
             sectionButton(icon: "lightbulb.fill", title: "Brainstorm", page: .brainstorm, color: Color.roammateAmber)
+            sectionButton(icon: "mappin.and.ellipse", title: "Plan", page: .plan, color: Color.roammateEmerald)
             sectionButton(icon: "sparkles", title: "Concierge", page: .concierge, color: Color.roammateViolet)
             sectionButton(icon: "person.2.fill", title: "People", page: .people, color: Color.roammateSky)
         }
