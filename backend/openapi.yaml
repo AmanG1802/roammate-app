@@ -3207,6 +3207,65 @@ paths:
                     items:
                       $ref: '#/components/schemas/EventOut'
 
+  /api/concierge/{trip_id}/messages:
+    get:
+      tags: [concierge]
+      summary: Get shared trip concierge thread
+      operationId: get_concierge_thread
+      description: Returns the shared, trip-wide concierge message thread. Readable by all trip members; `can_write` indicates whether the caller may post (Plus + admin).
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Concierge thread
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages, can_write]
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                  can_write:
+                    type: boolean
+
+  /api/concierge/{trip_id}/undo:
+    post:
+      tags: [concierge]
+      summary: Undo last concierge action
+      operationId: concierge_undo
+      description: Reverts the most recent not-yet-undone concierge action for this trip. Requires editor (admin) access and Plus.
+      parameters:
+        - name: trip_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Undo result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
   # ── Maps ──────────────────────────────────────────────────────────────────────
 
   /api/trips/{trip_id}/route:

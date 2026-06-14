@@ -103,6 +103,8 @@ HANDLERS = {
     "skip_event":                      concierge.skip_event,
     "whats_next":                      concierge.whats_next,
     "today_summary":                   concierge.today_summary,
+    "get_concierge_thread":            concierge.get_concierge_thread,
+    "concierge_undo":                  concierge.concierge_undo,
 
     # ── Maps ──────────────────────────────────────────────────────────────────
     "compute_route":                   maps.compute_route,
