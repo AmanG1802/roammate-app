@@ -379,9 +379,9 @@ function TripPlannerPageContent() {
           </Link>
 
           <nav className="flex flex-col gap-2 w-full px-2">
-            {sidebarBtn('brainstorm', <Lightbulb className="w-5 h-5" />, 'Ideas')}
+            {sidebarBtn('brainstorm', <Lightbulb className="w-5 h-5" />, 'Brainstorm')}
             {sidebarBtn('plan', <MapIcon className="w-5 h-5" />, 'Plan')}
-            {sidebarBtn('concierge', <Sparkles className="w-5 h-5" />, 'Live')}
+            {sidebarBtn('concierge', <Sparkles className="w-5 h-5" />, 'Concierge')}
             {sidebarBtn('people', <Users className="w-5 h-5" />, 'People')}
           </nav>
 

@@ -636,31 +636,31 @@ function TripHubContent() {
           >
             <motion.div variants={heroItem} whileTap={{ scale: 0.98 }}>
               <Link
-                href={`/trips?id=${tripId}`}
-                onClick={(e) => navigate(e, `/trips?id=${tripId}`)}
-                className="group flex items-center justify-between px-6 py-4 bg-white text-slate-900 rounded-2xl font-black text-[15px] hover:bg-indigo-50 transition-colors shadow-2xl shadow-black/30"
+                href={`/trips?id=${tripId}&mode=brainstorm`}
+                onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=brainstorm`)}
+                className="group flex items-center justify-between px-6 py-4 bg-white text-slate-900 rounded-2xl font-black text-[15px] hover:bg-amber-50 transition-colors shadow-2xl shadow-black/30"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
-                    <MapPin className="w-4 h-4 text-indigo-600" />
+                  <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center group-hover:bg-amber-200 transition-colors">
+                    <Lightbulb className="w-4 h-4 text-amber-600" />
                   </div>
-                  Open Planner
+                  Brainstorm
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-indigo-600 transition-all" />
+                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-amber-600 transition-all" />
               </Link>
             </motion.div>
 
             <motion.div variants={heroItem} whileTap={{ scale: 0.98 }}>
               <Link
-                href={`/trips?id=${tripId}&mode=brainstorm`}
-                onClick={(e) => navigate(e, `/trips?id=${tripId}&mode=brainstorm`)}
+                href={`/trips?id=${tripId}`}
+                onClick={(e) => navigate(e, `/trips?id=${tripId}`)}
                 className="group flex items-center justify-between px-6 py-4 bg-indigo-500/15 border border-indigo-400/25 text-indigo-200 rounded-2xl font-black text-[15px] hover:bg-indigo-500/25 hover:border-indigo-400/40 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-indigo-400/20 rounded-xl flex items-center justify-center group-hover:bg-indigo-400/30 transition-colors">
-                    <Lightbulb className="w-4 h-4 text-indigo-200" />
+                    <MapPin className="w-4 h-4 text-indigo-200" />
                   </div>
-                  Go to Brainstorm
+                  Open Planner
                 </div>
                 <ChevronRight className="w-5 h-5 text-indigo-300/50 group-hover:translate-x-0.5 group-hover:text-indigo-200 transition-all" />
               </Link>
