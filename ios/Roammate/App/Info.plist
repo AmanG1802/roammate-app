@@ -35,23 +35,27 @@
 	<string></string>
 	<key>GIDClientID</key>
 	<string>376477886565-vac1rbim4h61jjbruh19dca1a2lg91uh.apps.googleusercontent.com</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Roammate connects to a local development server to generate and update trip routes.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Roammate connects to a local development server to generate and update trip routes.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Roammate needs microphone access to transcribe your voice messages.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Roammate uses speech recognition to let you dictate messages in the AI chat.</string>
-	<key>UIUserInterfaceStyle</key>
-	<string>Light</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string></string>
 	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
 </dict>
 </plist>

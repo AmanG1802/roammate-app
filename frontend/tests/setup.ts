@@ -34,6 +34,7 @@ vi.stubGlobal('IntersectionObserver', MockObserver);
 
 // ── scroll APIs (jsdom no-ops, but components call them) ───────────────────────
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
+(window.HTMLElement.prototype as HTMLElement & { scrollTo: unknown }).scrollTo = vi.fn();
 window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
 
 // ── localStorage stub (jsdom's implementation is incomplete in some versions) ─
