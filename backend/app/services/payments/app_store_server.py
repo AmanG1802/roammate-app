@@ -65,12 +65,18 @@ def _require(name: str, value: Optional[str]) -> str:
 
 
 def _load_root_certs() -> list[bytes]:
+    if settings.APPLE_ROOT_CA_B64:
+        import base64
+        return [base64.b64decode(settings.APPLE_ROOT_CA_B64)]
     path = _require("APPLE_ROOT_CA_PATH", settings.APPLE_ROOT_CA_PATH)
     with open(path, "rb") as f:
         return [f.read()]
 
 
 def _load_signing_key() -> bytes:
+    if settings.APPLE_PRIVATE_KEY_B64:
+        import base64
+        return base64.b64decode(settings.APPLE_PRIVATE_KEY_B64)
     path = _require("APPLE_PRIVATE_KEY_PATH", settings.APPLE_PRIVATE_KEY_PATH)
     with open(path, "rb") as f:
         return f.read()
