@@ -29,6 +29,10 @@ final class ConciergeStore: ObservableObject {
 
     /// Set by the host to reload the shared itinerary after a mutation.
     var onEventsChanged: (() async -> Void)?
+    /// Current signed-in user id, set by the host. Stamped on locally-sent user
+    /// turns so their avatar resolves against the trip member list (parity with
+    /// hydrated history, which carries author ids from the backend).
+    var currentUserId: Int?
     /// Fallback search origin (current/next event coordinate) used when device
     /// location is unavailable. Set by the chat view from `TripDetailStore`.
     var fallbackCoordinate: CLLocationCoordinate2D?
@@ -65,7 +69,8 @@ final class ConciergeStore: ObservableObject {
                 // Resolved history cards render confirmed, not as live prompts.
                 card: .text,
                 status: isCard ? .confirmed : nil,
-                authorName: m.authorName
+                authorName: m.authorName,
+                authorId: m.authorId
             )
         }
     }
@@ -76,7 +81,7 @@ final class ConciergeStore: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isThinking else { return }
 
-        messages.append(ChatMessage(role: .user, text: trimmed))
+        messages.append(ChatMessage(role: .user, text: trimmed, authorId: currentUserId))
         isThinking = true
         error = nil
 
@@ -330,8 +335,11 @@ final class ConciergeStore: ObservableObject {
         return Event(conciergeJSON: json)
     }
 
-    // MARK: - Availability (day-of gating)
+    // MARK: - Availability
 
+    /// Today's date as a tz-aware `yyyy-MM-dd` key. Used by the view to decide
+    /// whether the trip has started (chips are hidden pre-trip). Date-gating of
+    /// real-time actions is enforced by the backend intent whitelist.
     var todayString: String {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
@@ -339,26 +347,6 @@ final class ConciergeStore: ObservableObject {
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: Date())
     }
-
-    /// `nil` when the Concierge is live today; otherwise a banner explaining why
-    /// actions are dormant.
-    var availabilityBanner: String? {
-        guard let start = trip.startDate, let end = trip.endDate else { return nil }
-        let today = todayString
-        let startKey = EventService.isoDateString(from: start)
-        let endKey = EventService.isoDateString(from: end)
-        if today < startKey {
-            let fmt = DateFormatter()
-            fmt.dateFormat = "EEE, MMM d"
-            return "Concierge goes live on \(fmt.string(from: start)). You can still ask questions now."
-        }
-        if today > endKey {
-            return "This trip has wrapped up — Concierge actions are paused."
-        }
-        return nil
-    }
-
-    var isLiveDay: Bool { availabilityBanner == nil }
 
     // MARK: - Helpers
 

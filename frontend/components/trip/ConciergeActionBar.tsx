@@ -12,7 +12,20 @@ const ConciergeChatDrawer = dynamic(() => import('./ConciergeChatDrawer'), { ssr
 
 const LATE_OPTIONS = [15, 30, 60];
 
-export default function ConciergeActionBar() {
+export default function ConciergeActionBar({
+  tripStartDate = null,
+  tripEndDate = null,
+  isAdmin = false,
+  members = [],
+}: {
+  /** Trip window (ISO) — gates the real-time-only actions. */
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
+  /** Current user is a trip admin — drives the drawer's free-tier upsell pill. */
+  isAdmin?: boolean;
+  /** Trip member list, forwarded to the drawer for sender avatars. */
+  members?: any[];
+} = {}) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showLateMenu, setShowLateMenu] = useState(false);
   const [rippleToast, setRippleToast] = useState<string | null>(null);
@@ -71,6 +84,14 @@ export default function ConciergeActionBar() {
     ? Intl.DateTimeFormat().resolvedOptions().timeZone
     : 'UTC';
 
+  // ACTIVE_TRIP_ONLY actions (Running Late / Skip Next / Find Coffee) are only
+  // valid while the trip is in progress. Mirrors the backend intent whitelist;
+  // ISO date comparison in the (browser) trip timezone.
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: browserTz });
+  const tripIsActive = tripStartDate && tripEndDate
+    ? (todayKey >= tripStartDate.slice(0, 10) && todayKey <= tripEndDate.slice(0, 10))
+    : false;
+
   const isStillUpcoming = (e: Event, now: Date): boolean => {
     const start = combineInTz(e.day_date, e.start_time, browserTz);
     const end = combineInTz(e.day_date, e.end_time, browserTz);
@@ -113,7 +134,7 @@ export default function ConciergeActionBar() {
         <div className="relative">
           <button
             onClick={() => setShowLateMenu((v) => !v)}
-            disabled={isProcessing || events.length === 0}
+            disabled={isProcessing || events.length === 0 || !tripIsActive}
             className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 rounded-xl font-bold text-sm hover:bg-rose-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {isProcessing ? (
@@ -129,7 +150,7 @@ export default function ConciergeActionBar() {
               {LATE_OPTIONS.map((min) => (
                 <button
                   key={min}
-                  onClick={() => handleRunningLate(min)}
+                  onClick={() => gateConcierge(() => handleRunningLate(min))}
                   className="w-full text-left px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                 >
                   +{min} min
@@ -145,7 +166,7 @@ export default function ConciergeActionBar() {
           title="Skip Next"
           aria-label="Skip next event"
           onClick={handleSkipNext}
-          disabled={!events.some((e) => e.start_time && !e.is_skipped && isStillUpcoming(e, new Date()))}
+          disabled={!tripIsActive || !events.some((e) => e.start_time && !e.is_skipped && isStillUpcoming(e, new Date()))}
           className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
         >
           <SkipForward className="w-4 h-4" />
@@ -155,7 +176,8 @@ export default function ConciergeActionBar() {
           title="Find Coffee"
           aria-label="Find coffee nearby"
           onClick={handleFindCoffee}
-          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors active:scale-95"
+          disabled={!tripIsActive || isProcessing}
+          className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
         >
           <Coffee className="w-4 h-4" />
         </button>
@@ -187,6 +209,9 @@ export default function ConciergeActionBar() {
         isOpen={conciergeOpen}
         onClose={closeConcierge}
         preAction={conciergePreAction}
+        isAdmin={isAdmin}
+        tripStartDate={tripStartDate}
+        members={members}
       />
     </>
   );

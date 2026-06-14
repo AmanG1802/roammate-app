@@ -228,8 +228,6 @@ function TripPlannerPageContent() {
     return parseISO(tripDays[idx].date);
   }, [tripDays, liveDayIdx]);
 
-  const isCurrentDay = liveDay ? isToday(liveDay) : false;
-
   const handleAddDay = useCallback(async () => {
     if (!tripId) return;
 
@@ -599,15 +597,13 @@ function TripPlannerPageContent() {
               {/* Map + optional concierge overlay */}
               <div className={`${conciergeMobileView === 'map' ? 'flex' : 'hidden'} lg:flex flex-1 relative`}>
                 <GoogleMap filterDay={liveDay ?? undefined} tripId={tripId} />
-                {isCurrentDay && currentUserIsAdmin && (
-                  <ConciergeActionBar />
-                )}
-                {!isCurrentDay && liveDay && (
-                  <div className="absolute bottom-4 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-20 px-5 py-3 bg-white/80 backdrop-blur border border-slate-200 rounded-2xl shadow-lg flex justify-center">
-                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest text-center">
-                      Concierge activates on {format(liveDay, 'EEE, MMM d')}
-                    </p>
-                  </div>
+                {currentUserIsAdmin && (
+                  <ConciergeActionBar
+                    tripStartDate={trip?.start_date ?? null}
+                    tripEndDate={trip?.end_date ?? null}
+                    isAdmin={currentUserIsAdmin}
+                    members={members}
+                  />
                 )}
               </div>
             </div>

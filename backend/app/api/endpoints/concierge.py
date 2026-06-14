@@ -65,6 +65,45 @@ async def _get_trip_tz(db: AsyncSession, trip_id: int) -> str:
     return (trip.timezone if trip and trip.timezone else "UTC")
 
 
+def _trip_is_active(trip: Optional[TripModel], trip_tz: str) -> bool:
+    """True when today (in the trip's tz) falls within ``[start_date, end_date]``.
+
+    Trip day boundaries follow the stored datetime's *date* component, matching
+    how ``TripDay.date`` is derived elsewhere (see ``trips.py``)."""
+    if trip is None or trip.start_date is None or trip.end_date is None:
+        return False
+    today = today_in_tz(trip_tz)
+    start = trip.start_date.date() if hasattr(trip.start_date, "date") else trip.start_date
+    end = trip.end_date.date() if hasattr(trip.end_date, "date") else trip.end_date
+    return start <= today <= end
+
+
+async def _enrich_add_event_params(
+    params: dict, trip: Optional[TripModel], user_id: int, trip_id: int,
+) -> dict:
+    """Hydrate ``add_event`` params with Maps data (lat/lng/place_id/address…)
+    so the new event is route-eligible from the start and the confirmation card
+    can preview the real location. Idempotent — skips when ``place_id`` is set.
+
+    Biases ``find_place`` to the trip destination when known. Failures are
+    swallowed (the event is still added, just without coordinates)."""
+    if not params or params.get("place_id") or not params.get("title"):
+        return params
+    from app.services.google_maps.base import LocationContext
+
+    maps_service = get_google_maps_service()
+    maps_service._current_user_id = user_id
+    maps_service._current_trip_id = trip_id
+    loc = None
+    if trip is not None and trip.destination_lat and trip.destination_lng:
+        loc = LocationContext(lat=trip.destination_lat, lng=trip.destination_lng)
+    try:
+        return await maps_service.enrich_item(dict(params), location=loc)
+    except Exception:
+        log.warning("add_event enrichment failed for %r", params.get("title"), exc_info=True)
+        return params
+
+
 def _event_dict_for_response(e: EventModel) -> dict:
     return {
         "id": e.id,
@@ -369,6 +408,35 @@ async def concierge_chat(
         },
         user_id=current_user.id,
     )
+
+    # Date-gate real-time-only intents (running late / skip / find nearby): these
+    # only make sense while the trip is in progress. Return a friendly text turn
+    # instead of an action card when today is outside the trip window.
+    if (
+        concierge_executor.is_active_trip_only_intent(result.get("intent"))
+        and not _trip_is_active(trip, trip_tz)
+    ):
+        blocked = "That action is only available while the trip is running."
+        await _persist_message(db, trip_id, current_user.id, "user", body.message)
+        await _persist_message(
+            db, trip_id, current_user.id, "assistant", blocked, message_type="text",
+        )
+        return ConciergeChatResponse(
+            intent="chat_only",
+            user_message=blocked,
+            params={},
+            requires_confirmation=False,
+            message_type="text",
+        )
+
+    # For a confirmable add_event, enrich the params with Maps data now (during
+    # the LLM dispatch/dry-run step, before the action card is shown) so the
+    # preview displays the real address and the committed event is route-eligible
+    # immediately on confirm.
+    if result.get("intent") == "add_event" and result.get("requires_confirmation"):
+        result["params"] = await _enrich_add_event_params(
+            result.get("params", {}), trip, current_user.id, trip_id,
+        )
 
     await _persist_message(db, trip_id, current_user.id, "user", body.message)
     await _persist_message(
