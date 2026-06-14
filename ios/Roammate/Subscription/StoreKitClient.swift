@@ -24,9 +24,12 @@ final class StoreKitClient {
     /// Set by SubscriptionStore on init.
     /// Called for every verified transaction (purchase, renewal, restore).
     /// The `signedJWS` is the verifiable JWS string that the backend decodes
-    /// via `/billing/apple/verify`; the `Transaction` instance is provided so
-    /// the listener can call `.finish()` after backend reconciliation.
-    var onVerifiedTransaction: ((_ signedJWS: String, _ transaction: StoreKit.Transaction) async -> Void)?
+    /// via `/billing/apple/verify`. Returns `true` only when the backend
+    /// confirmed the Plus entitlement; we use that to decide whether to
+    /// `.finish()` the transaction — an unconfirmed transaction is left in the
+    /// queue so `Transaction.updates` redelivers it and we retry verification
+    /// rather than silently dropping a real, paid-for purchase.
+    var onVerifiedTransaction: ((_ signedJWS: String, _ transaction: StoreKit.Transaction) async -> Bool)?
 
     init() {
         // The updates stream MUST be observed from app launch so we don't
@@ -35,8 +38,10 @@ final class StoreKitClient {
             for await result in Transaction.updates {
                 guard let self else { return }
                 if let pair = await self.verifiedPair(result) {
-                    await self.onVerifiedTransaction?(pair.jws, pair.tx)
-                    await pair.tx.finish()
+                    let confirmed = await self.onVerifiedTransaction?(pair.jws, pair.tx) ?? false
+                    // Only finish once the backend has granted entitlement;
+                    // otherwise leave it queued for a later retry.
+                    if confirmed { await pair.tx.finish() }
                 }
             }
         }
@@ -114,7 +119,14 @@ final class StoreKitClient {
             guard let pair = verifiedPair(verification) else {
                 throw PurchaseError.unverifiedTransaction
             }
-            await onVerifiedTransaction?(pair.jws, pair.tx)
+            // Treat the purchase as successful only when the backend has
+            // actually granted the entitlement. If verification fails we leave
+            // the transaction unfinished (so `Transaction.updates` retries it)
+            // and surface an error instead of a false "Welcome to Plus".
+            let confirmed = await onVerifiedTransaction?(pair.jws, pair.tx) ?? false
+            guard confirmed else {
+                throw PurchaseError.verificationFailed
+            }
             await pair.tx.finish()
             return .succeeded
         case .userCancelled:
@@ -131,7 +143,7 @@ final class StoreKitClient {
     func restorePurchases() async {
         for await result in Transaction.currentEntitlements {
             if let pair = verifiedPair(result) {
-                await onVerifiedTransaction?(pair.jws, pair.tx)
+                _ = await onVerifiedTransaction?(pair.jws, pair.tx)
             }
         }
     }
@@ -157,6 +169,7 @@ final class StoreKitClient {
     enum PurchaseError: LocalizedError {
         case productUnavailable(found: Int, requested: Int)
         case unverifiedTransaction
+        case verificationFailed
 
         var errorDescription: String? {
             switch self {
@@ -166,6 +179,9 @@ final class StoreKitClient {
                        "a Sandbox Tester is signed in under Settings → App Store."
             case .unverifiedTransaction:
                 return "Could not verify this purchase with the App Store."
+            case .verificationFailed:
+                return "Your payment went through, but we couldn't activate Plus just yet. " +
+                       "It'll be retried automatically — pull to refresh or tap Restore Purchases in a moment."
             }
         }
     }
