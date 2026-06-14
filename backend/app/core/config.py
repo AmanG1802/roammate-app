@@ -114,9 +114,11 @@ class Settings(BaseSettings):
     APPLE_ISSUER_ID: Optional[str] = None
     APPLE_KEY_ID: Optional[str] = None
     APPLE_PRIVATE_KEY_PATH: Optional[str] = None  # .p8 file for App Store Server API
+    APPLE_PRIVATE_KEY_B64: Optional[str] = None   # base64-encoded .p8 (Railway / env alternative)
     # Apple Root CA (G3) for verifying JWS/JWE signatures from StoreKit + SSN V2.
     # Download once from https://www.apple.com/certificateauthority/AppleRootCA-G3.cer
     APPLE_ROOT_CA_PATH: Optional[str] = None
+    APPLE_ROOT_CA_B64: Optional[str] = None        # base64-encoded DER cert (Railway / env alternative)
     APPLE_USE_SANDBOX: bool = True
     # Dedicated key for signing Subscription Promotional Offers (separate from API key)
     APPLE_PROMO_OFFER_KEY_ID: Optional[str] = None

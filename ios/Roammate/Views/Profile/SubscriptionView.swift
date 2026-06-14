@@ -542,13 +542,32 @@ private struct RestoreSection: View {
     @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @Binding var isRestoring: Bool
 
+    private enum RestoreStatus {
+        case success
+        case alreadyPlus
+        case nothingFound
+        case failed(String)
+    }
+    @State private var restoreStatus: RestoreStatus?
+
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             Button {
                 isRestoring = true
+                restoreStatus = nil
                 Task {
+                    let wasPlus = subscriptionStore.entitlement.isPlus
                     await subscriptionStore.restorePurchases()
                     isRestoring = false
+                    if !wasPlus && subscriptionStore.entitlement.isPlus {
+                        restoreStatus = .success
+                    } else if wasPlus {
+                        restoreStatus = .alreadyPlus
+                    } else if let err = subscriptionStore.lastError {
+                        restoreStatus = .failed(err)
+                    } else {
+                        restoreStatus = .nothingFound
+                    }
                 }
             } label: {
                 HStack(spacing: 6) {
@@ -567,11 +586,41 @@ private struct RestoreSection: View {
             .buttonStyle(.plain)
             .disabled(isRestoring)
 
-            Text("Already subscribed on another device? Tap above.")
-                .font(.caption2)
-                .foregroundStyle(Color.roammateMuted.opacity(0.7))
+            if let status = restoreStatus {
+                restoreStatusBanner(status)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            } else {
+                Text("Already subscribed on another device? Tap above.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.roammateMuted.opacity(0.7))
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: restoreStatus == nil)
         .frame(maxWidth: .infinity)
         .padding(.vertical, RoammateSpacing.sm)
+    }
+
+    @ViewBuilder
+    private func restoreStatusBanner(_ status: RestoreStatus) -> some View {
+        switch status {
+        case .success:
+            Label("Plus activated! Welcome to Roammate Plus.", systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.roammateSuccess)
+        case .alreadyPlus:
+            Label("You're already on Plus.", systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.roammateSuccess)
+        case .nothingFound:
+            Label("No purchase found. Make sure you're signed in with the Apple ID used to buy Plus.", systemImage: "exclamationmark.circle")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.roammateMuted)
+                .multilineTextAlignment(.center)
+        case .failed(let message):
+            Label(message, systemImage: "xmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.roammateDanger)
+                .multilineTextAlignment(.center)
+        }
     }
 }

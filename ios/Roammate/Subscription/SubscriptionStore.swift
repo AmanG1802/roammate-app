@@ -171,6 +171,7 @@ final class SubscriptionStore: ObservableObject {
     }
 
     func restorePurchases() async {
+        lastError = nil
         await storeKit.restorePurchases()
         await refresh()
     }
