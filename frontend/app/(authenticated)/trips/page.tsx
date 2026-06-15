@@ -345,7 +345,7 @@ function TripPlannerPageContent() {
       }`}
     >
       {icon}
-      <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
+      <span className="text-[9px] font-black uppercase tracking-normal">{label}</span>
     </motion.button>
   );
 
@@ -368,7 +368,7 @@ function TripPlannerPageContent() {
     <ProtectedRoute>
       <div className="flex h-screen bg-white overflow-hidden">
         {/* ── Icon sidebar ───────────────────────────────────────────────── */}
-        <aside className="w-[72px] bg-slate-900 flex flex-col items-center py-6 gap-3 shrink-0 z-30">
+        <aside className="w-20 bg-slate-900 flex flex-col items-center py-6 gap-3 shrink-0 z-30">
           <Link
             href="/dashboard"
             className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-900/50 hover:scale-105 transition-transform mb-4"
