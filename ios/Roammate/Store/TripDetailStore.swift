@@ -334,6 +334,7 @@ final class TripDetailStore: ObservableObject {
         let currentFp = RouteService.computeFingerprint(events: events)
         if let stored = routeFingerprint, stored != currentFp {
             isRouteStale = true
+            routeOverlays = []   // remove now-wrong polylines immediately
         }
     }
 
