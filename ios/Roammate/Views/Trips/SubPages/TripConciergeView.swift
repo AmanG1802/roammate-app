@@ -45,7 +45,10 @@ struct TripConciergeView: View {
             tutorial.conciergeSampleSent = true
             Task { await store.send(text) }
         }
-        .onAppear { primeFallbackCoordinate() }
+        .onAppear {
+            primeFallbackCoordinate()
+            store.currentUserId = authManager.currentUser?.id
+        }
         .task { await store.loadThread() }
     }
 
@@ -53,23 +56,28 @@ struct TripConciergeView: View {
 
     private var chat: some View {
         VStack(spacing: 0) {
-            if let banner = store.availabilityBanner {
-                availabilityBanner(banner)
-            }
-            if store.canWrite && !canUseConcierge {
-                plusBanner
-            }
             messageList
-            // 3.1: writers get the action chips + composer; everyone else sees a
-            // read-only follow-along state.
+            // 3.1: writers get the composer (+ the action chips once the trip is
+            // underway); free-tier admins get an upsell pill; everyone else sees
+            // a read-only follow-along state.
             if store.canWrite {
-                chipRow
+                if tripHasStarted { chipRow }
                 inputBar
                     .tutorialAnchor("concierge-input")
+            } else if isAdmin && !canUseConcierge {
+                unlockConciergeButton
             } else {
                 readOnlyComposer
             }
         }
+    }
+
+    /// Chips are contextually meaningless before the trip starts, so they're
+    /// hidden pre-trip. `trip.startDate` is an ISO `yyyy-MM-dd`-comparable date;
+    /// when unset we treat the trip as started so chips remain available.
+    private var tripHasStarted: Bool {
+        guard let start = trip.startDate else { return true }
+        return store.todayString >= EventService.isoDateString(from: start)
     }
 
     private var messageList: some View {
@@ -79,6 +87,7 @@ struct TripConciergeView: View {
                     ForEach(store.messages) { message in
                         ConciergeMessageView(message: message)
                             .environmentObject(store)
+                            .environmentObject(detailStore)
                             .id(message.id)
                     }
                     if store.isThinking {
@@ -135,8 +144,7 @@ struct TripConciergeView: View {
                     } label: {
                         chipLabel("Running late", "clock.arrow.circlepath")
                     }
-                    .disabled(!store.isLiveDay || store.isThinking)
-                    .opacity(store.isLiveDay ? 1 : 0.5)
+                    .disabled(store.isThinking)
 
                     chip("Skip next", "forward.end") {
                         requirePlus { Task { await store.skipNext() } }
@@ -157,8 +165,7 @@ struct TripConciergeView: View {
             chipLabel(title, icon)
         }
         .buttonStyle(.plain)
-        .disabled(!store.isLiveDay || store.isThinking)
-        .opacity(store.isLiveDay ? 1 : 0.5)
+        .disabled(store.isThinking)
     }
 
     private func chipLabel(_ title: String, _ icon: String) -> some View {
@@ -211,65 +218,43 @@ struct TripConciergeView: View {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !store.isThinking
     }
 
-    // MARK: - Banners & locked state
+    // MARK: - Footer states
 
-    private func availabilityBanner(_ text: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "moon.zzz.fill").font(.system(size: 12, weight: .bold))
-            Text(text).font(.system(.caption, design: .rounded, weight: .semibold))
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(Color.roammateMuted)
-        .padding(.horizontal, RoammateSpacing.md).padding(.vertical, 8)
-        .background(Color.roammateBackground)
-    }
-
-    private var plusBanner: some View {
+    /// Free-tier admin upsell: a full-width gradient pill that opens the paywall.
+    private var unlockConciergeButton: some View {
         Button {
             HapticManager.light()
             postNeedsPlus()
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles").font(.system(size: 12, weight: .bold))
-                Text("Concierge actions need Roammate Plus")
-                    .font(.system(.caption, design: .rounded, weight: .heavy))
-                Spacer(minLength: 0)
-                Text("Upgrade").font(.system(.caption2, design: .rounded, weight: .black))
+                Image(systemName: "sparkles").font(.system(size: 13, weight: .bold))
+                Text("Unlock Concierge")
+                    .font(.system(.body, design: .rounded, weight: .heavy))
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, RoammateSpacing.md).padding(.vertical, 8)
-            .background(RoammateGradient.plus)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(RoammateGradient.plus, in: Capsule())
+            .padding(.horizontal, RoammateSpacing.md)
+            .padding(.vertical, RoammateSpacing.sm)
         }
         .buttonStyle(.plain)
+        .background(Color.roammateSurface.shadow(.drop(color: .black.opacity(0.06), radius: 8, y: -4)))
     }
 
-    /// Read-only follow-along footer for members who can't post (non-admin or
-    /// non-Plus). They still see the whole shared thread above (3.1).
+    /// Read-only follow-along footer for non-admin members. They still see the
+    /// whole shared thread above (3.1).
     private var readOnlyComposer: some View {
-        Button {
-            HapticManager.light()
-            if !canUseConcierge { postNeedsPlus() }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isAdmin ? "sparkles" : "eye")
-                    .font(.system(size: 13, weight: .bold))
-                Text(isAdmin
-                     ? "Concierge actions need Roammate Plus"
-                     : "Trip admins run the Concierge — you can follow along here")
-                    .font(.system(.caption, design: .rounded, weight: .heavy))
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                if isAdmin && !canUseConcierge {
-                    Text("Upgrade").font(.system(.caption2, design: .rounded, weight: .black))
-                }
-            }
-            .foregroundStyle(isAdmin ? .white : Color.roammateMuted)
-            .padding(.horizontal, RoammateSpacing.md).padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .background(isAdmin ? AnyShapeStyle(RoammateGradient.plus) : AnyShapeStyle(Color.roammateSurface))
+        HStack(spacing: 8) {
+            Image(systemName: "eye").font(.system(size: 13, weight: .bold))
+            Text("Trip admins run the Concierge — you can follow along here")
+                .font(.system(.caption, design: .rounded, weight: .heavy))
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-        .disabled(!isAdmin)
+        .foregroundStyle(Color.roammateMuted)
+        .padding(.horizontal, RoammateSpacing.md).padding(.vertical, 12)
+        .background(Color.roammateSurface)
     }
 
     // MARK: - Actions

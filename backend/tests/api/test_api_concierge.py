@@ -62,6 +62,76 @@ async def test_concierge_chat_post(client: AsyncClient, auth_headers: dict, seco
     assert resp.status_code == 401
 
 
+def _dispatch_client(intent: str, requires_confirmation: bool = True, params: dict | None = None):
+    client = MagicMock()
+    client.dispatch = AsyncMock(return_value={
+        "intent": intent,
+        "user_message": f"Proposed {intent}.",
+        "params": params or {},
+        "requires_confirmation": requires_confirmation,
+    })
+    return client
+
+
+async def test_concierge_chat_active_trip_only_gated_outside_window(
+    client: AsyncClient, auth_headers: dict,
+):
+    """A real-time-only intent (shift_timeline) is refused with a friendly text
+    turn when the trip is not currently running."""
+    # A clearly-past trip so the gate fires regardless of the test clock.
+    trip = await create_trip(
+        client, auth_headers, name="Past Trip",
+        start_date="2020-06-01T00:00:00", end_date="2020-06-03T00:00:00",
+    )
+    tid = trip["id"]
+
+    with patch("app.api.endpoints.concierge.get_concierge_client",
+               return_value=_dispatch_client("shift_timeline")), \
+         patch(_ENTITLEMENT_PATCH, new_callable=AsyncMock):
+        resp = await client.post(f"/api/concierge/{tid}/chat", headers=auth_headers, json={
+            "message": "I'm running 30 minutes late",
+        })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["intent"] == "chat_only"
+    assert data["requires_confirmation"] is False
+    assert "only available while the trip is running" in data["user_message"]
+
+
+async def test_concierge_chat_add_event_enriches_params(
+    client: AsyncClient, auth_headers: dict,
+):
+    """add_event params are hydrated with Maps data before the action card is
+    returned, so the committed event is route-eligible."""
+    trip = await create_trip(client, auth_headers, name="Enrich Trip",
+                             start_date="2025-06-01T00:00:00")
+    tid = trip["id"]
+
+    async def _fake_enrich(item, *, client=None, location=None):
+        return {**item, "place_id": "pid-123", "lat": 48.85, "lng": 2.35,
+                "address": "5 Rue de Test, Paris"}
+
+    maps_mock = MagicMock()
+    maps_mock.enrich_item = AsyncMock(side_effect=_fake_enrich)
+
+    dispatch = _dispatch_client(
+        "add_event", requires_confirmation=True,
+        params={"title": "Coffee stop", "start_time": "10:00"},
+    )
+    with patch("app.api.endpoints.concierge.get_concierge_client", return_value=dispatch), \
+         patch("app.api.endpoints.concierge.get_google_maps_service", return_value=maps_mock), \
+         patch(_ENTITLEMENT_PATCH, new_callable=AsyncMock):
+        resp = await client.post(f"/api/concierge/{tid}/chat", headers=auth_headers, json={
+            "message": "Add a coffee stop at 10am",
+        })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["intent"] == "add_event"
+    assert data["params"]["place_id"] == "pid-123"
+    assert data["params"]["lat"] == 48.85
+    maps_mock.enrich_item.assert_awaited_once()
+
+
 # ── POST /api/concierge/{trip_id}/execute ──────────────────────────────────
 
 async def test_concierge_execute_post(client: AsyncClient, auth_headers: dict, second_auth_headers: dict):

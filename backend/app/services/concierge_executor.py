@@ -27,6 +27,7 @@ from app.models.all_models import (
     TimelineItem as EventModel,
     User as UserModel,
 )
+from app.schemas.concierge import ConciergeIntent
 from app.services.smart_ripple import (
     CrossMidnightShiftError,
     EventNotEligibleError,
@@ -123,6 +124,48 @@ def _parse_time_param(raw: str, trip_tz: str):
 
 class ConciergeExecutor:
     """Dispatch confirmed concierge intents to backend mutations."""
+
+    # ── Intent timing whitelist (date-gating) ────────────────────────────────
+    #
+    # Three tiers decide when an intent is allowed relative to the trip dates.
+    # Only ACTIVE_TRIP_ONLY intents are hard-gated at the API; the others are
+    # always dispatchable (chips that are meaningless pre-trip are merely hidden
+    # client-side). See ``is_active_trip_only_intent``.
+
+    # Pure conversation and read-only explanation — no trip-date restriction.
+    ANYTIME_INTENTS: frozenset[ConciergeIntent] = frozenset({
+        ConciergeIntent.chat_only,
+        ConciergeIntent.explain_plan,
+    })
+
+    # Schedule mutations valid for trip planning (pre-trip) and live editing
+    # (during trip). Not meaningful post-trip.
+    PLANNING_INTENTS: frozenset[ConciergeIntent] = frozenset({
+        ConciergeIntent.add_event,
+        ConciergeIntent.move_event,
+    })
+
+    # Real-time, trip-in-progress-only actions — only available while today is
+    # between trip.start_date and trip.end_date (inclusive).
+    ACTIVE_TRIP_ONLY_INTENTS: frozenset[ConciergeIntent] = frozenset({
+        ConciergeIntent.shift_timeline,
+        ConciergeIntent.skip_event,
+        ConciergeIntent.find_nearby,
+    })
+
+    @classmethod
+    def is_active_trip_only_intent(cls, intent: Optional[str]) -> bool:
+        """True when ``intent`` may run only while the trip is in progress.
+
+        Accepts the raw string the LLM dispatcher returns; unknown intents are
+        treated as not-gated (the executor's ``match`` already rejects them).
+        """
+        if not intent:
+            return False
+        try:
+            return ConciergeIntent(intent) in cls.ACTIVE_TRIP_ONLY_INTENTS
+        except ValueError:
+            return False
 
     async def execute(
         self,

@@ -115,6 +115,36 @@ class TestParseTimeParam:
         assert t == time(4, 30)  # IST 10:00 → UTC 04:30
 
 
+# ── Intent timing whitelist (date-gating) ────────────────────────────────────
+
+
+class TestIsActiveTripOnlyIntent:
+    def test_active_trip_only_intents(self):
+        for intent in ("shift_timeline", "skip_event", "find_nearby"):
+            assert ConciergeExecutor.is_active_trip_only_intent(intent) is True
+
+    def test_anytime_and_planning_intents_not_gated(self):
+        for intent in ("chat_only", "explain_plan", "add_event", "move_event"):
+            assert ConciergeExecutor.is_active_trip_only_intent(intent) is False
+
+    def test_unknown_or_empty_intent_not_gated(self):
+        assert ConciergeExecutor.is_active_trip_only_intent("bogus") is False
+        assert ConciergeExecutor.is_active_trip_only_intent(None) is False
+        assert ConciergeExecutor.is_active_trip_only_intent("") is False
+
+    def test_tiers_are_disjoint_and_cover_known_intents(self):
+        tiers = (
+            ConciergeExecutor.ANYTIME_INTENTS,
+            ConciergeExecutor.PLANNING_INTENTS,
+            ConciergeExecutor.ACTIVE_TRIP_ONLY_INTENTS,
+        )
+        # No intent appears in two tiers.
+        seen: set = set()
+        for tier in tiers:
+            assert seen.isdisjoint(tier)
+            seen |= set(tier)
+
+
 # ── Async executor tests (use db_session from conftest) ──────────────────────
 
 

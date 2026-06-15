@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   X, Send, Loader2, MapPin, Clock, SkipForward,
   Plus, Navigation, Star, Check, RotateCcw, Coffee,
-  ArrowRight, ChevronRight, AlertTriangle,
+  ArrowRight, ChevronRight, AlertTriangle, Sparkles, User,
 } from 'lucide-react';
 import { useTripStore } from '@/lib/store';
 import { api } from '@/lib/api';
@@ -13,6 +13,14 @@ import { formatTimeOfDay, timeOfDayFromDate } from '@/lib/time';
 import clsx from 'clsx';
 import EnrichmentBadge from '@/components/ui/EnrichmentBadge';
 import VoiceInputButton from '@/components/common/VoiceInputButton';
+import { useEntitlement } from '@/hooks/useEntitlement';
+import useAuth from '@/hooks/useAuth';
+
+// Author identity resolved from the trip member list for bubble avatars (3.1).
+interface AuthorInfo {
+  name?: string;
+  avatarUrl?: string;
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +78,7 @@ interface ChatMessage {
   status?: 'pending' | 'confirmed' | 'cancelled';
   preview?: ConciergePreview | null;
   authorName?: string | null;
+  authorId?: number | null;
   canUndo?: boolean;
 }
 
@@ -203,10 +212,20 @@ export default function ConciergeChatDrawer({
   isOpen,
   onClose,
   preAction,
+  isAdmin = false,
+  tripStartDate = null,
+  members = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
   preAction?: { type: string; payload?: any } | null;
+  /** Whether the current user is a trip admin — drives the free-tier upsell pill
+   *  vs the read-only follow-along footer (parity with iOS). */
+  isAdmin?: boolean;
+  /** Trip start date (ISO) — chips are hidden before the trip begins. */
+  tripStartDate?: string | null;
+  /** Trip member list for resolving sender avatars on the shared thread. */
+  members?: any[];
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -219,9 +238,42 @@ export default function ConciergeChatDrawer({
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { activeTripId, activeTripTimezone, loadEvents } = useTripStore();
+  const { entitlement, requirePlus } = useEntitlement();
+  const { user: currentUser } = useAuth(false);
+  const conciergeLocked = !entitlement.can_use_concierge;
   const processedPreActionRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const nearbyAbortRef = useRef<AbortController | null>(null);
+
+  // Resolve a sender's avatar/name from the trip member list (shared thread).
+  const memberById = useMemo(() => {
+    const map = new Map<number, AuthorInfo>();
+    for (const m of members || []) {
+      if (m?.user_id != null) {
+        map.set(m.user_id, { name: m.user?.name, avatarUrl: m.user?.avatar_url });
+      }
+    }
+    return map;
+  }, [members]);
+
+  const resolveAuthor = useCallback((msg: ChatMessage): AuthorInfo => {
+    if (msg.authorId != null && memberById.has(msg.authorId)) {
+      return memberById.get(msg.authorId)!;
+    }
+    // Fall back to the locally-known name (hydrated label) or the current user.
+    if (msg.authorName) return { name: msg.authorName };
+    if (currentUser) return { name: currentUser.name, avatarUrl: currentUser.avatar_url };
+    return {};
+  }, [memberById, currentUser]);
+
+  // Chips are contextually meaningless before the trip starts, so hide them
+  // pre-trip (ISO date comparison in the trip's timezone).
+  const tripHasStarted = (() => {
+    if (!tripStartDate) return true;
+    const tz = activeTripTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+    return todayKey >= tripStartDate.slice(0, 10);
+  })();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -275,6 +327,7 @@ export default function ConciergeChatDrawer({
             requires_confirmation: false,
             status: isCard ? 'confirmed' : undefined,
             authorName: m.author_name,
+            authorId: m.author_id ?? null,
           };
         });
         setMessages(hydrated);
@@ -357,7 +410,10 @@ export default function ConciergeChatDrawer({
     if (override === undefined) setInput('');
 
     const userMsgId = `user-${Date.now()}`;
-    addMessage({ id: userMsgId, role: 'user', content: msg, type: 'text' });
+    addMessage({
+      id: userMsgId, role: 'user', content: msg, type: 'text',
+      authorId: currentUser?.id ?? null,
+    });
 
     try {
       const data = await api<Record<string, any>>(`/api/concierge/${activeTripId}/chat`, {
@@ -694,6 +750,7 @@ export default function ConciergeChatDrawer({
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
+                  author={resolveAuthor(msg)}
                   onConfirm={handleConfirm}
                   onCancel={handleCancel}
                   onUndo={handleUndo}
@@ -712,24 +769,19 @@ export default function ConciergeChatDrawer({
               )}
             </div>
 
-            {/* Intent Chips */}
-            <div className="px-4 py-2 border-t border-slate-50 overflow-x-auto flex gap-2 scrollbar-hide">
-              <ChipButton label="My day" icon={<Clock className="w-3.5 h-3.5" />} onClick={handleTodaySummary} />
-              <ChipButton label="What's next?" icon={<ChevronRight className="w-3.5 h-3.5" />} onClick={handleWhatsNext} />
-              <ChipButton label="Find Coffee" icon={<Coffee className="w-3.5 h-3.5" />} onClick={handleFindCoffee} />
-            </div>
-
-            {/* Input — read-only for non-writers (3.1) */}
-            {!canWrite ? (
-              <div className="px-4 pb-4 pt-2">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-                  <p className="text-sm text-slate-500">
-                    You can follow the trip&rsquo;s Concierge here. Posting and confirming
-                    actions is available to trip admins on Roammate Plus.
-                  </p>
-                </div>
+            {/* Intent Chips — writers only, and only once the trip is underway
+                (chips are contextually meaningless pre-trip). */}
+            {canWrite && tripHasStarted && (
+              <div className="px-4 py-2 border-t border-slate-50 overflow-x-auto flex gap-2 scrollbar-hide">
+                <ChipButton label="My day" icon={<Clock className="w-3.5 h-3.5" />} onClick={handleTodaySummary} />
+                <ChipButton label="What's next?" icon={<ChevronRight className="w-3.5 h-3.5" />} onClick={handleWhatsNext} />
+                <ChipButton label="Find Coffee" icon={<Coffee className="w-3.5 h-3.5" />} onClick={handleFindCoffee} />
               </div>
-            ) : (
+            )}
+
+            {/* Footer — three-way: composer (writers), upsell pill (free-tier
+                admins), or read-only follow-along (non-admin members). 3.1 */}
+            {canWrite ? (
             <div className="px-4 pb-4 pt-2">
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                 <input
@@ -758,6 +810,26 @@ export default function ConciergeChatDrawer({
                 </button>
               </div>
             </div>
+            ) : isAdmin && conciergeLocked ? (
+              <div className="px-4 pb-4 pt-2">
+                <button
+                  onClick={() => requirePlus('concierge')}
+                  className="w-full py-3.5 rounded-full text-white font-black text-sm
+                             bg-gradient-to-r from-violet-600 via-fuchsia-500 to-orange-400
+                             flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Unlock Concierge
+                </button>
+              </div>
+            ) : (
+              <div className="px-4 pb-4 pt-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+                  <p className="text-sm text-slate-500">
+                    Trip admins run the Concierge — you can follow along here.
+                  </p>
+                </div>
+              </div>
             )}
           </motion.div>
         </>
@@ -853,6 +925,7 @@ function PreviewBlock({ preview }: { preview: ConciergePreview }) {
 
 function MessageBubble({
   msg,
+  author,
   onConfirm,
   onCancel,
   onUndo,
@@ -861,6 +934,7 @@ function MessageBubble({
   selectedPlace,
 }: {
   msg: ChatMessage;
+  author: AuthorInfo;
   onConfirm: (id: string, intent: string, params: Record<string, any>) => void;
   onCancel: (id: string) => void;
   onUndo: (id: string) => void;
@@ -868,15 +942,16 @@ function MessageBubble({
   onRetry: () => void;
   selectedPlace: PlaceCard | null;
 }) {
-  // User message (shared thread shows the author's name above the bubble, 3.1)
+  // User message — sender attribution in the shared thread is now a corner
+  // avatar (3.1) rather than a name label.
   if (msg.role === 'user') {
     return (
-      <div className="flex flex-col items-end">
-        {msg.authorName && (
-          <span className="text-[11px] font-medium text-slate-400 mb-0.5 mr-1">{msg.authorName}</span>
-        )}
-        <div className="max-w-[80%] bg-indigo-600 text-white rounded-2xl rounded-br-md px-4 py-2.5">
-          <p className="text-sm leading-relaxed">{msg.content}</p>
+      <div className="flex justify-end">
+        <div className="relative inline-block max-w-[80%]">
+          <div className="bg-indigo-600 text-white rounded-2xl rounded-br-md px-4 py-2.5">
+            <p className="text-sm leading-relaxed">{msg.content}</p>
+          </div>
+          <UserAvatarCorner author={author} />
         </div>
       </div>
     );
@@ -1085,12 +1160,50 @@ function MessageBubble({
     );
   }
 
-  // Default text message
+  // Default text message (AI) — sparkle gradient corner avatar.
   return (
     <div className="flex justify-start">
-      <div className="max-w-[80%] bg-slate-100 rounded-2xl rounded-bl-md px-4 py-2.5">
-        <FormattedText text={msg.content} />
+      <div className="relative inline-block max-w-[80%]">
+        <div className="bg-slate-100 rounded-2xl rounded-bl-md px-4 py-2.5">
+          <FormattedText text={msg.content} />
+        </div>
+        <AiAvatarCorner />
       </div>
+    </div>
+  );
+}
+
+// ── Bubble corner avatars (shared thread attribution) ───────────────────────
+
+function AiAvatarCorner() {
+  return (
+    <div className="absolute bottom-0 left-0 -translate-x-1/3 translate-y-1/3
+                    w-5 h-5 rounded-full flex items-center justify-center
+                    bg-gradient-to-br from-violet-600 via-fuchsia-500 to-orange-400 shadow-sm">
+      <Sparkles className="w-2.5 h-2.5 text-white" />
+    </div>
+  );
+}
+
+function UserAvatarCorner({ author }: { author: AuthorInfo }) {
+  const initials = (author.name || '')
+    .split(' ')
+    .slice(0, 2)
+    .map((s) => s.charAt(0))
+    .join('')
+    .toUpperCase();
+  return (
+    <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3
+                    w-5 h-5 rounded-full overflow-hidden flex items-center justify-center
+                    bg-indigo-100 text-indigo-600 ring-2 ring-white shadow-sm">
+      {author.avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={author.avatarUrl} alt={author.name || 'You'} className="w-full h-full object-cover" />
+      ) : initials ? (
+        <span className="text-[9px] font-black leading-none">{initials}</span>
+      ) : (
+        <User className="w-2.5 h-2.5" />
+      )}
     </div>
   );
 }

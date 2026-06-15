@@ -166,41 +166,14 @@ struct PlanMapPage: View {
                 .padding(.top, 12)
 
                 Spacer()
-
-                // Selected event callout
-                if let eventId = selectedEventId,
-                   let event = dayEvents.first(where: { $0.id == eventId }) {
-                    MapCalloutSheet(event: event)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
-                // Selected leg callout
-                if let legIdx = selectedLegIndex,
-                   legIdx < store.routeOverlays.count {
-                    let overlay = store.routeOverlays[legIdx]
-                    let fromTitle = dayEvents.first(where: { $0.id == overlay.fromEventId })?.title ?? "Start"
-                    let toTitle = dayEvents.first(where: { $0.id == overlay.toEventId })?.title ?? "End"
-                    RouteLegCallout(
-                        fromTitle: fromTitle,
-                        toTitle: toTitle,
-                        durationSeconds: Int(overlay.duration),
-                        distanceMeters: Int(overlay.distance),
-                        color: overlay.color
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
             }
-            .animation(.easeInOut(duration: 0.2), value: selectedEventId)
-            .animation(.easeInOut(duration: 0.2), value: selectedLegIndex)
 
 
         }
         // Refresh Route button + optional route-state label float just above the sheet.
         .overlay { floatingRouteCluster }
+        // Place / leg callouts float just above the sheet edge, tracking live drags.
+        .overlay { floatingCalloutCluster }
         // Native sheet — always present, non-dismissible.
         .sheet(isPresented: .constant(true)) {
             VStack(spacing: 0) {
@@ -246,6 +219,7 @@ struct PlanMapPage: View {
                 store.checkRouteStaleness(dayDate: day)
             }
         }
+        .onChange(of: drawerDetent) { _, _ in fitCamera() }
     }
 
     /// Mirrors the old PlanPaneView.applyTutorialPane(): when the tutorial drives
@@ -276,6 +250,7 @@ struct PlanMapPage: View {
             // Only show when the computed position is within the visible area —
             // guards against the initial sheetTopY = UIScreen.main.bounds.height.
             let visible = buttonCenterY > 50 && buttonCenterY < geo.size.height - 10
+            let calloutActive = selectedEventId != nil || selectedLegIndex != nil
 
             ZStack {
                 // Context label: gate error or stale warning, shown above the button.
@@ -305,9 +280,58 @@ struct PlanMapPage: View {
                     .fixedSize()
                     .position(x: geo.size.width / 2, y: buttonCenterY)
             }
-            .opacity((drawerDetent == .large || !visible || drawerTab == .ideaBin) ? 0 : 1)
+            .opacity((drawerDetent == .large || !visible || drawerTab == .ideaBin || calloutActive) ? 0 : 1)
             .animation(.easeInOut(duration: 0.18), value: drawerDetent == .large)
             .animation(.easeInOut(duration: 0.18), value: drawerTab == .ideaBin)
+            .animation(.easeInOut(duration: 0.18), value: calloutActive)
+        }
+    }
+
+    // MARK: - Floating Callout Cluster
+
+    /// Place callout (MapCalloutSheet) or route-leg callout (RouteLegCallout) anchored
+    /// with its bottom edge ~12pt above the live drawer top edge. Mirrors the
+    /// floatingRouteCluster GeometryReader math so it tracks live drags.
+    @ViewBuilder
+    private var floatingCalloutCluster: some View {
+        GeometryReader { geo in
+            let localSheetTop = sheetTopY - geo.frame(in: .global).minY
+            let calloutBottomY = localSheetTop - 12
+            let visible = calloutBottomY > 80 && calloutBottomY < geo.size.height - 10
+
+            ZStack {
+                if let eventId = selectedEventId,
+                   let event = dayEvents.first(where: { $0.id == eventId }) {
+                    MapCalloutSheet(event: event)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        // Bottom-anchor: push up from screen bottom by (screenH - calloutBottomY)
+                        .padding(.bottom, geo.size.height - calloutBottomY)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if let legIdx = selectedLegIndex,
+                          legIdx < store.routeOverlays.count {
+                    let overlay = store.routeOverlays[legIdx]
+                    let fromTitle = dayEvents.first(where: { $0.id == overlay.fromEventId })?.title ?? "Start"
+                    let toTitle = dayEvents.first(where: { $0.id == overlay.toEventId })?.title ?? "End"
+                    RouteLegCallout(
+                        fromTitle: fromTitle,
+                        toTitle: toTitle,
+                        durationSeconds: Int(overlay.duration),
+                        distanceMeters: Int(overlay.distance),
+                        color: overlay.color
+                    )
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, geo.size.height - calloutBottomY)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .opacity((drawerDetent == .large || !visible) ? 0 : 1)
+            .animation(.easeInOut(duration: 0.2), value: selectedEventId)
+            .animation(.easeInOut(duration: 0.2), value: selectedLegIndex)
+            .animation(.easeInOut(duration: 0.18), value: drawerDetent == .large)
         }
     }
 
@@ -463,6 +487,7 @@ struct PlanMapPage: View {
     // MARK: - Helpers
 
     private func fitCamera() {
+        guard drawerDetent != .large else { return }
         let markers = allMarkers
         guard !markers.isEmpty else { return }
         let coords = markers.map {
@@ -470,14 +495,24 @@ struct PlanMapPage: View {
         }
         let lats = coords.map(\.latitude)
         let lngs = coords.map(\.longitude)
-        let center = CLLocationCoordinate2D(
-            latitude: (lats.min()! + lats.max()!) / 2,
-            longitude: (lngs.min()! + lngs.max()!) / 2
-        )
-        let span = MKCoordinateSpan(
-            latitudeDelta: max((lats.max()! - lats.min()!) * 1.4, 0.02),
-            longitudeDelta: max((lngs.max()! - lngs.min()!) * 1.4, 0.02)
-        )
+        let markerCenterLat = (lats.min()! + lats.max()!) / 2
+        let markerCenterLng = (lngs.min()! + lngs.max()!) / 2
+        let paddedLatSpan = max((lats.max()! - lats.min()!) * 1.4, 0.02)
+        let paddedLngSpan = max((lngs.max()! - lngs.min()!) * 1.4, 0.02)
+
+        // Fit markers into the visible map area above the drawer.
+        // visibleFraction: how much of the screen height is above the drawer.
+        let screenH = UIScreen.main.bounds.height
+        let visibleFraction = max(min(sheetTopY / screenH, 1.0), 0.2)
+        // Inflate latitudeDelta so only visibleFraction of it is shown on screen.
+        let latitudeDelta = paddedLatSpan / visibleFraction
+        // Shift center southward so markers sit in the visible upper slice.
+        // p = visible-area center as a fraction from screen top.
+        let p = (sheetTopY / 2) / screenH
+        let centerLat = markerCenterLat - (0.5 - p) * latitudeDelta
+
+        let span = MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: paddedLngSpan)
+        let center = CLLocationCoordinate2D(latitude: centerLat, longitude: markerCenterLng)
         cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
     }
 

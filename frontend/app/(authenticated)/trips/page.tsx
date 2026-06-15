@@ -228,8 +228,6 @@ function TripPlannerPageContent() {
     return parseISO(tripDays[idx].date);
   }, [tripDays, liveDayIdx]);
 
-  const isCurrentDay = liveDay ? isToday(liveDay) : false;
-
   const handleAddDay = useCallback(async () => {
     if (!tripId) return;
 
@@ -347,7 +345,7 @@ function TripPlannerPageContent() {
       }`}
     >
       {icon}
-      <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
+      <span className="text-[9px] font-black uppercase tracking-normal">{label}</span>
     </motion.button>
   );
 
@@ -370,7 +368,7 @@ function TripPlannerPageContent() {
     <ProtectedRoute>
       <div className="flex h-screen bg-white overflow-hidden">
         {/* ── Icon sidebar ───────────────────────────────────────────────── */}
-        <aside className="w-[72px] bg-slate-900 flex flex-col items-center py-6 gap-3 shrink-0 z-30">
+        <aside className="w-20 bg-slate-900 flex flex-col items-center py-6 gap-3 shrink-0 z-30">
           <Link
             href="/dashboard"
             className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-900/50 hover:scale-105 transition-transform mb-4"
@@ -599,15 +597,13 @@ function TripPlannerPageContent() {
               {/* Map + optional concierge overlay */}
               <div className={`${conciergeMobileView === 'map' ? 'flex' : 'hidden'} lg:flex flex-1 relative`}>
                 <GoogleMap filterDay={liveDay ?? undefined} tripId={tripId} />
-                {isCurrentDay && currentUserIsAdmin && (
-                  <ConciergeActionBar />
-                )}
-                {!isCurrentDay && liveDay && (
-                  <div className="absolute bottom-4 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-20 px-5 py-3 bg-white/80 backdrop-blur border border-slate-200 rounded-2xl shadow-lg flex justify-center">
-                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest text-center">
-                      Concierge activates on {format(liveDay, 'EEE, MMM d')}
-                    </p>
-                  </div>
+                {currentUserIsAdmin && (
+                  <ConciergeActionBar
+                    tripStartDate={trip?.start_date ?? null}
+                    tripEndDate={trip?.end_date ?? null}
+                    isAdmin={currentUserIsAdmin}
+                    members={members}
+                  />
                 )}
               </div>
             </div>

@@ -251,13 +251,14 @@ export default function GoogleMap({ filterDay, tripId }: GoogleMapProps) {
   useEffect(() => {
     if (
       routeSnapshot &&
-      routeSnapshot.filterDay !== currentDayKey
+      (routeSnapshot.filterDay !== currentDayKey ||
+        routeSnapshot.fingerprint !== currentFingerprint)
     ) {
       clearRouteVisuals();
       setMockRoute(null);
       setLastRouteData(null);
     }
-  }, [currentDayKey, routeSnapshot]);
+  }, [currentDayKey, currentFingerprint, routeSnapshot]);
 
   useEffect(() => {
     if (!toast) return;

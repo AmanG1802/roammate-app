@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Message dispatcher
 
@@ -7,11 +8,22 @@ import SwiftUI
 struct ConciergeMessageView: View {
     let message: ChatMessage
     @EnvironmentObject var store: ConciergeStore
+    @EnvironmentObject var detailStore: TripDetailStore
+
+    /// Resolve the sender's avatar from the trip member list (shared thread).
+    private var resolvedAvatarUrl: String? {
+        guard let authorId = message.authorId else { return nil }
+        return detailStore.members.first(where: { $0.userId == authorId })?.user.avatarUrl
+    }
 
     var body: some View {
         switch message.card {
         case .text:
-            ConciergeBubble(role: message.role, text: message.text, authorName: message.authorName)
+            ConciergeBubble(
+                role: message.role,
+                text: message.text,
+                avatarUrl: resolvedAvatarUrl
+            )
         case .actionCard:
             ConciergeActionCardView(message: message)
         case .placeCards(let places):
@@ -39,7 +51,8 @@ func conciergeMarkdown(_ raw: String) -> AttributedString {
 struct ConciergeBubble: View {
     let role: ChatMessage.Role
     let text: String
-    var authorName: String? = nil
+    /// Sender avatar (user bubbles only) — resolved from the trip member list.
+    var avatarUrl: String? = nil
 
     var body: some View {
         // System turns (confirmation receipts, undo notices) render as a small
@@ -57,29 +70,68 @@ struct ConciergeBubble: View {
         } else {
             HStack {
                 if role == .user { Spacer(minLength: 40) }
-                VStack(alignment: role == .user ? .trailing : .leading, spacing: 2) {
-                    // 3.1: author label in the shared trip-wide thread.
-                    if role == .user, let authorName {
-                        Text(authorName)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.roammateMuted)
-                            .padding(.horizontal, 4)
+                // 3.1: sender attribution in the shared trip-wide thread is now a
+                // corner avatar (sparkle circle for AI, photo/initials for users).
+                Text(conciergeMarkdown(text))
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(role == .user ? .white : Color.roammateInk)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                    .padding(.bottom, 11)
+                    .background(
+                        role == .user ? Color.roammateIndigo : Color.roammateSurface,
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(role == .assistant ? Color.roammateBorder : Color.clear, lineWidth: 1)
+                    )
+                    .overlay(alignment: role == .user ? .bottomTrailing : .bottomLeading) {
+                        avatarCorner
                     }
-                    Text(conciergeMarkdown(text))
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundStyle(role == .user ? .white : Color.roammateInk)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(
-                            role == .user ? Color.roammateIndigo : Color.roammateSurface,
-                            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(role == .assistant ? Color.roammateBorder : Color.clear, lineWidth: 1)
-                        )
-                }
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = text
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                    }
                 if role == .assistant { Spacer(minLength: 40) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var avatarCorner: some View {
+        if role == .assistant {
+            ZStack {
+                Circle().fill(RoammateGradient.plus).frame(width: 22, height: 22)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+            }
+            .offset(x: -6, y: 6)
+        } else {
+            ConciergeUserAvatar(avatarUrl: avatarUrl)
+                .offset(x: 6, y: 6)
+        }
+    }
+}
+
+/// Corner avatar for a user chat bubble: photo/initials when known, otherwise a
+/// neutral person glyph.
+struct ConciergeUserAvatar: View {
+    var authorName: String?
+    var avatarUrl: String?
+
+    var body: some View {
+        if avatarUrl != nil || (authorName?.isEmpty == false) {
+            AvatarCircle(name: authorName ?? "", avatarUrl: avatarUrl, size: 22)
+        } else {
+            ZStack {
+                Circle().fill(Color.roammateIndigoTint).frame(width: 22, height: 22)
+                Image(systemName: "person.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.roammateIndigo)
             }
         }
     }

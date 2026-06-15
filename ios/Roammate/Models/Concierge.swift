@@ -40,6 +40,9 @@ struct ChatMessage: Identifiable {
     let preview: ConciergePreview?
     /// Author display name in the shared trip-wide thread (3.1).
     let authorName: String?
+    /// Author user id — resolves the sender's avatar against the trip member
+    /// list for the bubble corner icon.
+    let authorId: Int?
     /// Whether this confirmed action can be reverted (3.8). Only the most
     /// recent executed action is undoable at a time.
     var canUndo: Bool
@@ -57,6 +60,7 @@ struct ChatMessage: Identifiable {
         timestamp: Date = Date(),
         preview: ConciergePreview? = nil,
         authorName: String? = nil,
+        authorId: Int? = nil,
         canUndo: Bool = false
     ) {
         self.id = id
@@ -69,6 +73,7 @@ struct ChatMessage: Identifiable {
         self.timestamp = timestamp
         self.preview = preview
         self.authorName = authorName
+        self.authorId = authorId
         self.canUndo = canUndo
     }
 }
